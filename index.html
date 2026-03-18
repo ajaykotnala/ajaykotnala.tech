@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ajay Kotnala - Senior Solution Architect</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #141925;
+            --bg-tertiary: #1e2533;
+            --text-primary: #e4e6eb;
+            --text-secondary: #9ca3af;
+            --accent-primary: #00d4aa;
+            --accent-secondary: #00a884;
+            --accent-tertiary: #007d6c;
+            --border-color: #2a3441;
+            --gradient-1: linear-gradient(135deg, #00d4aa 0%, #007d6c 100%);
+            --gradient-2: linear-gradient(135deg, #1e2533 0%, #0a0e1a 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Typography */
+        h1, h2, h3, h4 {
+            font-family: 'Playfair Display', serif;
+            font-weight: 700;
+        }
+
+        .code-text {
+            font-family: 'Source Code Pro', monospace;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 14, 26, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-logo {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.5rem;
+            font-weight: 900;
+            background: var(--gradient-1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.3s ease;
+            font-weight: 500;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent-primary);
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: radial-gradient(circle at 20% 50%, rgba(0, 212, 170, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(0, 125, 108, 0.1) 0%, transparent 50%);
+            overflow: hidden;
+        }
+
+        /* Background Architecture Diagrams */
+        .bg-arch-diagrams {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            opacity: 0.1;
+        }
+
+        .bg-diagram {
+            position: absolute;
+            border: 1px solid var(--accent-primary);
+            border-radius: 10px;
+            background: rgba(0, 212, 170, 0.02);
+        }
+
+        .bg-diagram-1 {
+            top: 10%;
+            left: 5%;
+            width: 200px;
+            height: 150px;
+            transform: rotate(-5deg);
+            animation: float-diagram-1 15s infinite ease-in-out;
+        }
+
+        @keyframes float-diagram-1 {
+            0%, 100% { transform: rotate(-5deg) translateY(0px); }
+            50% { transform: rotate(-3deg) translateY(-10px); }
+        }
+
+        .bg-diagram-1::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 80%;
+            border: 1px solid var(--accent-primary);
+            border-radius: 5px;
+        }
+
+        .bg-diagram-2 {
+            top: 60%;
+            right: 10%;
+            width: 180px;
+            height: 180px;
+            transform: rotate(3deg);
+            animation: float-diagram-2 20s infinite ease-in-out;
+        }
+
+        @keyframes float-diagram-2 {
+            0%, 100% { transform: rotate(3deg) translateY(0px); }
+            50% { transform: rotate(5deg) translateY(-15px); }
+        }
+
+        .bg-diagram-2::before {
+            content: '';
+            position: absolute;
+            top: 25%;
+            left: 25%;
+            width: 50%;
+            height: 50%;
+            border: 1px solid var(--accent-primary);
+            border-radius: 50%;
+        }
+
+        .bg-diagram-2::after {
+            content: '';
+            position: absolute;
+            top: 10%;
+            left: 10%;
+            width: 80%;
+            height: 80%;
+            border: 1px solid var(--accent-primary);
+            border-radius: 5px;
+            transform: rotate(45deg);
+        }
+
+        .bg-diagram-3 {
+            bottom: 20%;
+            left: 15%;
+            width: 160px;
+            height: 120px;
+            transform: rotate(-8deg);
+            animation: float-diagram-3 18s infinite ease-in-out;
+        }
+
+        @keyframes float-diagram-3 {
+            0%, 100% { transform: rotate(-8deg) translateY(0px); }
+            50% { transform: rotate(-6deg) translateY(-12px); }
+        }
+
+        .bg-diagram-3::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: var(--accent-primary);
+        }
+
+        .bg-diagram-3::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 2px;
+            height: 100%;
+            background: var(--accent-primary);
+        }
+
+        .bg-diagram-lines {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .bg-line {
+            position: absolute;
+            background: var(--accent-primary);
+            opacity: 0.3;
+        }
+
+        .bg-line-1 {
+            top: 20%;
+            left: 0;
+            width: 100%;
+            height: 1px;
+            transform: rotate(2deg);
+        }
+
+        .bg-line-2 {
+            top: 40%;
+            left: 0;
+            width: 100%;
+            height: 1px;
+            transform: rotate(-1deg);
+        }
+
+        .bg-line-3 {
+            top: 70%;
+            left: 0;
+            width: 100%;
+            height: 1px;
+            transform: rotate(1deg);
+        }
+
+        .bg-line-4 {
+            top: 0;
+            left: 25%;
+            width: 1px;
+            height: 100%;
+            transform: rotate(3deg);
+        }
+
+        .bg-line-5 {
+            top: 0;
+            left: 75%;
+            width: 1px;
+            height: 100%;
+            transform: rotate(-2deg);
+        }
+
+        .hero-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .hero-content {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 3rem;
+            align-items: center;
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        .hero-text {
+            text-align: left;
+        }
+
+        .hero-image-container {
+            position: relative;
+            width: 280px;
+            height: 280px;
+            border-radius: 20px;
+            overflow: hidden;
+            border: 3px solid var(--accent-primary);
+            box-shadow: 0 20px 40px rgba(0, 212, 170, 0.3);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .hero-image-container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 25px 50px rgba(0, 212, 170, 0.4);
+        }
+
+        .hero-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .hero-image-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0, 212, 170, 0.8), transparent);
+            padding: 1rem;
+            color: var(--bg-primary);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .hero-content {
+                grid-template-columns: 1fr;
+                text-align: center;
+                gap: 2rem;
+            }
+
+            .hero-text {
+                text-align: center;
+            }
+
+            .hero-image-container {
+                width: 220px;
+                height: 220px;
+            }
+        }
+
+        .hero-title {
+            font-size: clamp(3rem, 8vw, 6rem);
+            font-weight: 900;
+            margin-bottom: 1rem;
+            line-height: 1.1;
+        }
+
+        .hero-subtitle {
+            font-size: clamp(1.2rem, 3vw, 1.8rem);
+            color: var(--accent-primary);
+            margin-bottom: 2rem;
+            font-weight: 600;
+        }
+
+        .hero-description {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 3rem;
+            line-height: 1.8;
+        }
+
+        /* 3D Architecture Diagram */
+        .arch-diagram {
+            width: 300px;
+            height: 300px;
+            margin: 3rem auto;
+            position: relative;
+            transform-style: preserve-3d;
+            animation: rotate3d 20s infinite linear;
+        }
+
+        @keyframes rotate3d {
+            0% { transform: rotateY(0deg) rotateX(10deg); }
+            100% { transform: rotateY(360deg) rotateX(10deg); }
+        }
+
+        .arch-layer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 2px solid var(--accent-primary);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Source Code Pro', monospace;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .arch-layer:nth-child(1) {
+            transform: translateZ(150px);
+            background: rgba(0, 212, 170, 0.1);
+        }
+
+        .arch-layer:nth-child(2) {
+            transform: translateZ(50px);
+            background: rgba(0, 212, 170, 0.05);
+        }
+
+        .arch-layer:nth-child(3) {
+            transform: translateZ(-50px);
+            background: rgba(0, 212, 170, 0.05);
+        }
+
+        .arch-layer:nth-child(4) {
+            transform: translateZ(-150px);
+            background: rgba(0, 212, 170, 0.1);
+        }
+
+        .cta-button {
+            display: inline-block;
+            padding: 1rem 2rem;
+            background: var(--gradient-1);
+            color: var(--bg-primary);
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            margin: 0.5rem;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 212, 170, 0.3);
+        }
+
+        .cta-button-secondary {
+            background: transparent;
+            color: var(--accent-primary);
+            border: 2px solid var(--accent-primary);
+        }
+
+        .cta-button-secondary:hover {
+            background: rgba(0, 212, 170, 0.1);
+        }
+
+        /* Section Styles */
+        section {
+            padding: 5rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-title {
+            font-size: clamp(2rem, 5vw, 3rem);
+            margin-bottom: 3rem;
+            text-align: center;
+            position: relative;
+        }
+
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: -1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 3px;
+            background: var(--gradient-1);
+        }
+
+        /* About Section */
+        .about {
+            background: var(--bg-secondary);
+        }
+
+        .about-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: center;
+        }
+
+        .about-text {
+            font-size: 1.1rem;
+            line-height: 1.8;
+            color: var(--text-secondary);
+        }
+
+        .about-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            padding: 2rem;
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 900;
+            background: var(--gradient-1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        /* Skills Section */
+        .skills-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .skill-category {
+            background: var(--bg-secondary);
+            padding: 2rem;
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
+        }
+
+        .skill-category h3 {
+            color: var(--accent-primary);
+            margin-bottom: 1.5rem;
+            font-size: 1.3rem;
+        }
+
+        .skill-list {
+            list-style: none;
+        }
+
+        .skill-list li {
+            padding: 0.5rem 0;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .skill-list li:last-child {
+            border-bottom: none;
+        }
+
+        /* Experience Section */
+        .experience {
+            background: var(--bg-secondary);
+        }
+
+        .timeline {
+            position: relative;
+            padding-left: 2rem;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--gradient-1);
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 3rem;
+            padding-left: 2rem;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -2.5rem;
+            top: 0.5rem;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent-primary);
+            border: 2px solid var(--bg-primary);
+        }
+
+        .timeline-date {
+            color: var(--accent-primary);
+            font-family: 'Source Code Pro', monospace;
+            margin-bottom: 0.5rem;
+        }
+
+        .timeline-title {
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .timeline-company {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .timeline-achievements {
+            list-style: none;
+        }
+
+        .timeline-achievements li {
+            padding: 0.5rem 0;
+            color: var(--text-secondary);
+            position: relative;
+            padding-left: 1.5rem;
+        }
+
+        .timeline-achievements li::before {
+            content: '▸';
+            position: absolute;
+            left: 0;
+            color: var(--accent-primary);
+        }
+
+        /* Projects Section */
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+        }
+
+        .project-card {
+            background: var(--bg-secondary);
+            border-radius: 15px;
+            padding: 2rem;
+            border: 1px solid var(--border-color);
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+
+        .project-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent-primary);
+        }
+
+        .project-title {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: var(--accent-primary);
+        }
+
+        .project-description {
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .project-tech {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .tech-tag {
+            background: var(--bg-tertiary);
+            color: var(--accent-primary);
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-family: 'Source Code Pro', monospace;
+        }
+
+        /* Education Section */
+        .education {
+            background: var(--bg-secondary);
+        }
+
+        .education-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .education-card {
+            background: var(--bg-tertiary);
+            padding: 2rem;
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
+        }
+
+        .education-degree {
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .education-school {
+            color: var(--accent-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .education-period {
+            color: var(--text-secondary);
+            font-family: 'Source Code Pro', monospace;
+        }
+
+        /* Contact Section */
+        .contact {
+            text-align: center;
+        }
+
+        .contact-content {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .contact-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .contact-item {
+            background: var(--bg-secondary);
+            padding: 2rem;
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
+        }
+
+        .contact-item h4 {
+            color: var(--accent-primary);
+            margin-bottom: 1rem;
+        }
+
+        .contact-item p {
+            color: var(--text-secondary);
+        }
+
+        /* Footer */
+        footer {
+            background: var(--bg-tertiary);
+            padding: 2rem;
+            text-align: center;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .social-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .social-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .social-links a:hover {
+            color: var(--accent-primary);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .about-content {
+                grid-template-columns: 1fr;
+            }
+
+            .about-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .skills-grid,
+            .projects-grid,
+            .education-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .arch-diagram {
+                width: 200px;
+                height: 200px;
+            }
+
+            .arch-layer:nth-child(1) { transform: translateZ(100px); }
+            .arch-layer:nth-child(2) { transform: translateZ(33px); }
+            .arch-layer:nth-child(3) { transform: translateZ(-33px); }
+            .arch-layer:nth-child(4) { transform: translateZ(-100px); }
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in-up {
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        /* Smooth Scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-container">
+            <div class="nav-logo">Ajay Kotnala</div>
+            <ul class="nav-links">
+                <li><a href="#about">About</a></li>
+                <li><a href="#skills">Skills</a></li>
+                <li><a href="#experience">Experience</a></li>
+                <li><a href="#projects">Projects</a></li>
+                <li><a href="#education">Education</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <!-- Background Architecture Diagrams -->
+        <div class="bg-arch-diagrams">
+            <div class="bg-diagram bg-diagram-1"></div>
+            <div class="bg-diagram bg-diagram-2"></div>
+            <div class="bg-diagram bg-diagram-3"></div>
+            <div class="bg-diagram-lines">
+                <div class="bg-line bg-line-1"></div>
+                <div class="bg-line bg-line-2"></div>
+                <div class="bg-line bg-line-3"></div>
+                <div class="bg-line bg-line-4"></div>
+                <div class="bg-line bg-line-5"></div>
+            </div>
+        </div>
+        
+        <div class="hero-container fade-in-up">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <h1 class="hero-title">Ajay Kotnala</h1>
+                    <p class="hero-subtitle">Solutions Architect | Application Architect | Cloud-Native & Microservices | AWS · Azure · GCP | Leading Enterprise Transformations | Exploring GenAI & Agentic AI for Enterprise Solutions</p>
+                    <p class="hero-description">
+                        Enterprise-scale architect with 15+ years designing cloud-native solutions, 
+                        leading cross-functional teams of 40+ engineers, and delivering multi-million dollar 
+                        digital transformation initiatives.
+                    </p>
+                    
+                    <div>
+                        <a href="#contact" class="cta-button">Get In Touch</a>
+                        <a href="#experience" class="cta-button cta-button-secondary">View Experience</a>
+                    </div>
+                </div>
+                
+                <div class="hero-image-container">
+                    <img src="./ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="hero-image" onerror="this.src='./ajay-ntt-photo.jpg'; this.onerror='this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';';">
+                    <div style="display: none; width: 100%; height: 100%; background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary)); align-items: center; justify-content: center; color: var(--bg-primary); font-size: 3rem; font-weight: bold;">
+                        AK
+                    </div>
+                    <div class="hero-image-overlay">
+                        Senior Solution Architect
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 3D Architecture Diagram -->
+            <div class="arch-diagram">
+                <div class="arch-layer">Cloud Architecture</div>
+                <div class="arch-layer">Microservices</div>
+                <div class="arch-layer">API Gateway</div>
+                <div class="arch-layer">Event-Driven</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="about">
+        <h2 class="section-title">About Me</h2>
+        <div class="about-content">
+            <div class="about-text">
+                <p>
+                    Senior Solution Architect with comprehensive background in System Design, 
+                    API management, and event-driven development. Demonstrated success in leading 
+                    cross-functional teams, driving digital transformation initiatives, and 
+                    delivering cost-effective solutions aligned with business objectives.
+                </p>
+                <br>
+                <p>
+                    I specialize in translating complex business requirements into robust, 
+                    scalable technical architectures. My expertise spans multi-cloud environments, 
+                    microservices design, and enterprise-scale API management, consistently 
+                    delivering solutions that reduce operational costs while improving system 
+                    performance and reliability.
+                </p>
+            </div>
+            <div class="about-stats">
+                <div class="stat-card">
+                    <div class="stat-number">15+</div>
+                    <div class="stat-label">Years Experience</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">40+</div>
+                    <div class="stat-label">Engineers Led</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">20%</div>
+                    <div class="stat-label">Latency Reduction</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">25%</div>
+                    <div class="stat-label">Cost Savings</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Skills Section -->
+    <section id="skills">
+        <h2 class="section-title">Technical Expertise</h2>
+        <div class="skills-grid">
+            <div class="skill-category">
+                <h3>Architecture & Design</h3>
+                <ul class="skill-list">
+                    <li>Enterprise Application Architecture</li>
+                    <li>Solution Architecture</li>
+                    <li>System Design</li>
+                    <li>Microservices Architecture</li>
+                    <li>Domain-Driven Design</li>
+                    <li>Cloud-Native Architecture</li>
+                    <li>API-First Design</li>
+                    <li>Event-Driven Architecture</li>
+                </ul>
+            </div>
+            <div class="skill-category">
+                <h3>Cloud Platforms</h3>
+                <ul class="skill-list">
+                    <li>Amazon Web Services (AWS)</li>
+                    <li>Google Cloud Platform (GCP)</li>
+                    <li>Microsoft Azure</li>
+                    <li>Multi-Cloud Strategy</li>
+                    <li>Cloud Migration</li>
+                    <li>Serverless Architecture</li>
+                </ul>
+            </div>
+            <div class="skill-category">
+                <h3>Development Technologies</h3>
+                <ul class="skill-list">
+                    <li>Node.js</li>
+                    <li>TypeScript</li>
+                    <li>NestJS</li>
+                    <li>C#</li>
+                    <li>.NET Core</li>
+                    <li>Angular</li>
+                    <li>Full-Stack Development</li>
+                    <li>RESTful APIs</li>
+                    <li>GraphQL</li>
+                    <li>JAVA</li>
+                    <li>Python</li>
+                </ul>
+            </div>
+            <div class="skill-category">
+                <h3>API Management</h3>
+                <ul class="skill-list">
+                    <li>API Gateway</li>
+                    <li>Apigee</li>
+                    <li>WSO2 API Manager</li>
+                    <li>Swagger/OpenAPI</li>
+                    <li>API Design</li>
+                    <li>API Security</li>
+                    <li>API Monetization</li>
+                </ul>
+            </div>
+            <div class="skill-category">
+                <h3>DevOps & Automation</h3>
+                <ul class="skill-list">
+                    <li>CI/CD Pipelines</li>
+                    <li>GitHub Actions</li>
+                    <li>Azure DevOps</li>
+                    <li>Jenkins</li>
+                    <li>Infrastructure as Code (IaC)</li>
+                    <li>Terraform</li>
+                    <li>Ansible</li>
+                    <li>AWS CloudFormation</li>
+                    <li>Kubernetes</li>
+                    <li>Docker</li>
+                </ul>
+            </div>
+            <div class="skill-category">
+                <h3>Data & AI Services</h3>
+                <ul class="skill-list">
+                    <li>Agentic AI</li>
+                    <li>GenAI</li>
+                    <li>AWS Transcribe</li>
+                    <li>AWS Comprehend</li>
+                    <li>AWS Rekognition</li>
+                    <li>AWS Textract</li>
+                    <li>Azure AI</li>
+                    <li>AI Tools: Claude, ChatGPT Enterprise, GitHub Copilot, Ollama</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Experience Section -->
+    <section id="experience" class="experience">
+        <h2 class="section-title">Professional Experience</h2>
+        <div class="timeline">
+            <div class="timeline-item">
+                <div class="timeline-date">02/2024 – present</div>
+                <h3 class="timeline-title">Senior Solution Architect</h3>
+                <div class="timeline-company">NTT, Hyderabad, India</div>
+                <ul class="timeline-achievements">
+                    <li>Designed cloud-native architectures for high-traffic enterprise applications, reducing latency by 20%</li>
+                    <li>Led API gateway implementations (Azure APIM, Kong, Apigee) for secure, scalable API management</li>
+                    <li>Implemented CI/CD pipelines using Terraform & GitHub Actions, improving deployment efficiency by 10%</li>
+                    <li>Migrated legacy monolith applications to microservices architecture, reducing maintenance costs by 25%</li>
+                    <li>Led and managed cross-functional delivery teams of 30+ engineers across enterprise programs</li>
+                </ul>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-date">05/2022 – 02/2024</div>
+                <h3 class="timeline-title">Specialist - Architect</h3>
+                <div class="timeline-company">L&T, Hyderabad, India</div>
+                <ul class="timeline-achievements">
+                    <li>Spearheaded Medical Data as a Service (mDaaS) Initiative, architected healthcare data monetization platform</li>
+                    <li>Led security & compliance initiatives using IAM policies and GDPR best practices</li>
+                    <li>Developed event-driven microservices with NestJS & TypeScript, handling 100K+ API calls/month</li>
+                    <li>Led architecture discussions with global clients including Schneider Electric, Nokia, Zebra Technologies, and Google</li>
+                    <li>Contributed to Statements of Work (SOW) and RFPs resulting in successful client engagements worth multiple millions</li>
+                </ul>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-date">07/2019 – 05/2022</div>
+                <h3 class="timeline-title">Senior Consultant</h3>
+                <div class="timeline-company">Neudesic an IBM Company, Hyderabad, India</div>
+                <ul class="timeline-achievements">
+                    <li>Analyzed existing systems to identify improvement areas and implemented processes, reducing operational inefficiencies by 15%</li>
+                    <li>Developed enterprise applications from requirements analysis through deployment using market-focused approach</li>
+                    <li>Modernized legacy codebases to contemporary development standards, reducing operating costs by 35%</li>
+                </ul>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-date">06/2013 – 06/2019</div>
+                <h3 class="timeline-title">Principal Development Engineer</h3>
+                <div class="timeline-company">Aveva, Hyderabad, India</div>
+                <ul class="timeline-achievements">
+                    <li>Led development of Aveva Connect - Aveva's first approach to Cloud (AWS) following SAAS model</li>
+                    <li>Architected microservices-based platform with NodeJS, AngularJS, Serverless packages</li>
+                    <li>Implemented comprehensive user management and accessibility features</li>
+                </ul>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-date">01/2011 – 06/2013</div>
+                <h3 class="timeline-title">Software Engineer</h3>
+                <div class="timeline-company">Fidelity National Information Services, Gurugram, India</div>
+                <ul class="timeline-achievements">
+                    <li>Developed Business Internet Banking - Commercial and investment banking tool for financial asset management</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Projects Section -->
+    <section id="projects">
+        <h2 class="section-title">Key Initiatives & Projects</h2>
+        <div class="projects-grid">
+            <div class="project-card">
+                <h3 class="project-title">Medical Data as a Service (mDaaS)</h3>
+                <p class="project-description">
+                    Architected healthcare data monetization platform enabling healthcare providers 
+                    to utilize and monetize patient information while maintaining security and compliance.
+                </p>
+                <div class="project-tech">
+                    <span class="tech-tag">NestJS</span>
+                    <span class="tech-tag">TypeScript</span>
+                    <span class="tech-tag">AWS</span>
+                    <span class="tech-tag">GDPR</span>
+                    <span class="tech-tag">HIPAA</span>
+                </div>
+            </div>
+            <div class="project-card">
+                <h3 class="project-title">Aveva Connect Cloud Platform</h3>
+                <p class="project-description">
+                    Led development of Aveva's first cloud approach, implementing a comprehensive 
+                    SAAS platform with microservices architecture, user management, and accessibility features.
+                </p>
+                <div class="project-tech">
+                    <span class="tech-tag">AWS</span>
+                    <span class="tech-tag">Node.js</span>
+                    <span class="tech-tag">AngularJS</span>
+                    <span class="tech-tag">Serverless</span>
+                    <span class="tech-tag">Microservices</span>
+                </div>
+            </div>
+            <div class="project-card">
+                <h3 class="project-title">Enterprise API Gateway Implementation</h3>
+                <p class="project-description">
+                    Implemented comprehensive API gateway solutions across multiple platforms 
+                    (Azure APIM, Kong, Apigee) for secure, scalable API management in enterprise environments.
+                </p>
+                <div class="project-tech">
+                    <span class="tech-tag">Azure APIM</span>
+                    <span class="tech-tag">Kong</span>
+                    <span class="tech-tag">Apigee</span>
+                    <span class="tech-tag">OAuth 2.0</span>
+                    <span class="tech-tag">JWT</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Education Section -->
+    <section id="education" class="education">
+        <h2 class="section-title">Education & Certifications</h2>
+        <div class="education-grid">
+            <div class="education-card">
+                <h3 class="education-degree">Information Technology</h3>
+                <div class="education-school">Rajasthan Technical University</div>
+                <div class="education-period">2006 – 2010 | Jaipur, India</div>
+            </div>
+            <div class="education-card">
+                <h3 class="education-degree">Azure DP-900</h3>
+                <div class="education-school">Microsoft Azure Certification</div>
+                <div class="education-period">Azure Fundamentals</div>
+            </div>
+            <div class="education-card">
+                <h3 class="education-degree">Azure AI-900</h3>
+                <div class="education-school">Microsoft Azure Certification</div>
+                <div class="education-period">Azure AI Fundamentals</div>
+            </div>
+            <div class="education-card">
+                <h3 class="education-degree">NVIDIA AI Technical Curriculum</h3>
+                <div class="education-school">NVIDIA Certification</div>
+                <div class="education-period">AI Technologies</div>
+            </div>
+            <div class="education-card">
+                <h3 class="education-degree">Cloud Solution and Design Course</h3>
+                <div class="education-school">Professional Certification</div>
+                <div class="education-period">Cloud Architecture</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="contact">
+        <h2 class="section-title">Get In Touch</h2>
+        <div class="contact-content">
+            <p>
+                I'm always interested in discussing new opportunities, architectural challenges, 
+                and collaborative projects. Whether you're looking for technical leadership, 
+                solution architecture expertise, or want to discuss cloud transformation initiatives, 
+                I'd love to hear from you.
+            </p>
+            <div class="contact-info">
+                <div class="contact-item">
+                    <h4>Email</h4>
+                    <p>ajay.kotnalajpr@gmail.com</p>
+                </div>
+                <div class="contact-item">
+                    <h4>Location</h4>
+                    <p>Hyderabad, India</p>
+                </div>
+                <div class="contact-item">
+                    <h4>Available For</h4>
+                    <p>Consulting | Architecture | Technical Leadership</p>
+                </div>
+            </div>
+            <div style="margin-top: 3rem;">
+                <a href="mailto:ajay.kotnalajpr@gmail.com" class="cta-button">Send Email</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div class="social-links">
+                <a href="#">LinkedIn</a>
+                <a href="#">GitHub</a>
+                <a href="#">Twitter</a>
+            </div>
+            <p>&copy; 2024 Ajay Kotnala. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Intersection Observer for fade-in animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        // Apply fade-in animation to sections
+        document.addEventListener('DOMContentLoaded', () => {
+            const sections = document.querySelectorAll('section');
+            sections.forEach(section => {
+                section.style.opacity = '0';
+                section.style.transform = 'translateY(30px)';
+                section.style.transition = 'opacity 0.8s ease, transform 0.8s ease';
+                observer.observe(section);
+            });
+        });
+
+        // Smooth scroll for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Add parallax effect to hero section
+        window.addEventListener('scroll', () => {
+            const scrolled = window.pageYOffset;
+            const hero = document.querySelector('.hero');
+            if (hero) {
+                hero.style.transform = `translateY(${scrolled * 0.5}px)`;
+            }
+        });
+    </script>
+</body>
+</html>
