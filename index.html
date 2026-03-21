@@ -62,6 +62,27 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 1rem;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .nav-profile-img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--accent-primary);
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+
+        .nav-profile-img:hover {
+            transform: scale(1.1);
+            border-color: var(--accent-secondary);
         }
 
         .nav-logo {
@@ -819,7 +840,10 @@
     <!-- Navigation -->
     <nav>
         <div class="nav-container">
-            <div class="nav-logo">Ajay Kotnala</div>
+            <div class="nav-left">
+                <img src="ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="nav-profile-img">
+                <div class="nav-logo">Ajay Kotnala</div>
+            </div>
             <ul class="nav-links">
                 <li><a href="#about">About</a></li>
                 <li><a href="#skills">Skills</a></li>
@@ -851,7 +875,7 @@
             <div class="hero-content">
                 <div class="hero-text">
                     <h1 class="hero-title">Ajay Kotnala</h1>
-                    <p class="hero-subtitle">Solutions Architect | Application Architect | Cloud-Native & Microservices | AWS · Azure · GCP | Leading Enterprise Transformations | Exploring GenAI & Agentic AI for Enterprise Solutions</p>
+                    <p class="hero-subtitle">Solutions Architect | Application Architect | Exploring GenAI & Agentic AI for Enterprise Solutions</p>
                     <p class="hero-description">
                         Enterprise-scale architect with 15+ years designing cloud-native solutions, 
                         leading cross-functional teams of 40+ engineers, and delivering multi-million dollar 
@@ -864,24 +888,16 @@
                     </div>
                 </div>
                 
-                <div class="hero-image-container">
-                    <img src="./ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="hero-image" onerror="this.src='./ajay-ntt-photo.jpg'; this.onerror='this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';';">
-                    <div style="display: none; width: 100%; height: 100%; background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary)); align-items: center; justify-content: center; color: var(--bg-primary); font-size: 3rem; font-weight: bold;">
-                        AK
-                    </div>
-                    <div class="hero-image-overlay">
-                        Senior Solution Architect
-                    </div>
-                </div>
-            </div>
-            
-            <!-- 3D Architecture Diagram -->
+                 <!-- 3D Architecture Diagram -->
             <div class="arch-diagram">
                 <div class="arch-layer">Cloud Architecture</div>
                 <div class="arch-layer">Microservices</div>
-                <div class="arch-layer">API Gateway</div>
+                <div class="arch-layer">AI</div>
                 <div class="arch-layer">Event-Driven</div>
             </div>
+            </div>
+            
+           
         </div>
     </section>
 
