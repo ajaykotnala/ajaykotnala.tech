@@ -1,21 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ajay Kotnala - Senior Solution Architect</title>
-    
+
     <!-- Google Fonts for SF Pro substitutes (Inter) and code (Source Code Pro) -->
-    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
     <style>
         /* Modern CSS Custom Properties representing Apple Design Tokens from DESIGN.md */
         :root {
             /* Color System */
-            --color-primary: #0066cc; /* Action Blue */
+            --color-primary: #0066cc;
+            /* Action Blue */
             --color-primary-focus: #0071e3;
-            --color-primary-on-dark: #2997ff; /* Sky Link Blue */
-            --color-ink: #1d1d1f; /* Apple Near-Black Text */
+            --color-primary-on-dark: #2997ff;
+            /* Sky Link Blue */
+            --color-ink: #1d1d1f;
+            /* Apple Near-Black Text */
             --color-body: #1d1d1f;
             --color-body-on-dark: #ffffff;
             --color-body-muted: #86868b;
@@ -24,15 +30,17 @@
             --color-divider-soft: rgba(0, 0, 0, 0.08);
             --color-hairline: #e0e0e0;
             --color-canvas: #ffffff;
-            --color-canvas-parchment: #f5f5f7; /* Apple signature light gray */
+            --color-canvas-parchment: #f5f5f7;
+            /* Apple signature light gray */
             --color-surface-pearl: #fafafc;
-            --color-surface-tile-1: #272729; /* Primary dark tile */
+            --color-surface-tile-1: #272729;
+            /* Primary dark tile */
             --color-surface-tile-2: #2a2a2c;
             --color-surface-tile-3: #252527;
             --color-surface-black: #000000;
             --color-surface-chip-translucent: rgba(210, 210, 215, 0.64);
             --color-on-primary: #ffffff;
-            
+
             /* Typography Scale & Weight (SF Pro substitutes using Inter) */
             --font-headline: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             --font-body: "Inter", system-ui, -apple-system, sans-serif;
@@ -55,7 +63,7 @@
             --rounded-md: 11px;
             --rounded-lg: 18px;
             --rounded-pill: 9999px;
-            
+
             /* Elevation & Shadow */
             --shadow-product: 0 20px 40px rgba(0, 0, 0, 0.12);
             --shadow-product-hover: 0 30px 60px rgba(0, 0, 0, 0.18);
@@ -118,7 +126,7 @@
         }
 
         /* Navigation Systems (Apple Double Navigation) */
-        
+
         /* 1. Global Navigation Bar (Thin Black Bar) */
         .global-nav {
             position: fixed;
@@ -453,9 +461,17 @@
             border-radius: 50%;
         }
 
-        .dashboard-header .dot.red { background: #ff5f56; }
-        .dashboard-header .dot.yellow { background: #ffbd2e; }
-        .dashboard-header .dot.green { background: #27c93f; }
+        .dashboard-header .dot.red {
+            background: #ff5f56;
+        }
+
+        .dashboard-header .dot.yellow {
+            background: #ffbd2e;
+        }
+
+        .dashboard-header .dot.green {
+            background: #27c93f;
+        }
 
         .dashboard-header .dashboard-title {
             font-family: var(--font-mono);
@@ -485,7 +501,8 @@
         }
 
         .system-node.cloud {
-            border-left: 4px solid #34c759; /* Apple Green */
+            border-left: 4px solid #34c759;
+            /* Apple Green */
         }
 
         .system-node.service {
@@ -493,11 +510,13 @@
         }
 
         .system-node.gateway {
-            border-left: 4px solid #af52de; /* Purple */
+            border-left: 4px solid #af52de;
+            /* Purple */
         }
 
         .system-node.ai {
-            border-left: 4px solid #ff9500; /* Orange */
+            border-left: 4px solid #ff9500;
+            /* Orange */
             background: linear-gradient(90deg, #ffffff 0%, rgba(255, 149, 0, 0.04) 100%);
         }
 
@@ -975,6 +994,7 @@
             .hero-content {
                 gap: var(--spacing-lg);
             }
+
             .hero-title {
                 font-size: 44px;
             }
@@ -982,31 +1002,39 @@
 
         @media (max-width: 833px) {
             .global-nav-links {
-                display: none; /* Collapses to standard Apple mobile header layout */
+                display: none;
+                /* Collapses to standard Apple mobile header layout */
             }
+
             .sub-nav-container {
                 padding: 0 16px;
             }
+
             .hero-content {
                 grid-template-columns: 1fr;
                 text-align: center;
                 gap: var(--spacing-xl);
             }
+
             .hero-text {
                 align-items: center;
                 text-align: center;
             }
+
             .hero-description {
                 margin-left: auto;
                 margin-right: auto;
             }
+
             .about-content {
                 grid-template-columns: 1fr;
             }
+
             .contact-info {
                 grid-template-columns: 1fr;
                 gap: var(--spacing-md);
             }
+
             section {
                 padding: var(--spacing-xxl) 1.5rem;
             }
@@ -1016,15 +1044,19 @@
             .hero-title {
                 font-size: 34px;
             }
+
             .about-stats {
                 grid-template-columns: 1fr;
             }
+
             .timeline {
                 padding-left: 20px;
             }
+
             .timeline-dot {
                 left: -20px;
             }
+
             .footer-bottom {
                 flex-direction: column;
                 align-items: flex-start;
@@ -1032,6 +1064,7 @@
         }
     </style>
 </head>
+
 <body>
 
     <!-- 1. Global Navigation Bar -->
@@ -1051,12 +1084,20 @@
             <div class="global-nav-actions">
                 <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
                     <svg class="nav-icon" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/>
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
                     </svg>
                 </a>
                 <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" aria-label="LinkedIn">
                     <svg class="nav-icon" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                        <path fill="currentColor"
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z" />
                     </svg>
                 </a>
             </div>
@@ -1082,17 +1123,17 @@
                     <h1 class="hero-title">Ajay Kotnala</h1>
                     <div class="hero-subtitle">Solutions Architect | Application Architect</div>
                     <p class="hero-description">
-                        Enterprise-scale architect with 15+ years designing cloud-native solutions, 
-                        leading cross-functional teams of 30+ engineers, and delivering multi-million dollar 
+                        Enterprise-scale architect with 15+ years designing cloud-native solutions,
+                        leading cross-functional teams of 30+ engineers, and delivering multi-million dollar
                         digital transformation initiatives.
                     </p>
-                    
+
                     <div class="hero-cta-group">
                         <a href="#contact" class="button-primary">Get In Touch</a>
                         <a href="#experience" class="button-secondary-pill">View Experience</a>
                     </div>
                 </div>
-                
+
                 <div class="hero-visual-card">
                     <!-- Dashboard Mockup -->
                     <div class="system-dashboard-mock">
@@ -1111,13 +1152,13 @@
                             </div>
                             <div class="system-row">
                                 <div class="system-node service">
-                                    <span class="node-label">Microservices (NestJS / TypeScript / .NET Core)</span>
+                                    <span class="node-label">Microservices (NodeJS / C# / Python / Java)</span>
                                 </div>
                                 <div class="system-connections">
                                     <div class="conn-line vertical"></div>
                                 </div>
                                 <div class="system-node gateway">
-                                    <span class="node-label">API Management (Apigee / Kong / Gateway)</span>
+                                    <span class="node-label">API Management (APIGateway / WSO2 / APIM / Gateway)</span>
                                 </div>
                                 <div class="system-connections">
                                     <div class="conn-line vertical"></div>
@@ -1146,14 +1187,18 @@
             <div class="about-content">
                 <div class="about-text">
                     <p class="lead-airy">
-                        Senior Solution Architect with comprehensive background in System Design, 
+                        Senior Solution Architect with comprehensive background in System Design,
                         API management, and event-driven development.
                     </p>
                     <p class="about-paragraph">
-                        Demonstrated success in leading cross-functional teams, driving digital transformation initiatives, and delivering cost-effective solutions aligned with business objectives.
+                        Demonstrated success in leading cross-functional teams, driving digital transformation
+                        initiatives, and delivering cost-effective solutions aligned with business objectives.
                     </p>
                     <p class="about-paragraph">
-                        I specialize in translating complex business requirements into robust, scalable technical architectures. My expertise spans multi-cloud environments, microservices design, and enterprise-scale API management, consistently delivering solutions that reduce operational costs while improving system performance and reliability.
+                        I specialize in translating complex business requirements into robust, scalable technical
+                        architectures. My expertise spans multi-cloud environments, microservices design, and
+                        enterprise-scale API management, consistently delivering solutions that reduce operational costs
+                        while improving system performance and reliability.
                     </p>
                 </div>
                 <div class="about-stats">
@@ -1278,11 +1323,16 @@
                             <div class="timeline-company">NTT, Hyderabad, India</div>
                         </div>
                         <ul class="timeline-achievements">
-                            <li>Designed cloud-native architectures for high-traffic enterprise applications, reducing latency by 20%</li>
-                            <li>Led API gateway implementations (Azure APIM, Kong, Apigee) for secure, scalable API management</li>
-                            <li>Implemented CI/CD pipelines using Terraform & GitHub Actions, improving deployment efficiency by 10%</li>
-                            <li>Migrated legacy monolith applications to microservices architecture, reducing maintenance costs by 25%</li>
-                            <li>Led and managed cross-functional delivery teams of 30+ engineers across enterprise programs</li>
+                            <li>Designed cloud-native architectures for high-traffic enterprise applications, reducing
+                                latency by 20%</li>
+                            <li>Led API gateway implementations (Azure APIM, Kong, Apigee) for secure, scalable API
+                                management</li>
+                            <li>Implemented CI/CD pipelines using Terraform & GitHub Actions, improving deployment
+                                efficiency by 10%</li>
+                            <li>Migrated legacy monolith applications to microservices architecture, reducing
+                                maintenance costs by 25%</li>
+                            <li>Led and managed cross-functional delivery teams of 30+ engineers across enterprise
+                                programs</li>
                         </ul>
                     </div>
                 </div>
@@ -1295,11 +1345,15 @@
                             <div class="timeline-company">L&T, Hyderabad, India</div>
                         </div>
                         <ul class="timeline-achievements">
-                            <li>Spearheaded Medical Data as a Service (mDaaS) Initiative, architected healthcare data monetization platform</li>
+                            <li>Spearheaded Medical Data as a Service (mDaaS) Initiative, architected healthcare data
+                                monetization platform</li>
                             <li>Led security & compliance initiatives using IAM policies and GDPR best practices</li>
-                            <li>Developed event-driven microservices with NestJS & TypeScript, handling 100K+ API calls/month</li>
-                            <li>Led architecture discussions with global clients including Schneider Electric, Nokia, Zebra Technologies, and Google</li>
-                            <li>Contributed to Statements of Work (SOW) and RFPs resulting in successful client engagements worth multiple millions</li>
+                            <li>Developed event-driven microservices with NestJS & TypeScript, handling 100K+ API
+                                calls/month</li>
+                            <li>Led architecture discussions with global clients including Schneider Electric, Nokia,
+                                Zebra Technologies, and Google</li>
+                            <li>Contributed to Statements of Work (SOW) and RFPs resulting in successful client
+                                engagements worth multiple millions</li>
                         </ul>
                     </div>
                 </div>
@@ -1312,9 +1366,12 @@
                             <div class="timeline-company">Neudesic an IBM Company, Hyderabad, India</div>
                         </div>
                         <ul class="timeline-achievements">
-                            <li>Analyzed existing systems to identify improvement areas and implemented processes, reducing operational inefficiencies by 15%</li>
-                            <li>Developed enterprise applications from requirements analysis through deployment using market-focused approach</li>
-                            <li>Modernized legacy codebases to contemporary development standards, reducing operating costs by 35%</li>
+                            <li>Analyzed existing systems to identify improvement areas and implemented processes,
+                                reducing operational inefficiencies by 15%</li>
+                            <li>Developed enterprise applications from requirements analysis through deployment using
+                                market-focused approach</li>
+                            <li>Modernized legacy codebases to contemporary development standards, reducing operating
+                                costs by 35%</li>
                         </ul>
                     </div>
                 </div>
@@ -1327,8 +1384,10 @@
                             <div class="timeline-company">Aveva, Hyderabad, India</div>
                         </div>
                         <ul class="timeline-achievements">
-                            <li>Led development of Aveva Connect - Aveva's first approach to Cloud (AWS) following SAAS model</li>
-                            <li>Architected microservices-based platform with NodeJS, AngularJS, Serverless packages</li>
+                            <li>Led development of Aveva Connect - Aveva's first approach to Cloud (AWS) following SAAS
+                                model</li>
+                            <li>Architected microservices-based platform with NodeJS, AngularJS, Serverless packages
+                            </li>
                             <li>Implemented comprehensive user management and accessibility features</li>
                         </ul>
                     </div>
@@ -1342,7 +1401,8 @@
                             <div class="timeline-company">Fidelity National Information Services, Gurugram, India</div>
                         </div>
                         <ul class="timeline-achievements">
-                            <li>Developed Business Internet Banking - Commercial and investment banking tool for financial asset management</li>
+                            <li>Developed Business Internet Banking - Commercial and investment banking tool for
+                                financial asset management</li>
                         </ul>
                     </div>
                 </div>
@@ -1359,7 +1419,7 @@
                     <div>
                         <h3 class="project-title">Medical Data as a Service (mDaaS)</h3>
                         <p class="project-description">
-                            Architected healthcare data monetization platform enabling healthcare providers 
+                            Architected healthcare data monetization platform enabling healthcare providers
                             to utilize and monetize patient information while maintaining security and compliance.
                         </p>
                     </div>
@@ -1375,7 +1435,7 @@
                     <div>
                         <h3 class="project-title">Aveva Connect Cloud Platform</h3>
                         <p class="project-description">
-                            Led development of Aveva's first cloud approach, implementing a comprehensive 
+                            Led development of Aveva's first cloud approach, implementing a comprehensive
                             SAAS platform with microservices architecture, user management, and accessibility features.
                         </p>
                     </div>
@@ -1391,8 +1451,8 @@
                     <div>
                         <h3 class="project-title">NTT Industry Cloud Platform</h3>
                         <p class="project-description">
-                            Leading development of industry-specific cloud solutions with accelerators, blueprints, 
-                            and cloud-native building blocks. Platform enables faster time-to-market for sector-specific 
+                            Leading development of industry-specific cloud solutions with accelerators, blueprints,
+                            and cloud-native building blocks. Platform enables faster time-to-market for sector-specific
                             use cases across sovereign, public, and private cloud environments.
                         </p>
                     </div>
@@ -1416,27 +1476,32 @@
                 <div class="education-card store-utility-card">
                     <h3 class="education-degree">Information Technology</h3>
                     <div class="education-school">Rajasthan Technical University</div>
-                    <div class="education-period">2006 – 2010 | Jaipur, India</div>
+                    <div class="education-period">Engineering</div>
+                </div>
+                <div class="education-card store-utility-card">
+                    <h3 class="education-degree">AIF - C01</h3>
+                    <div class="education-school">AWS Certified AI</div>
+                    <div class="education-period">AI</div>
                 </div>
                 <div class="education-card store-utility-card">
                     <h3 class="education-degree">Azure DP-900</h3>
                     <div class="education-school">Microsoft Azure Certification</div>
-                    <div class="education-period">Azure Fundamentals</div>
+                    <div class="education-period">AI</div>
                 </div>
                 <div class="education-card store-utility-card">
                     <h3 class="education-degree">Azure AI-900</h3>
                     <div class="education-school">Microsoft Azure Certification</div>
-                    <div class="education-period">Azure AI Fundamentals</div>
+                    <div class="education-period">AI</div>
                 </div>
                 <div class="education-card store-utility-card">
                     <h3 class="education-degree">NVIDIA AI Technical Curriculum</h3>
                     <div class="education-school">NVIDIA Certification</div>
-                    <div class="education-period">AI Technologies</div>
+                    <div class="education-period">AI</div>
                 </div>
                 <div class="education-card store-utility-card">
                     <h3 class="education-degree">Cloud Solution and Design</h3>
                     <div class="education-school">Professional Certification</div>
-                    <div class="education-period">Cloud Architecture</div>
+                    <div class="education-period">Cloud</div>
                 </div>
             </div>
         </div>
@@ -1448,16 +1513,17 @@
             <h2 class="section-title">Get In Touch</h2>
             <div class="contact-content store-utility-card">
                 <p class="contact-lead lead-airy">
-                    I'm always interested in discussing new opportunities, architectural challenges, 
-                    and collaborative projects. Whether you're looking for technical leadership, 
-                    solution architecture expertise, or want to discuss cloud transformation initiatives, 
+                    I'm always interested in discussing new opportunities, architectural challenges,
+                    and collaborative projects. Whether you're looking for technical leadership,
+                    solution architecture expertise, or want to discuss cloud transformation initiatives,
                     I'd love to hear from you.
                 </p>
-                
+
                 <div class="contact-info">
                     <div class="contact-item">
                         <h4>Email</h4>
-                        <p><a href="mailto:ajay.kotnalajpr@gmail.com" class="text-link">ajay.kotnalajpr@gmail.com</a></p>
+                        <p><a href="mailto:ajay.kotnalajpr@gmail.com" class="text-link">ajay.kotnalajpr@gmail.com</a>
+                        </p>
                     </div>
                     <div class="contact-item">
                         <h4>Location</h4>
@@ -1468,7 +1534,7 @@
                         <p>Consulting | Architecture | Technical Leadership</p>
                     </div>
                 </div>
-                
+
                 <div style="margin-top: 3rem; text-align: center;">
                     <a href="mailto:ajay.kotnalajpr@gmail.com" class="button-store-hero">Send Email</a>
                 </div>
@@ -1485,7 +1551,8 @@
                     <a href="https://github.com/ajaykotnala" target="_blank">GitHub</a>
                     <a href="https://medium.com/@ajay.kotnalajpr" target="_blank">Medium</a>
                 </div>
-                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved. Designed with Apple design guidelines.</p>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved. Designed with Apple design
+                    guidelines.</p>
             </div>
         </div>
     </footer>
@@ -1521,7 +1588,7 @@
                 e.preventDefault();
                 const targetId = this.getAttribute('href');
                 if (targetId === '#') return;
-                
+
                 const target = document.querySelector(targetId);
                 if (target) {
                     // Nav offset calculation: global nav (44px) + sub nav (52px) = 96px
@@ -1540,4 +1607,5 @@
         });
     </script>
 </body>
+
 </html>
