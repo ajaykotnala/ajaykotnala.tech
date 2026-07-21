@@ -1,0 +1,1988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Designing Tinder at Scale — System Design Deep Dive | Ajay Kotnala</title>
+    <meta name="description" content="A comprehensive system design breakdown of Tinder — covering feed generation, swiping consistency, geo-spatial indexing, and scaling to 20M daily active users. Written by Ajay Kotnala, Senior Solution Architect.">
+    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
+    <style>
+        /* ===== Apple Design Tokens (matching index.html) ===== */
+        :root {
+            /* Color System */
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-pearl: #fafafc;
+            --color-on-primary: #ffffff;
+
+            /* Tinder brand accents (kept for article identity) */
+            --tinder-pink: #e8445a;
+            --tinder-orange: #e56b47;
+            --tinder-gradient: linear-gradient(135deg, #e8445a, #e56b47);
+
+            /* Typography */
+            --font-headline: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-body: "Lora", Georgia, "Times New Roman", serif;
+            --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+
+            /* Border Radii */
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            /* Shadows */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06);
+
+            /* Article */
+            --article-width: 680px;
+        }
+
+        /* ===== Reset ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* ===== 1. Global Navigation Bar (Apple Thin Black Bar) ===== */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            font-family: var(--font-ui);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .global-nav-logo .logo-icon {
+            font-size: 16px;
+            color: var(--color-primary-on-dark);
+        }
+
+        .global-nav-links {
+            display: flex;
+            list-style: none;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .global-nav-links a {
+            color: #cccccc;
+            text-decoration: none;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            letter-spacing: -0.12px;
+            transition: color 0.2s ease;
+        }
+
+        .global-nav-links a:hover {
+            color: #ffffff;
+        }
+
+        .global-nav-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .global-nav-actions a {
+            color: #cccccc;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .global-nav-actions a:hover {
+            color: #ffffff;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ===== 2. Sub Navigation Bar (Frosted Sticky) ===== */
+        .sub-nav-frosted {
+            position: sticky;
+            top: 44px;
+            left: 0;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 999;
+            border-bottom: 1px solid var(--color-divider-soft);
+        }
+
+        .sub-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .sub-nav-title {
+            font-family: var(--font-headline);
+            font-size: 21px;
+            font-weight: 600;
+            color: var(--color-ink);
+            text-decoration: none;
+            letter-spacing: 0.231px;
+        }
+
+        .sub-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sub-nav-link {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink);
+            text-decoration: none;
+            opacity: 0.8;
+            transition: color 0.2s ease, opacity 0.2s ease;
+        }
+
+        .sub-nav-link:hover {
+            color: var(--color-primary);
+            opacity: 1;
+        }
+
+        .sub-nav-button {
+            background: var(--color-primary);
+            color: var(--color-on-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            border-radius: var(--rounded-pill);
+            text-decoration: none;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        .sub-nav-button:hover {
+            background: var(--color-primary-focus);
+        }
+
+        .sub-nav-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== Scroll Progress Bar ===== */
+        .progress-bar {
+            position: fixed;
+            top: 44px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--tinder-gradient);
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        /* ===== Article Hero ===== */
+        .article-hero {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(96px + 4rem) 2rem 4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .article-hero-inner {
+            max-width: var(--article-width);
+            width: 100%;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .article-category {
+            display: inline-block;
+            padding: 4px 14px;
+            background: var(--tinder-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .article-date {
+            color: var(--color-body-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .article-read-time {
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 13px;
+        }
+
+        .article-read-time::before {
+            content: '·';
+            margin-right: 0.5rem;
+            color: var(--color-body-muted);
+        }
+
+        .article-hero h1 {
+            font-family: var(--font-headline);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+        }
+
+        .article-hero h1 .gradient-text {
+            background: var(--tinder-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .article-hero-desc {
+            font-family: var(--font-body);
+            font-size: 20px;
+            color: var(--color-body-muted);
+            line-height: 1.7;
+            max-width: 600px;
+        }
+
+        .article-hero-desc em {
+            font-style: italic;
+            color: var(--color-ink-muted-80);
+        }
+
+        /* ===== Author Bar (Medium-style) ===== */
+        .author-bar {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--color-divider-soft);
+            margin-bottom: 2.5rem;
+        }
+
+        .author-bar-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-bar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .author-bar-name {
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-ink);
+        }
+
+        .author-bar-meta {
+            font-family: var(--font-ui);
+            font-size: 13px;
+            color: var(--color-body-muted);
+        }
+
+        /* ===== Table of Contents ===== */
+        .toc-wrapper {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .toc {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem 2.5rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--tinder-gradient);
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toc h3 {
+            font-size: 12px;
+            margin-bottom: 1.2rem;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            padding: 0.35rem 0;
+        }
+
+        .toc li a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 15px;
+            transition: color 0.2s ease, padding-left 0.2s ease;
+            display: inline-block;
+        }
+
+        .toc li a::before {
+            content: counter(toc-counter, decimal-leading-zero) '.';
+            color: var(--tinder-pink);
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-right: 0.8rem;
+            font-size: 13px;
+        }
+
+        .toc li a:hover {
+            color: var(--color-primary);
+            padding-left: 4px;
+        }
+
+        /* ===== Article Body (Medium-friendly) ===== */
+        .article-body {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .article-body h2 {
+            font-family: var(--font-headline);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-top: 3.5rem;
+            margin-bottom: 1.2rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .article-body h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .article-body h2 .section-number {
+            color: var(--tinder-pink);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .article-body h3 {
+            font-family: var(--font-headline);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-top: 2.5rem;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .article-body p {
+            font-family: var(--font-body);
+            font-size: 19px;
+            line-height: 1.85;
+            color: var(--color-ink-muted-80);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.003em;
+        }
+
+        .article-body ul, .article-body ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .article-body li {
+            font-family: var(--font-body);
+            color: var(--color-ink-muted-80);
+            margin-bottom: 0.6rem;
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .article-body strong {
+            color: var(--color-ink);
+            font-weight: 600;
+        }
+
+        .article-body em {
+            color: var(--color-ink-muted-80);
+            font-style: italic;
+        }
+
+        .article-body code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--color-canvas-parchment);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--tinder-pink);
+        }
+
+        /* ===== Callout Boxes ===== */
+        .callout {
+            background: var(--color-canvas-parchment);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 0 var(--rounded-sm) var(--rounded-sm) 0;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .callout.callout-warning {
+            border-left-color: var(--tinder-orange);
+            background: #fef7f5;
+        }
+
+        .callout.callout-insight {
+            border-left-color: var(--tinder-pink);
+            background: #fdf5f6;
+        }
+
+        .callout .callout-label {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.6rem;
+            color: var(--color-primary);
+        }
+
+        .callout.callout-warning .callout-label {
+            color: var(--tinder-orange);
+        }
+
+        .callout.callout-insight .callout-label {
+            color: var(--tinder-pink);
+        }
+
+        .callout p {
+            margin-bottom: 0;
+            font-size: 16px !important;
+            line-height: 1.7 !important;
+        }
+
+        /* ===== Code Blocks (GitHub Light Theme) ===== */
+        .code-block {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-hairline);
+            border-radius: var(--rounded-sm);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0 2rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--color-hairline);
+            color: var(--color-body-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 0 var(--rounded-sm) 0 var(--rounded-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--color-ink);
+            line-height: 1.7;
+            white-space: pre;
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .code-block .keyword { color: #cf222e; }
+        .code-block .string { color: #0a3069; }
+        .code-block .comment { color: #6e7781; font-style: italic; }
+        .code-block .type { color: #953800; }
+        .code-block .number { color: #0550ae; }
+
+        /* ===== Entity Cards ===== */
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .entity-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 1.8rem;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .entity-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .entity-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .entity-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .entity-card p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ===== API Endpoint Cards ===== */
+        .api-endpoint {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .api-endpoint:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .api-method-url {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .api-method {
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .api-method.post {
+            background: #fdf5f6;
+            color: var(--tinder-pink);
+        }
+
+        .api-method.get {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .api-url {
+            font-family: var(--font-mono);
+            color: var(--color-ink);
+            font-size: 15px;
+        }
+
+        .api-desc {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 15px !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        /* ===== Excalidraw-Style SVG Architecture Diagrams ===== */
+        .diagram-container {
+            margin: 3rem -2rem;
+            padding: 2rem;
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            overflow-x: auto;
+        }
+
+        .diagram-title {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-body-muted);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .diagram-caption {
+            text-align: center;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            margin-top: 1rem;
+            font-style: italic;
+        }
+
+        .diagram-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== Comparison Table ===== */
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 2rem 0;
+            border-radius: var(--rounded-md);
+            overflow: hidden;
+            border: 1px solid var(--color-divider-soft);
+            font-family: var(--font-ui);
+        }
+
+        .comparison-table th {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            background: var(--color-canvas);
+            color: var(--color-ink-muted-80);
+            font-size: 15px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--color-divider-soft);
+            line-height: 1.5;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--color-canvas-parchment);
+        }
+
+        .check-icon { color: var(--color-primary); font-weight: 700; }
+        .cross-icon { color: var(--color-body-muted); font-weight: 700; }
+
+        /* ===== Scale Numbers ===== */
+        .scale-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .scale-stat {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 1.2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition: box-shadow 0.3s ease, transform 0.3s ease;
+        }
+
+        .scale-stat:hover {
+            box-shadow: var(--shadow-card);
+            transform: translateY(-2px);
+        }
+
+        .scale-stat::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--tinder-gradient);
+        }
+
+        .scale-stat .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            background: var(--tinder-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-headline);
+        }
+
+        .scale-stat .stat-desc {
+            color: var(--color-body-muted);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ===== Deep Dive Accordion ===== */
+        .deep-dive {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            margin: 1.5rem 0;
+            overflow: hidden;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .deep-dive:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .deep-dive-header {
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+
+        .deep-dive-header:hover {
+            background: var(--color-canvas-parchment);
+        }
+
+        .deep-dive-header h4 {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--color-ink);
+        }
+
+        .deep-dive-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-canvas-parchment);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            transition: transform 0.3s ease, background 0.3s ease;
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        .deep-dive.open .deep-dive-toggle {
+            transform: rotate(45deg);
+            background: #fdf5f6;
+            color: var(--tinder-pink);
+        }
+
+        .deep-dive-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .deep-dive.open .deep-dive-content {
+            max-height: 3000px;
+        }
+
+        .deep-dive-content-inner {
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .deep-dive-content-inner p,
+        .deep-dive-content-inner li {
+            font-size: 16px !important;
+        }
+
+        /* ===== Level Expectation Cards ===== */
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .level-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .level-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .level-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .level-card.mid::before { background: var(--color-primary); }
+        .level-card.senior::before { background: var(--tinder-orange); }
+        .level-card.staff::before { background: var(--tinder-pink); }
+
+        .level-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .level-card.mid .level-label { color: var(--color-primary); }
+        .level-card.senior .level-label { color: var(--tinder-orange); }
+        .level-card.staff .level-label { color: var(--tinder-pink); }
+
+        .level-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .level-card p {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .level-focus {
+            display: inline-block;
+            margin-top: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .level-card.mid .level-focus { background: #eef6ff; color: var(--color-primary); }
+        .level-card.senior .level-focus { background: #fef3ef; color: var(--tinder-orange); }
+        .level-card.staff .level-focus { background: #fdf5f6; color: var(--tinder-pink); }
+
+        /* ===== Author Footer Card ===== */
+        .article-footer {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+        }
+
+        .author-card {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-canvas);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            flex-shrink: 0;
+        }
+
+        .author-info h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: var(--color-ink);
+        }
+
+        .author-info .author-role {
+            color: var(--color-primary);
+            font-size: 14px;
+            font-family: var(--font-ui);
+            margin-bottom: 0.6rem;
+        }
+
+        .author-info p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-weight: 500;
+            font-size: 15px;
+            transition: gap 0.2s ease;
+        }
+
+        .back-link:hover {
+            gap: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* ===== Global Footer ===== */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .footer-container {
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .social-links a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        .fine-print {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink-muted-48);
+            letter-spacing: -0.12px;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 833px) {
+            .global-nav-links { display: none; }
+            .sub-nav-container { padding: 0 16px; }
+            .article-hero { padding: calc(96px + 2rem) 1.5rem 3rem; }
+            .article-body { padding: 0 1.5rem 4rem; }
+            .toc-wrapper { padding: 0 1.5rem; }
+            .entity-grid { grid-template-columns: 1fr; }
+            .scale-stats { grid-template-columns: 1fr 1fr; }
+            .level-grid { grid-template-columns: 1fr; }
+            .author-card { flex-direction: column; text-align: center; }
+            .diagram-container { margin: 2rem -1rem; padding: 1.5rem 1rem; }
+            .comparison-table { font-size: 14px; }
+            .comparison-table th, .comparison-table td { padding: 8px 10px; }
+            .author-bar { padding: 0 1.5rem; }
+        }
+
+        @media (max-width: 480px) {
+            .scale-stats { grid-template-columns: 1fr; }
+            .footer-bottom { flex-direction: column; align-items: flex-start; }
+        }
+
+        /* ===== Animations ===== */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1), transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .reveal-element.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- 1. Global Navigation Bar -->
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="index.html" class="global-nav-logo">
+                <span class="logo-icon">[A]</span> Ajay Kotnala
+            </a>
+            <ul class="global-nav-links">
+                <li><a href="index.html#about">About</a></li>
+                <li><a href="index.html#skills">Skills</a></li>
+                <li><a href="index.html#experience">Experience</a></li>
+                <li><a href="index.html#projects">Projects</a></li>
+                <li><a href="index.html#contact">Contact</a></li>
+            </ul>
+            <div class="global-nav-actions">
+                <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
+                    </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" aria-label="LinkedIn">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. Sticky Sub Navigation Bar -->
+    <nav class="sub-nav-frosted">
+        <div class="sub-nav-container">
+            <a href="#" class="sub-nav-title">System Design</a>
+            <div class="sub-nav-right">
+                <a href="index.html" class="sub-nav-link">Portfolio</a>
+                <a href="index.html#contact" class="sub-nav-button">Get in Touch</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Article Hero -->
+    <section class="article-hero">
+        <div class="article-hero-inner reveal-element active">
+            <div class="article-meta">
+                <span class="article-category">System Design</span>
+                <span class="article-date">July 2026</span>
+                <span class="article-read-time">18 min read</span>
+            </div>
+            <h1>Designing <span class="gradient-text">Tinder</span> at Scale:<br>A System Design Deep Dive</h1>
+            <p class="article-hero-desc">
+                How do you architect a system where millions of people are furiously swiping, every second hoping the next profile might be <em>"the one"</em>? Let's break it down — from feed generation and geo-spatial queries to swipe consistency and push notifications.
+            </p>
+        </div>
+    </section>
+
+    <!-- Author Bar (Medium-style) -->
+    <div class="author-bar reveal-element active">
+        <img src="ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar">
+        <div class="author-bar-info">
+            <div class="author-bar-name">Ajay Kotnala</div>
+            <div class="author-bar-meta">Senior Solution Architect · July 2026 · 18 min read</div>
+        </div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc-wrapper">
+        <div class="toc reveal-element">
+            <h3>In This Article</h3>
+            <ol>
+                <li><a href="#understanding">Understanding the Problem</a></li>
+                <li><a href="#requirements">Defining Requirements</a></li>
+                <li><a href="#entities">Core Entities & Data Model</a></li>
+                <li><a href="#api">The API Surface</a></li>
+                <li><a href="#hld">High-Level Architecture</a></li>
+                <li><a href="#deep-dive-consistency">Deep Dive: Swipe Consistency</a></li>
+                <li><a href="#deep-dive-feed">Deep Dive: Low-Latency Feed Generation</a></li>
+                <li><a href="#deep-dive-dedup">Deep Dive: Avoiding Duplicate Profiles</a></li>
+                <li><a href="#final">Final Architecture & Interview Bar</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Article Body -->
+    <article class="article-body">
+
+        <!-- Section 1: Understanding the Problem -->
+        <h2 id="understanding"><span class="section-number">01</span>Understanding the Problem</h2>
+
+        <p>
+            At its core, Tinder is deceptively simple. You open the app, see a profile, and make a snap judgment — swipe right if you're interested, swipe left if you're not. If two people swipe right on each other, <strong>boom</strong>, it's a match, and the conversation can begin.
+        </p>
+        <p>
+            But beneath that buttery-smooth swiping experience lies a monster of a system. We're talking about <strong>20 million daily active users</strong>, each firing off roughly 100 swipes per day. That's 2 billion swipes. <em>Per day.</em> And every single one of those swipes needs to be processed quickly, consistently, and without showing the same profile twice.
+        </p>
+        <p>
+            The beauty of this system design question — and what makes it a favorite in interviews — is that it forces you to think about the full stack: real-time geolocation, massive write throughput, consistency guarantees, and a recommendation feed that loads faster than the user can lose patience.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>This question focuses on the <strong>recommendation feed and swiping experience</strong>, not on chat, image uploads, or premium features. If you're unsure what to prioritize, have a quick conversation with your interviewer — they'll steer you toward the most complex or unique functionality.</p>
+        </div>
+
+        <!-- Section 2: Requirements -->
+        <h2 id="requirements"><span class="section-number">02</span>Defining Requirements</h2>
+
+        <h3>Functional Requirements</h3>
+        <p>Let's keep our scope tight. These are the features we <em>need</em> to build:</p>
+        <ul>
+            <li><strong>Profile creation</strong> with preferences — age range, interests, maximum distance</li>
+            <li><strong>Feed generation</strong> — a stack of potential matches filtered by the user's preferences and current location</li>
+            <li><strong>Swiping</strong> — right for "yes," left for "no," processed one at a time</li>
+            <li><strong>Match notification</strong> — both users are notified when there's a mutual "yes"</li>
+        </ul>
+
+        <h3>Non-Functional Requirements</h3>
+        <p>These are the engineering constraints that separate a whiteboard sketch from a production system:</p>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">20M</div>
+                <div class="stat-desc">Daily Active Users</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">~100</div>
+                <div class="stat-desc">Swipes / User / Day</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">&lt;300ms</div>
+                <div class="stat-desc">Feed Load Latency</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">~2B</div>
+                <div class="stat-desc">Daily Swipes</div>
+            </div>
+        </div>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Requirement</th>
+                    <th>Priority</th>
+                    <th>Why It Matters</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Strong swipe consistency</td>
+                    <td><span class="check-icon">●</span> Must have</td>
+                    <td>Mutual swipes must trigger a match — no "lost love" bugs</td>
+                </tr>
+                <tr>
+                    <td>Low-latency feed loading</td>
+                    <td><span class="check-icon">●</span> Must have</td>
+                    <td>Users expect instant gratification — the stack should appear immediately</td>
+                </tr>
+                <tr>
+                    <td>No duplicate profiles</td>
+                    <td><span class="check-icon">●</span> Must have</td>
+                    <td>Re-showing swiped profiles creates a frustrating UX</td>
+                </tr>
+                <tr>
+                    <td>Fake profile protection</td>
+                    <td><span class="cross-icon">○</span> Out of scope</td>
+                    <td>Important, but a separate domain</td>
+                </tr>
+                <tr>
+                    <td>Monitoring & alerting</td>
+                    <td><span class="cross-icon">○</span> Out of scope</td>
+                    <td>Assumed to exist, not the focus</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Section 3: Core Entities -->
+        <h2 id="entities"><span class="section-number">03</span>Core Entities & Data Model</h2>
+
+        <p>
+            Before we jump into designing APIs or drawing architecture diagrams, let's ground ourselves with the fundamental data objects our system revolves around. Think of these as the <em>nouns</em> in our system's vocabulary.
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">👤</div>
+                <h4>User</h4>
+                <p>A person using the app — both as the active swiper <em>and</em> as a profile shown to others. Includes preferences like age range, interests, and max distance.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">👆</div>
+                <h4>Swipe</h4>
+                <p>An expression of "yes" or "no" on another profile. Belongs to a <code>swiping_user</code> and references a <code>target_user</code>.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">💕</div>
+                <h4>Match</h4>
+                <p>The magic moment — a connection formed when two users mutually swipe "yes" on each other.</p>
+            </div>
+        </div>
+
+        <p>
+            Nothing earth-shattering here, and that's fine. The goal at this stage is alignment. In an interview, list these entities, explain the relationships, and make sure you and your interviewer are speaking the same language before diving deeper.
+        </p>
+
+        <!-- Section 4: API Design -->
+        <h2 id="api"><span class="section-number">04</span>The API Surface</h2>
+
+        <p>
+            The API is your contract with the outside world — get it right, and everything downstream flows naturally. We need exactly one endpoint for each functional requirement.
+        </p>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method post">POST</span>
+                <span class="api-url">/profile</span>
+            </div>
+            <p class="api-desc">
+                Create or update a user's profile preferences. Includes age range, distance, interests. The user's identity comes from the auth token in headers — never from the request body.
+            </p>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">Request Body</span>
+            <code>{
+  <span class="string">"age_min"</span>: <span class="number">20</span>,
+  <span class="string">"age_max"</span>: <span class="number">30</span>,
+  <span class="string">"distance"</span>: <span class="number">10</span>,
+  <span class="string">"interestedIn"</span>: <span class="string">"female"</span> | <span class="string">"male"</span> | <span class="string">"both"</span>
+}</code>
+        </div>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method get">GET</span>
+                <span class="api-url">/feed?lat={}&amp;long={}&amp;distance={}</span>
+            </div>
+            <p class="api-desc">
+                Fetch a stack of potential match profiles. We pass location client-side since it changes constantly. Other filters (age, interests) are loaded server-side from the user's saved preferences.
+            </p>
+        </div>
+
+        <div class="callout">
+            <div class="callout-label">Design Decision</div>
+            <p>You might be tempted to add pagination here, but this isn't a typical paginated list — it's a <strong>recommendation engine</strong>. When the stack is exhausted, the client simply hits the endpoint again for a fresh batch. No page cursors needed.</p>
+        </div>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method post">POST</span>
+                <span class="api-url">/swipe/{userId}</span>
+            </div>
+            <p class="api-desc">
+                Record a swipe decision on a target user. The response immediately indicates whether this swipe resulted in a match.
+            </p>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">Request Body</span>
+            <code>{
+  <span class="string">"decision"</span>: <span class="string">"yes"</span> | <span class="string">"no"</span>
+}</code>
+        </div>
+
+        <!-- Section 5: High-Level Design -->
+        <h2 id="hld"><span class="section-number">05</span>High-Level Architecture</h2>
+
+        <p>
+            Now we get to the fun part — putting the pieces together. We'll walk through each functional requirement and build up our system step by step, starting simple and layering on complexity only when the problem demands it.
+        </p>
+
+        <h3>Profile Creation Flow</h3>
+        <p>
+            This is the straightforward starting point. A user opens the app, fills in their preferences, and we persist them. Classic <strong>client → gateway → service → database</strong> pattern.
+        </p>
+
+        <!-- DIAGRAM 1: High-Level Architecture (Excalidraw-style) -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 1 — High-Level System Architecture</div>
+            <svg viewBox="0 0 780 520" xmlns="http://www.w3.org/2000/svg" style="max-width:780px;">
+                <defs>
+                    <!-- Excalidraw dot grid -->
+                    <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0"/>
+                    </pattern>
+                    <!-- Hand-drawn roughness filter -->
+                    <filter id="roughen" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="2" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <filter id="roughenLight" x="-1%" y="-1%" width="102%" height="102%">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="5" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <!-- Arrow markers -->
+                    <marker id="exArrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowPink" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#e8445a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowBlue" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                </defs>
+
+                <!-- Background -->
+                <rect width="780" height="520" fill="#fefefe" rx="12"/>
+                <rect width="780" height="520" fill="url(#dotGrid)" rx="12"/>
+
+                <!-- Mobile Client -->
+                <rect x="30" y="185" width="110" height="150" rx="16" fill="#eef6ff" stroke="#333" stroke-width="2" filter="url(#roughen)"/>
+                <rect x="42" y="205" width="86" height="105" rx="6" fill="#ffffff" stroke="#999" stroke-width="1" filter="url(#roughenLight)"/>
+                <text x="85" y="250" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="22" text-anchor="middle">📱</text>
+                <text x="85" y="278" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle">Mobile</text>
+                <text x="85" y="296" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle">Client</text>
+
+                <!-- Arrow: Client → Gateway -->
+                <path d="M 142 260 C 160 258, 175 262, 198 260" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)"/>
+
+                <!-- API Gateway -->
+                <rect x="205" y="200" width="130" height="120" rx="10" fill="#e3f2fd" stroke="#0066cc" stroke-width="2" filter="url(#roughen)"/>
+                <text x="270" y="248" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="600">API</text>
+                <text x="270" y="268" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="600">Gateway</text>
+                <text x="270" y="295" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Auth · Routing</text>
+                <text x="270" y="310" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Rate Limiting</text>
+
+                <!-- Arrow: Gateway → Profile Service -->
+                <path d="M 335 237 C 352 210, 370 155, 405 130" fill="none" stroke="#0066cc" stroke-width="2" stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#exArrowBlue)" filter="url(#roughenLight)"/>
+
+                <!-- Arrow: Gateway → Swipe Service -->
+                <path d="M 335 290 C 352 320, 370 365, 405 390" fill="none" stroke="#e8445a" stroke-width="2" stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#exArrowPink)" filter="url(#roughenLight)"/>
+
+                <!-- Profile Service -->
+                <rect x="410" y="65" width="145" height="115" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2" filter="url(#roughen)"/>
+                <text x="482" y="108" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="600">Profile</text>
+                <text x="482" y="128" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="600">Service</text>
+                <text x="482" y="152" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">CRUD · Preferences</text>
+                <text x="482" y="167" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Feed Generation</text>
+
+                <!-- Swipe Service -->
+                <rect x="410" y="340" width="145" height="115" rx="10" fill="#fce4ec" stroke="#e8445a" stroke-width="2" filter="url(#roughen)"/>
+                <text x="482" y="383" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="600">Swipe</text>
+                <text x="482" y="403" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="600">Service</text>
+                <text x="482" y="427" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Persist · Match Check</text>
+                <text x="482" y="442" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Notify</text>
+
+                <!-- Arrow: Profile Service → User DB -->
+                <path d="M 555 122 C 575 120, 600 118, 620 120" fill="none" stroke="#2e7d32" stroke-width="2" stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)"/>
+
+                <!-- Arrow: Swipe Service → Swipe DB -->
+                <path d="M 555 397 C 575 395, 600 393, 620 395" fill="none" stroke="#e8445a" stroke-width="2" stroke-linecap="round" marker-end="url(#exArrowPink)" filter="url(#roughenLight)"/>
+
+                <!-- User DB (cylinder drawn by hand) -->
+                <ellipse cx="690" cy="95" rx="55" ry="18" fill="#e8f5e9" stroke="#333" stroke-width="1.8" filter="url(#roughen)"/>
+                <path d="M 635 95 L 635 140" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)"/>
+                <path d="M 745 95 L 745 140" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)"/>
+                <ellipse cx="690" cy="140" rx="55" ry="18" fill="#e8f5e9" stroke="#333" stroke-width="1.8" filter="url(#roughen)"/>
+                <rect x="635" y="95" width="110" height="45" fill="#e8f5e9" stroke="none"/>
+                <text x="690" y="125" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" text-anchor="middle" font-weight="600">User DB</text>
+                <text x="690" y="143" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">PostgreSQL</text>
+
+                <!-- Swipe DB (cylinder drawn by hand) -->
+                <ellipse cx="690" cy="370" rx="55" ry="18" fill="#fce4ec" stroke="#333" stroke-width="1.8" filter="url(#roughen)"/>
+                <path d="M 635 370 L 635 415" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)"/>
+                <path d="M 745 370 L 745 415" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)"/>
+                <ellipse cx="690" cy="415" rx="55" ry="18" fill="#fce4ec" stroke="#333" stroke-width="1.8" filter="url(#roughen)"/>
+                <rect x="635" y="370" width="110" height="45" fill="#fce4ec" stroke="none"/>
+                <text x="690" y="400" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" text-anchor="middle" font-weight="600">Swipe DB</text>
+                <text x="690" y="418" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Cassandra</text>
+
+                <!-- Push Notification -->
+                <rect x="410" y="472" width="145" height="34" rx="8" fill="#fff3e0" stroke="#e56b47" stroke-width="1.5" stroke-dasharray="5,3" filter="url(#roughen)"/>
+                <text x="482" y="494" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle">APNS / FCM</text>
+
+                <!-- Arrow: Swipe → APNS -->
+                <path d="M 482 455 C 482 462, 480 468, 482 470" fill="none" stroke="#e56b47" stroke-width="1.5" stroke-dasharray="4,3" stroke-linecap="round" marker-end="url(#exArrowPink)" filter="url(#roughenLight)"/>
+            </svg>
+            <p class="diagram-caption">The system splits into two independent services — Profile and Swipe — each with its own optimized data store.</p>
+        </div>
+
+        <h3>Why Two Separate Services?</h3>
+        <p>
+            This is a question that comes up a lot, and the reasoning matters. Profile views and creation are <em>low-frequency, read-heavy</em> operations. Swipes, on the other hand, are a <strong>firehose of writes</strong>. With 20M DAU × 100 swipes/day, we're looking at roughly <strong>200GB of new swipe data per day</strong>.
+        </p>
+        <p>
+            By separating these concerns, we get independent scaling, optimized database choices (PostgreSQL for structured profile data vs. Cassandra for massive write throughput), and the freedom to implement swipe-specific caching without touching the profile service.
+        </p>
+
+        <h3>The Swipe + Match Flow</h3>
+        <p>
+            Here's where things get interesting. When Person B swipes right on Person A, the system needs to instantly check whether Person A had previously swiped right on Person B. If they did — it's a match.
+        </p>
+        <p>
+            Person B sees the match graphic immediately (they're already in the app). Person A, who might have swiped days ago, gets notified via a push notification through APNS or FCM.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Watch Out</div>
+            <p>We chose Cassandra for the swipe database because of its write-optimized storage engine. But Cassandra trades consistency for availability, which introduces a critical race condition we'll tackle in the deep dives.</p>
+        </div>
+
+        <!-- Section 6: Deep Dive - Consistency -->
+        <h2 id="deep-dive-consistency"><span class="section-number">06</span>Deep Dive: Swipe Consistency</h2>
+
+        <p>
+            Here's a nightmare scenario. Person A and Person B both swipe right on each other at <em>roughly the same time</em>. The system processes both swipes in parallel, and each one checks for the inverse — but neither swipe has landed in the database yet. Result? <strong>Both checks come back empty. No match is created. True love: lost to a race condition.</strong>
+        </p>
+
+        <!-- DIAGRAM 2: Race Condition Timeline (Excalidraw-style) -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 2 — The "Lost Match" Race Condition</div>
+            <svg viewBox="0 0 760 340" xmlns="http://www.w3.org/2000/svg" style="max-width:760px;">
+                <rect width="760" height="340" fill="#fefefe" rx="12"/>
+                <rect width="760" height="340" fill="url(#dotGrid)" rx="12"/>
+
+                <!-- Timeline Labels -->
+                <text x="30" y="70" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="700">Person A</text>
+                <text x="30" y="190" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="700">Server</text>
+                <text x="30" y="290" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="700">Person B</text>
+
+                <!-- Swimlane line -->
+                <line x1="120" y1="45" x2="120" y2="320" stroke="#e0e0e0" stroke-width="1"/>
+
+                <!-- Time arrow -->
+                <path d="M 140 30 L 718 30" fill="none" stroke="#ccc" stroke-width="1.5" marker-end="url(#exArrow)" filter="url(#roughenLight)"/>
+                <text x="430" y="22" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle">TIME →</text>
+
+                <!-- Step 1: A swipes -->
+                <circle cx="180" cy="70" r="7" fill="#e8445a" filter="url(#roughenLight)"/>
+                <text x="180" y="55" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Swipe →</text>
+                <path d="M 180 78 C 195 120, 210 155, 232 175" fill="none" stroke="#e8445a" stroke-width="1.5" stroke-dasharray="5,3" filter="url(#roughenLight)"/>
+
+                <!-- Step 2: B swipes -->
+                <circle cx="220" cy="290" r="7" fill="#0066cc" filter="url(#roughenLight)"/>
+                <text x="220" y="310" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Swipe →</text>
+                <path d="M 220 282 C 235 250, 250 215, 272 195" fill="none" stroke="#0066cc" stroke-width="1.5" stroke-dasharray="5,3" filter="url(#roughenLight)"/>
+
+                <!-- Step 3: Check for A (no inverse found) -->
+                <rect x="228" y="168" width="135" height="24" rx="6" fill="#fce4ec" stroke="#e8445a" stroke-width="1.5" filter="url(#roughen)"/>
+                <text x="295" y="184" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Check B→A: ✗ None</text>
+
+                <!-- Step 4: Check for B (no inverse found) -->
+                <rect x="268" y="195" width="135" height="24" rx="6" fill="#eef6ff" stroke="#0066cc" stroke-width="1.5" filter="url(#roughen)"/>
+                <text x="335" y="211" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Check A→B: ✗ None</text>
+
+                <!-- Step 5: Save A's swipe -->
+                <rect x="425" y="168" width="120" height="24" rx="6" fill="#f5f5f7" stroke="#ccc" stroke-width="1" filter="url(#roughen)"/>
+                <text x="485" y="184" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Save A→B ✓</text>
+
+                <!-- Step 6: Save B's swipe -->
+                <rect x="465" y="195" width="120" height="24" rx="6" fill="#f5f5f7" stroke="#ccc" stroke-width="1" filter="url(#roughen)"/>
+                <text x="525" y="211" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Save B→A ✓</text>
+
+                <!-- Result: No match -->
+                <rect x="610" y="172" width="130" height="38" rx="10" fill="#fce4ec" stroke="#e8445a" stroke-width="2" filter="url(#roughen)"/>
+                <text x="675" y="192" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" font-weight="700">💔 No Match!</text>
+                <text x="675" y="205" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle">Both saved, match lost</text>
+            </svg>
+            <p class="diagram-caption">When both swipes arrive simultaneously, the inverse check finds nothing — and the match is silently lost.</p>
+        </div>
+
+        <h3>How Do We Fix This?</h3>
+        <p>
+            There are two broad approaches, and the choice says a lot about your engineering philosophy:
+        </p>
+
+        <div class="deep-dive open" id="dd-eventual">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-eventual')">
+                <h4>Approach 1: Eventual Consistency + Reconciliation</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Instead of demanding real-time accuracy, run a <strong>background reconciliation job</strong> that periodically scans for unmatched mutual swipes. When it finds a pair of "yes" swipes that were never surfaced as a match, it retroactively creates the match and sends push notifications to both users.
+                    </p>
+                    <p>
+                        From the user's perspective, they simply get a notification that the other person swiped on them — they'll never know it was a reconciliation process catching up. This approach prioritizes availability and is simpler to implement, but your interviewer might push you toward a stricter solution.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="deep-dive" id="dd-strong">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-strong')">
+                <h4>Approach 2: Strong Consistency with Distributed Locking</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        For real-time accuracy, we can use a <strong>distributed lock</strong> keyed on the pair of user IDs (always ordered, so <code>min(A,B):max(A,B)</code>). Before processing a swipe, the service acquires a lock for the user pair. This guarantees that concurrent swipes between the same two users are serialized.
+                    </p>
+                    <p>
+                        A Redis-based lock with a short TTL (a few seconds) works well here. The chance of two users swiping on each other within the same second is astronomically low, so lock contention will be negligible. The trade-off is added latency (~1-2ms for the lock operation) and the operational overhead of a Redis cluster.
+                    </p>
+                    <p>
+                        <strong>Alternative:</strong> Use a strongly consistent database (like CockroachDB) for the swipe data, or route all swipes for a given user pair to the same partition/server. Both approaches enforce serialization without explicit locking.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 7: Deep Dive - Feed Generation -->
+        <h2 id="deep-dive-feed"><span class="section-number">07</span>Deep Dive: Low-Latency Feed Generation</h2>
+
+        <p>
+            Let's talk about the elephant in the room. Our naive query looks like this:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">SQL</span>
+            <code><span class="keyword">SELECT</span> * <span class="keyword">FROM</span> users
+<span class="keyword">WHERE</span> age <span class="keyword">BETWEEN</span> <span class="number">18</span> <span class="keyword">AND</span> <span class="number">35</span>
+<span class="keyword">AND</span> interestedIn = <span class="string">'female'</span>
+<span class="keyword">AND</span> lat <span class="keyword">BETWEEN</span> userLat - maxDist <span class="keyword">AND</span> userLat + maxDist
+<span class="keyword">AND</span> long <span class="keyword">BETWEEN</span> userLong - maxDist <span class="keyword">AND</span> userLong + maxDist</code>
+        </div>
+
+        <p>
+            This query is a performance disaster at scale. Filtering by a bounding box of lat/long coordinates requires scanning an enormous number of rows, even with B-tree indexes. Geo-spatial queries need a fundamentally different approach.
+        </p>
+
+        <h3>Geo-Spatial Indexing with Geohashing</h3>
+        <p>
+            The solution is <strong>geohashing</strong> — a technique that converts 2D coordinates (latitude, longitude) into a single string that represents a grid cell. Nearby locations share a common prefix, which means finding users in your area becomes a <strong>prefix-based lookup</strong> instead of a range scan.
+        </p>
+        <p>
+            Services like Redis (with its built-in geospatial commands) or databases like PostGIS make this trivial. When a user updates their location, we compute their geohash and store it. To generate a feed, we look up the user's geohash cell and its neighboring cells, then filter by other criteria.
+        </p>
+
+        <h3>Pre-Computing Feeds</h3>
+        <p>
+            Even with geospatial indexing, generating a feed on-demand adds latency. The better approach is to <strong>pre-compute feeds in the background</strong> and cache them. Here's the architecture:
+        </p>
+
+        <!-- DIAGRAM 3: Feed Generation Pipeline (Excalidraw-style) -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 3 — Pre-Computed Feed Generation Pipeline</div>
+            <svg viewBox="0 0 760 380" xmlns="http://www.w3.org/2000/svg" style="max-width:760px;">
+                <rect width="760" height="380" fill="#fefefe" rx="12"/>
+                <rect width="760" height="380" fill="url(#dotGrid)" rx="12"/>
+
+                <!-- Feed Builder -->
+                <rect x="30" y="60" width="150" height="85" rx="10" fill="#e3f2fd" stroke="#0066cc" stroke-width="2" filter="url(#roughen)"/>
+                <text x="105" y="95" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" font-weight="600">Feed Builder</text>
+                <text x="105" y="115" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Background Job</text>
+                <text x="105" y="132" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">⏱ Scheduled / Triggered</text>
+
+                <!-- Arrow: Builder → Geo Index -->
+                <path d="M 180 100 C 195 98, 210 102, 233 100" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)"/>
+
+                <!-- Geo Spatial Index -->
+                <rect x="238" y="55" width="145" height="95" rx="10" fill="#fff3e0" stroke="#e56b47" stroke-width="2" filter="url(#roughen)"/>
+                <text x="310" y="90" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" font-weight="600">Geo Index</text>
+                <text x="310" y="110" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Geohash + Filters</text>
+                <text x="310" y="127" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">PostGIS / Redis GEO</text>
+
+                <!-- Arrow: Geo Index → Cache -->
+                <path d="M 383 100 C 400 98, 418 102, 435 100" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)"/>
+
+                <!-- Feed Cache -->
+                <rect x="440" y="55" width="145" height="95" rx="10" fill="#fce4ec" stroke="#e8445a" stroke-width="2" filter="url(#roughen)"/>
+                <text x="512" y="90" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" font-weight="600">Feed Cache</text>
+                <text x="512" y="110" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Redis / Memcached</text>
+                <text x="512" y="127" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">TTL: ~1hr</text>
+
+                <!-- Arrow: Cache → Client -->
+                <path d="M 585 100 C 602 98, 618 102, 635 100" fill="none" stroke="#e8445a" stroke-width="2" stroke-linecap="round" marker-end="url(#exArrowPink)" filter="url(#roughenLight)"/>
+
+                <!-- Client -->
+                <rect x="640" y="65" width="95" height="75" rx="10" fill="#eef6ff" stroke="#333" stroke-width="2" filter="url(#roughen)"/>
+                <text x="687" y="100" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="18" text-anchor="middle">📱</text>
+                <text x="687" y="120" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">GET /feed</text>
+
+                <!-- Swipe DB Connection -->
+                <rect x="30" y="215" width="150" height="85" rx="10" fill="#f5f5f7" stroke="#333" stroke-width="1.5" filter="url(#roughen)"/>
+                <text x="105" y="248" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" font-weight="600">Swipe DB</text>
+                <text x="105" y="268" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Previously Swiped IDs</text>
+                <text x="105" y="285" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Bloom Filter</text>
+
+                <!-- Arrow: Builder ↕ Swipe DB -->
+                <path d="M 105 145 C 107 165, 103 190, 105 213" fill="none" stroke="#e56b47" stroke-width="1.5" stroke-dasharray="5,3" stroke-linecap="round" marker-end="url(#exArrowPink)" filter="url(#roughenLight)"/>
+
+                <!-- Feed Invalidation Triggers Box -->
+                <rect x="238" y="215" width="345" height="140" rx="10" fill="#fefaf6" stroke="#e0e0e0" stroke-width="1.5" stroke-dasharray="6,4" filter="url(#roughen)"/>
+                <text x="410" y="242" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" text-anchor="middle" font-weight="600">Feed Invalidation Triggers</text>
+                <text x="273" y="268" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" alignment-baseline="middle">⚡ User changes location significantly</text>
+                <text x="273" y="288" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" alignment-baseline="middle">⚡ User updates filter preferences</text>
+                <text x="273" y="308" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" alignment-baseline="middle">⚡ Cache TTL expires (~1 hour)</text>
+                <text x="273" y="328" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" alignment-baseline="middle">⚡ Suggested user changes profile</text>
+            </svg>
+            <p class="diagram-caption">A background job pre-builds feeds using geospatial queries and caches them. Staleness is managed via TTL and event-driven invalidation.</p>
+        </div>
+
+        <h3>Handling Stale Feeds</h3>
+        <p>
+            Pre-computing introduces a new problem: <strong>stale profiles</strong>. A user in your cached feed might have changed locations, updated their preferences, or deleted their account since the feed was built.
+        </p>
+        <p>
+            The solution is a multi-layered freshness strategy:
+        </p>
+        <ul>
+            <li><strong>Short TTL</strong> (~ 1 hour) on cached feeds, with background recomputation</li>
+            <li><strong>Event-driven invalidation</strong> — if a user changes their location significantly or updates preferences, trigger a feed refresh</li>
+            <li><strong>Warm caches only for active users</strong> — don't waste compute pre-building feeds for dormant accounts</li>
+        </ul>
+
+        <div class="callout">
+            <div class="callout-label">Tunable Parameters</div>
+            <p>One of the most powerful aspects of this design is its <strong>tunability</strong>. Cache TTL, number of cached profiles, criteria for "active" users, geohash precision — all of these can be adjusted without changing system logic. This gives operators fine-grained control over cost vs. freshness trade-offs.</p>
+        </div>
+
+        <!-- Section 8: Deep Dive - Dedup -->
+        <h2 id="deep-dive-dedup"><span class="section-number">08</span>Deep Dive: Avoiding Duplicate Profiles</h2>
+
+        <p>
+            Nothing kills the swiping vibe faster than seeing someone you already passed on show up again. Or worse — swiping right on someone and then seeing them reappear, making you wonder if your original swipe was even recorded.
+        </p>
+
+        <h3>The Straightforward Approach</h3>
+        <p>
+            During feed generation, query the swipe database for all user IDs this person has previously swiped on, and filter them out. Since we're partitioning Cassandra by <code>swiping_user_id</code>, this lookup is efficient — it hits a single partition.
+        </p>
+
+        <h3>The Scaling Challenge</h3>
+        <p>
+            For power users with tens of thousands of historical swipes, that "contains check" gets expensive. Two solutions stand out:
+        </p>
+
+        <div class="deep-dive" id="dd-bloom">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-bloom')">
+                <h4>Solution: Bloom Filters for O(1) Deduplication</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        A <strong>Bloom filter</strong> is a probabilistic data structure that can tell you definitively if an element is <em>not</em> in a set, or <em>probably</em> in a set — with a configurable false positive rate.
+                    </p>
+                    <p>
+                        For each user, maintain a Bloom filter of all user IDs they've swiped on. When building a feed, check each candidate against the Bloom filter. A false positive means we occasionally skip a valid candidate — a tiny, invisible cost. A false negative (showing a previously-swiped profile) never happens.
+                    </p>
+                    <p>
+                        The beauty is that the Bloom filter is constant-size regardless of swipe history, and lookups are O(1). At ~1KB per user with a 0.1% false positive rate, we can fit the entire Bloom filter set for our active users in memory.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 9: Final Design -->
+        <h2 id="final"><span class="section-number">09</span>Final Architecture & Interview Bar</h2>
+
+        <p>
+            Let's zoom out and look at the complete picture. Our final design incorporates all the layers we've discussed — from the API surface down to the storage and caching strategies.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Component</th>
+                    <th>Technology</th>
+                    <th>Rationale</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>API Gateway</td>
+                    <td>Kong / AWS API GW</td>
+                    <td>Auth, rate limiting, routing</td>
+                </tr>
+                <tr>
+                    <td>Profile Service</td>
+                    <td>Stateless microservice</td>
+                    <td>CRUD, preference management</td>
+                </tr>
+                <tr>
+                    <td>Swipe Service</td>
+                    <td>Stateless microservice</td>
+                    <td>Write-heavy, match detection</td>
+                </tr>
+                <tr>
+                    <td>User Database</td>
+                    <td>PostgreSQL + PostGIS</td>
+                    <td>Structured data, geo-spatial indexing</td>
+                </tr>
+                <tr>
+                    <td>Swipe Database</td>
+                    <td>Cassandra</td>
+                    <td>Massive write throughput, partitioned by user</td>
+                </tr>
+                <tr>
+                    <td>Feed Cache</td>
+                    <td>Redis</td>
+                    <td>Pre-computed feeds, Bloom filters, geo commands</td>
+                </tr>
+                <tr>
+                    <td>Feed Builder</td>
+                    <td>Background worker</td>
+                    <td>Scheduled + event-driven feed generation</td>
+                </tr>
+                <tr>
+                    <td>Push Notifications</td>
+                    <td>APNS / FCM</td>
+                    <td>Match alerts to offline users</td>
+                </tr>
+                <tr>
+                    <td>Distributed Lock</td>
+                    <td>Redis (Redlock)</td>
+                    <td>Swipe consistency for concurrent mutual swipes</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>What's Expected at Each Level?</h3>
+        <p>
+            Interviewers calibrate their expectations based on your seniority. Here's a rough guide to what "good" looks like at each level for this particular problem.
+        </p>
+
+        <div class="level-grid reveal-element">
+            <div class="level-card mid">
+                <div class="level-label">Mid-Level (E4)</div>
+                <h4>Build the Foundation</h4>
+                <p>Clearly define APIs and data model. Land on a functional HLD covering feed, swiping, and matching. Show awareness of geo-spatial filtering and profile deduplication.</p>
+                <span class="level-focus">80% Breadth · 20% Depth</span>
+            </div>
+            <div class="level-card senior">
+                <div class="level-label">Senior (E5)</div>
+                <h4>Drive the Depth</h4>
+                <p>Quickly nail the HLD, then spend time on feed generation trade-offs, geo-spatial indexing options, and swipe consistency strategies. Proactively surface stale cache issues.</p>
+                <span class="level-focus">60% Breadth · 40% Depth</span>
+            </div>
+            <div class="level-card staff">
+                <div class="level-label">Staff+ (E6)</div>
+                <h4>Own the Conversation</h4>
+                <p>Breeze through the basics, then deep-dive into trade-offs with confidence drawn from real-world experience. The interviewer follows your lead, not the other way around.</p>
+                <span class="level-focus">40% Breadth · 60% Depth</span>
+            </div>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Final Thought</div>
+            <p>
+                The best candidates don't just design a system that works — they design a system with <strong>tunable knobs</strong>. Cache TTLs, Bloom filter sizes, geohash precision, reconciliation intervals — these parameters give operations teams control without requiring code changes. That's what separates textbook architecture from production-ready engineering.
+            </p>
+        </div>
+
+    </article>
+
+    <!-- Author Footer -->
+    <div class="article-footer">
+        <div class="author-card reveal-element">
+            <img src="ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar">
+            <div class="author-info">
+                <h4>Ajay Kotnala</h4>
+                <div class="author-role">Senior Solution Architect · NTT</div>
+                <p>
+                    15+ years designing cloud-native, event-driven architectures at enterprise scale.
+                    Passionate about system design, API-first thinking, and making complex systems feel simple.
+                </p>
+            </div>
+        </div>
+        <a href="index.html" class="back-link">← Back to Portfolio</a>
+    </div>
+
+    <!-- Global Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-bottom">
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank">LinkedIn</a>
+                    <a href="https://github.com/ajaykotnala" target="_blank">GitHub</a>
+                    <a href="https://medium.com/@ajay.kotnalajpr" target="_blank">Medium</a>
+                </div>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll Progress Bar
+        window.addEventListener('scroll', () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrollTop / docHeight) * 100;
+            document.getElementById('progressBar').style.width = progress + '%';
+        });
+
+        // Intersection Observer for scroll-reveal animations
+        document.addEventListener('DOMContentLoaded', () => {
+            const observerOptions = {
+                threshold: 0.12,
+                rootMargin: '0px 0px -40px 0px'
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('active');
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll('.reveal-element').forEach(el => {
+                observer.observe(el);
+            });
+        });
+
+        // Deep Dive Accordion
+        function toggleDeepDive(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle('open');
+        }
+
+        // Smooth scroll for TOC and anchor links
+        document.querySelectorAll('.toc a, a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                const targetId = this.getAttribute('href');
+                if (targetId.startsWith('#')) {
+                    e.preventDefault();
+                    const target = document.querySelector(targetId);
+                    if (target) {
+                        // Nav offset: global nav (44px) + sub nav (52px) + padding
+                        const offset = 110;
+                        const targetPosition = target.getBoundingClientRect().top + window.scrollY - offset;
+                        window.scrollTo({ top: targetPosition, behavior: 'smooth' });
+                    }
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>
