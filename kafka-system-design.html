@@ -1,0 +1,2155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apache Kafka Deep Dive — System Design | Ajay Kotnala</title>
+    <meta name="description" content="A comprehensive Apache Kafka system design guide for interviews — covering topics, partitions, consumer groups, replication, hot partitions, and when to choose Kafka over traditional message queues. Written by Ajay Kotnala, Senior Solution Architect.">
+    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
+    <style>
+        /* ===== Apple Design Tokens (matching index.html) ===== */
+        :root {
+            /* Color System */
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-pearl: #fafafc;
+            --color-on-primary: #ffffff;
+
+            /* Kafka brand accents (kept for article identity) */
+            --kafka-teal: #00796b;
+            --kafka-green: #00a896;
+            --kafka-gradient: linear-gradient(135deg, #00796b, #00a896);
+
+            /* Typography */
+            --font-headline: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-body: "Lora", Georgia, "Times New Roman", serif;
+            --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+
+            /* Border Radii */
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            /* Shadows */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06);
+
+            /* Article */
+            --article-width: 680px;
+        }
+
+        /* ===== Reset ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* ===== 1. Global Navigation Bar (Apple Thin Black Bar) ===== */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            font-family: var(--font-ui);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .global-nav-logo .logo-icon {
+            font-size: 16px;
+            color: var(--color-primary-on-dark);
+        }
+
+        .global-nav-links {
+            display: flex;
+            list-style: none;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .global-nav-links a {
+            color: #cccccc;
+            text-decoration: none;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            letter-spacing: -0.12px;
+            transition: color 0.2s ease;
+        }
+
+        .global-nav-links a:hover {
+            color: #ffffff;
+        }
+
+        .global-nav-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .global-nav-actions a {
+            color: #cccccc;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .global-nav-actions a:hover {
+            color: #ffffff;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ===== 2. Sub Navigation Bar (Frosted Sticky) ===== */
+        .sub-nav-frosted {
+            position: sticky;
+            top: 44px;
+            left: 0;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 999;
+            border-bottom: 1px solid var(--color-divider-soft);
+        }
+
+        .sub-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .sub-nav-title {
+            font-family: var(--font-headline);
+            font-size: 21px;
+            font-weight: 600;
+            color: var(--color-ink);
+            text-decoration: none;
+            letter-spacing: 0.231px;
+        }
+
+        .sub-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sub-nav-link {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink);
+            text-decoration: none;
+            opacity: 0.8;
+            transition: color 0.2s ease, opacity 0.2s ease;
+        }
+
+        .sub-nav-link:hover {
+            color: var(--color-primary);
+            opacity: 1;
+        }
+
+        .sub-nav-button {
+            background: var(--color-primary);
+            color: var(--color-on-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            border-radius: var(--rounded-pill);
+            text-decoration: none;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        .sub-nav-button:hover {
+            background: var(--color-primary-focus);
+        }
+
+        .sub-nav-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== Scroll Progress Bar ===== */
+        .progress-bar {
+            position: fixed;
+            top: 44px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--kafka-gradient);
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        /* ===== Article Hero ===== */
+        .article-hero {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(96px + 4rem) 2rem 4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .article-hero-inner {
+            max-width: var(--article-width);
+            width: 100%;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .article-category {
+            display: inline-block;
+            padding: 4px 14px;
+            background: var(--kafka-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .article-date {
+            color: var(--color-body-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .article-read-time {
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 13px;
+        }
+
+        .article-read-time::before {
+            content: '·';
+            margin-right: 0.5rem;
+            color: var(--color-body-muted);
+        }
+
+        .article-hero h1 {
+            font-family: var(--font-headline);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+        }
+
+        .article-hero h1 .gradient-text {
+            background: var(--kafka-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .article-hero-desc {
+            font-family: var(--font-body);
+            font-size: 20px;
+            color: var(--color-body-muted);
+            line-height: 1.7;
+            max-width: 600px;
+        }
+
+        .article-hero-desc em {
+            font-style: italic;
+            color: var(--color-ink-muted-80);
+        }
+
+        /* ===== Author Bar (Medium-style) ===== */
+        .author-bar {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--color-divider-soft);
+            margin-bottom: 2.5rem;
+        }
+
+        .author-bar-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-bar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .author-bar-name {
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-ink);
+        }
+
+        .author-bar-meta {
+            font-family: var(--font-ui);
+            font-size: 13px;
+            color: var(--color-body-muted);
+        }
+
+        /* ===== Table of Contents ===== */
+        .toc-wrapper {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .toc {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem 2.5rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--kafka-gradient);
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toc h3 {
+            font-size: 12px;
+            margin-bottom: 1.2rem;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            padding: 0.35rem 0;
+        }
+
+        .toc li a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 15px;
+            transition: color 0.2s ease, padding-left 0.2s ease;
+            display: inline-block;
+        }
+
+        .toc li a::before {
+            content: counter(toc-counter, decimal-leading-zero) '.';
+            color: var(--kafka-teal);
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-right: 0.8rem;
+            font-size: 13px;
+        }
+
+        .toc li a:hover {
+            color: var(--color-primary);
+            padding-left: 4px;
+        }
+
+        /* ===== Article Body (Medium-friendly) ===== */
+        .article-body {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .article-body h2 {
+            font-family: var(--font-headline);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-top: 3.5rem;
+            margin-bottom: 1.2rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .article-body h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .article-body h2 .section-number {
+            color: var(--kafka-teal);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .article-body h3 {
+            font-family: var(--font-headline);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-top: 2.5rem;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .article-body p {
+            font-family: var(--font-body);
+            font-size: 19px;
+            line-height: 1.85;
+            color: var(--color-ink-muted-80);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.003em;
+        }
+
+        .article-body ul, .article-body ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .article-body li {
+            font-family: var(--font-body);
+            color: var(--color-ink-muted-80);
+            margin-bottom: 0.6rem;
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .article-body strong {
+            color: var(--color-ink);
+            font-weight: 600;
+        }
+
+        .article-body em {
+            color: var(--color-ink-muted-80);
+            font-style: italic;
+        }
+
+        .article-body code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--color-canvas-parchment);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--kafka-teal);
+        }
+
+        /* ===== Callout Boxes ===== */
+        .callout {
+            background: var(--color-canvas-parchment);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 0 var(--rounded-sm) var(--rounded-sm) 0;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .callout.callout-warning {
+            border-left-color: var(--kafka-green);
+            background: #f0f8f6;
+        }
+
+        .callout.callout-insight {
+            border-left-color: var(--kafka-teal);
+            background: #f0faf8;
+        }
+
+        .callout .callout-label {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.6rem;
+            color: var(--color-primary);
+        }
+
+        .callout.callout-warning .callout-label {
+            color: var(--kafka-green);
+        }
+
+        .callout.callout-insight .callout-label {
+            color: var(--kafka-teal);
+        }
+
+        .callout p {
+            margin-bottom: 0;
+            font-size: 16px !important;
+            line-height: 1.7 !important;
+        }
+
+        /* ===== Code Blocks (GitHub Light Theme) ===== */
+        .code-block {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-hairline);
+            border-radius: var(--rounded-sm);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0 2rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--color-hairline);
+            color: var(--color-body-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 0 var(--rounded-sm) 0 var(--rounded-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--color-ink);
+            line-height: 1.7;
+            white-space: pre;
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .code-block .keyword { color: #cf222e; }
+        .code-block .string { color: #0a3069; }
+        .code-block .comment { color: #6e7781; font-style: italic; }
+        .code-block .type { color: #953800; }
+        .code-block .number { color: #0550ae; }
+
+        /* ===== Entity Cards ===== */
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .entity-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 1.8rem;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .entity-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .entity-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .entity-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .entity-card p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ===== API Endpoint Cards ===== */
+        .api-endpoint {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .api-endpoint:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .api-method-url {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .api-method {
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .api-method.post {
+            background: #f0faf8;
+            color: var(--kafka-teal);
+        }
+
+        .api-method.get {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .api-url {
+            font-family: var(--font-mono);
+            color: var(--color-ink);
+            font-size: 15px;
+        }
+
+        .api-desc {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 15px !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        /* ===== Excalidraw-Style SVG Architecture Diagrams ===== */
+        .diagram-container {
+            margin: 3rem -2rem;
+            padding: 2rem;
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            overflow-x: auto;
+        }
+
+        .diagram-title {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-body-muted);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .diagram-caption {
+            text-align: center;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            margin-top: 1rem;
+            font-style: italic;
+        }
+
+        .diagram-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== Comparison Table ===== */
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 2rem 0;
+            border-radius: var(--rounded-md);
+            overflow: hidden;
+            border: 1px solid var(--color-divider-soft);
+            font-family: var(--font-ui);
+        }
+
+        .comparison-table th {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            background: var(--color-canvas);
+            color: var(--color-ink-muted-80);
+            font-size: 15px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--color-divider-soft);
+            line-height: 1.5;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--color-canvas-parchment);
+        }
+
+        .check-icon { color: var(--color-primary); font-weight: 700; }
+        .cross-icon { color: var(--color-body-muted); font-weight: 700; }
+
+        /* ===== Scale Numbers ===== */
+        .scale-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .scale-stat {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 1.2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition: box-shadow 0.3s ease, transform 0.3s ease;
+        }
+
+        .scale-stat:hover {
+            box-shadow: var(--shadow-card);
+            transform: translateY(-2px);
+        }
+
+        .scale-stat::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--kafka-gradient);
+        }
+
+        .scale-stat .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            background: var(--kafka-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-headline);
+        }
+
+        .scale-stat .stat-desc {
+            color: var(--color-body-muted);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ===== Deep Dive Accordion ===== */
+        .deep-dive {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            margin: 1.5rem 0;
+            overflow: hidden;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .deep-dive:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .deep-dive-header {
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+
+        .deep-dive-header:hover {
+            background: var(--color-canvas-parchment);
+        }
+
+        .deep-dive-header h4 {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--color-ink);
+        }
+
+        .deep-dive-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-canvas-parchment);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            transition: transform 0.3s ease, background 0.3s ease;
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        .deep-dive.open .deep-dive-toggle {
+            transform: rotate(45deg);
+            background: #f0faf8;
+            color: var(--kafka-teal);
+        }
+
+        .deep-dive-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .deep-dive.open .deep-dive-content {
+            max-height: 3000px;
+        }
+
+        .deep-dive-content-inner {
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .deep-dive-content-inner p,
+        .deep-dive-content-inner li {
+            font-size: 16px !important;
+        }
+
+        /* ===== Level Expectation Cards ===== */
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .level-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .level-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .level-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .level-card.mid::before { background: var(--color-primary); }
+        .level-card.senior::before { background: var(--kafka-green); }
+        .level-card.staff::before { background: var(--kafka-teal); }
+
+        .level-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .level-card.mid .level-label { color: var(--color-primary); }
+        .level-card.senior .level-label { color: var(--kafka-green); }
+        .level-card.staff .level-label { color: var(--kafka-teal); }
+
+        .level-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .level-card p {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .level-focus {
+            display: inline-block;
+            margin-top: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .level-card.mid .level-focus { background: #eef6ff; color: var(--color-primary); }
+        .level-card.senior .level-focus { background: #e8f5f3; color: var(--kafka-green); }
+        .level-card.staff .level-focus { background: #f0faf8; color: var(--kafka-teal); }
+
+        /* ===== Author Footer Card ===== */
+        .article-footer {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+        }
+
+        .author-card {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-canvas);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            flex-shrink: 0;
+        }
+
+        .author-info h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: var(--color-ink);
+        }
+
+        .author-info .author-role {
+            color: var(--color-primary);
+            font-size: 14px;
+            font-family: var(--font-ui);
+            margin-bottom: 0.6rem;
+        }
+
+        .author-info p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-weight: 500;
+            font-size: 15px;
+            transition: gap 0.2s ease;
+        }
+
+        .back-link:hover {
+            gap: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* ===== Global Footer ===== */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .footer-container {
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .social-links a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        .fine-print {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink-muted-48);
+            letter-spacing: -0.12px;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 833px) {
+            .global-nav-links { display: none; }
+            .sub-nav-container { padding: 0 16px; }
+            .article-hero { padding: calc(96px + 2rem) 1.5rem 3rem; }
+            .article-body { padding: 0 1.5rem 4rem; }
+            .toc-wrapper { padding: 0 1.5rem; }
+            .entity-grid { grid-template-columns: 1fr; }
+            .scale-stats { grid-template-columns: 1fr 1fr; }
+            .level-grid { grid-template-columns: 1fr; }
+            .author-card { flex-direction: column; text-align: center; }
+            .diagram-container { margin: 2rem -1rem; padding: 1.5rem 1rem; }
+            .comparison-table { font-size: 14px; }
+            .comparison-table th, .comparison-table td { padding: 8px 10px; }
+            .author-bar { padding: 0 1.5rem; }
+        }
+
+        @media (max-width: 480px) {
+            .scale-stats { grid-template-columns: 1fr; }
+            .footer-bottom { flex-direction: column; align-items: flex-start; }
+        }
+
+        /* ===== Animations ===== */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1), transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .reveal-element.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- 1. Global Navigation Bar -->
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="index.html" class="global-nav-logo">
+                <span class="logo-icon">[A]</span> Ajay Kotnala
+            </a>
+            <ul class="global-nav-links">
+                <li><a href="index.html#about">About</a></li>
+                <li><a href="index.html#skills">Skills</a></li>
+                <li><a href="index.html#experience">Experience</a></li>
+                <li><a href="index.html#projects">Projects</a></li>
+                <li><a href="index.html#contact">Contact</a></li>
+            </ul>
+            <div class="global-nav-actions">
+                <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
+                    </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" aria-label="LinkedIn">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. Sticky Sub Navigation Bar -->
+    <nav class="sub-nav-frosted">
+        <div class="sub-nav-container">
+            <a href="#" class="sub-nav-title">System Design</a>
+            <div class="sub-nav-right">
+                <a href="index.html" class="sub-nav-link">Portfolio</a>
+                <a href="index.html#contact" class="sub-nav-button">Get in Touch</a>
+            </div>
+        </div>
+    </nav>
+
+
+    <!-- Article Hero -->
+    <section class="article-hero">
+        <div class="article-hero-inner reveal-element active">
+            <div class="article-meta">
+                <span class="article-category">System Design</span>
+                <span class="article-date">July 2026</span>
+                <span class="article-read-time">22 min read</span>
+            </div>
+            <h1>Apache Kafka <span class="gradient-text">Deep Dive</span>:<br>System Design for Interviews</h1>
+            <p class="article-hero-desc">
+                Every time you track a food delivery in real time, refresh a stock ticker, or watch concert tickets vanish in seconds — there's a good chance Kafka is moving the events behind the scenes. Let's unpack how it works, <em>why interviewers love it</em>, and what you need to say to stand out.
+            </p>
+        </div>
+    </section>
+
+    <!-- Author Bar (Medium-style) -->
+    <div class="author-bar reveal-element active">
+        <img src="ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar">
+        <div class="author-bar-info">
+            <div class="author-bar-name">Ajay Kotnala</div>
+            <div class="author-bar-meta">Senior Solution Architect · July 2026 · 22 min read</div>
+        </div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc-wrapper">
+        <div class="toc reveal-element">
+            <h3>In This Article</h3>
+            <ol>
+                <li><a href="#introduction">Introduction — Why Kafka Matters</a></li>
+                <li><a href="#motivating">Motivating Example — Food Delivery at Scale</a></li>
+                <li><a href="#terminology">Terminology & Architecture</a></li>
+                <li><a href="#how-it-works">How Kafka Works Internally</a></li>
+                <li><a href="#when-to-use">When to Use Kafka in Interviews</a></li>
+                <li><a href="#interview-essentials">Interview Essentials</a></li>
+                <li><a href="#levels">Level Expectations</a></li>
+                <li><a href="#summary">Summary</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Article Body -->
+    <article class="article-body">
+
+        <!-- Section 1: Introduction -->
+        <h2 id="introduction"><span class="section-number">01</span>Introduction — Why Kafka Matters</h2>
+
+        <p>
+            Apache Kafka is a distributed event streaming platform. That sentence shows up in every textbook, but it doesn't tell you much until you've felt the pain Kafka solves: <strong>millions of events per second</strong>, dozens of downstream systems that all need the same data, and zero tolerance for losing an order status update because one service was briefly down.
+        </p>
+        <p>
+            Kafka sits in a sweet spot between a traditional message queue and a real-time data pipeline. Producers append events to durable, ordered logs. Consumers read at their own pace. Multiple teams can subscribe to the same stream without stepping on each other. LinkedIn built it to handle their activity feed; today it powers everything from fraud detection to CDC pipelines to the order-tracking screen you stare at while your biryani is en route.
+        </p>
+        <p>
+            Interviewers ask about Kafka because it forces you to think about <strong>throughput, ordering, fault tolerance, and backpressure</strong> in the same breath. It's not a "drop in RabbitMQ and move on" topic — the vocabulary (partitions, offsets, ISR, consumer groups) is dense, and the trade-offs are genuinely interesting.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>When Kafka comes up, clarify whether the interviewer wants a <strong>conceptual deep dive</strong> (how it works) or an <strong>applied design</strong> (where you'd place it in a system). Both are common. A strong opening: "I'd use Kafka as the durable event backbone — let me walk through why, and what we'd publish."</p>
+        </div>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">2M+</div>
+                <div class="stat-desc">Partitions / Cluster (typical large deploy)</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">~1M</div>
+                <div class="stat-desc">Msgs / Sec / Broker</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">7 days</div>
+                <div class="stat-desc">Default Retention</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">RF=3</div>
+                <div class="stat-desc">Production Replication</div>
+            </div>
+        </div>
+
+        <!-- Section 2: Motivating Example -->
+        <h2 id="motivating"><span class="section-number">02</span>Motivating Example — Food Delivery at Scale</h2>
+
+        <p>
+            Picture a food delivery platform during Friday dinner rush. Every few seconds: an order is placed, a restaurant accepts, a rider is assigned, GPS coordinates stream in, the customer gets a push notification. That's easily <strong>50,000+ events per minute</strong> in a single metro — and at least six different systems care about those events.
+        </p>
+        <p>
+            The analytics team wants every click for funnel dashboards. The dispatch service needs rider location updates in near real time. Billing listens for "delivered" to charge the wallet. Customer support replays order history when someone calls angry about cold fries. Marketing triggers a coupon if delivery exceeds 45 minutes.
+        </p>
+        <p>
+            Your first instinct might be a single message queue: producers push, one consumer group pulls, done. That works until <strong>throughput spikes</strong> and one slow consumer backs up the entire queue. Or until you need <strong>ordering per order ID</strong> — rider assignment must not arrive before restaurant acceptance — while still scaling horizontally across thousands of concurrent orders.
+        </p>
+
+        <h3>Stage 1: Single Queue — Simple, Then Painful</h3>
+        <p>
+            Start with one topic, one consumer. Every event flows through a single pipe. At 500 orders/minute you're fine. At 50,000/minute with bursty dinner peaks, the queue depth grows, consumers lag, and the "order delivered" notification shows up ten minutes late. One poison message can stall everything unless you build retry logic yourself.
+        </p>
+
+        <h3>Stage 2: Partition by Order ID</h3>
+        <p>
+            Kafka's answer is <strong>partitioning</strong>. Hash the order ID to pick a partition. All events for order <code>#ORD-8842</code> land in the same partition, preserving order within that order's lifecycle. Different orders spread across partitions, so you scale writes horizontally. Ten partitions means ten parallel write pipelines on the broker cluster.
+        </p>
+
+        <h3>Stage 3: Consumer Groups — Same Data, Many Readers</h3>
+        <p>
+            Now dispatch, billing, and analytics all need the same <code>order-events</code> topic. Each runs as a separate <strong>consumer group</strong>. Kafka delivers each message once <em>per group</em> — dispatch gets every event, billing gets every event, analytics gets every event — but within a group, each partition is consumed by exactly one consumer instance. Scale dispatch by adding consumers (up to partition count); billing scales independently.
+        </p>
+
+        <!-- DIAGRAM 1: Motivating Example Evolution -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 1 — From Single Queue to Partitioned Consumer Groups</div>
+            <svg viewBox="0 0 780 420" xmlns="http://www.w3.org/2000/svg" style="max-width:780px;">
+                <defs>
+                    <pattern id="dotGrid1" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0"/>
+                    </pattern>
+                    <filter id="roughen1" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="2" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <filter id="roughenLight1" x="-1%" y="-1%" width="102%" height="102%">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="5" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <marker id="exArrow1" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowTeal1" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#00796b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                </defs>
+                <rect width="780" height="420" fill="#fefefe" rx="12"/>
+                <rect width="780" height="420" fill="url(#dotGrid1)" rx="12"/>
+
+                <!-- Stage labels -->
+                <text x="130" y="35" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="700">Stage 1</text>
+                <text x="390" y="35" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="700">Stage 2</text>
+                <text x="650" y="35" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="700">Stage 3</text>
+
+                <!-- Stage 1: Single queue -->
+                <rect x="40" y="55" width="180" height="330" rx="10" fill="#f5f5f7" stroke="#ccc" stroke-width="1.5" stroke-dasharray="6,4" filter="url(#roughen1)"/>
+                <text x="130" y="80" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle">Single Queue</text>
+                <rect x="70" y="100" width="120" height="40" rx="8" fill="#e0f2f1" stroke="#00796b" stroke-width="1.5" filter="url(#roughen1)"/>
+                <text x="130" y="125" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle">Producers</text>
+                <path d="M 130 140 L 130 165" fill="none" stroke="#333" stroke-width="2" marker-end="url(#exArrow1)" filter="url(#roughenLight1)"/>
+                <rect x="70" y="170" width="120" height="80" rx="8" fill="#fff3e0" stroke="#333" stroke-width="2" filter="url(#roughen1)"/>
+                <text x="130" y="200" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle">One Topic</text>
+                <text x="130" y="220" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Bottleneck!</text>
+                <path d="M 130 250 L 130 275" fill="none" stroke="#333" stroke-width="2" marker-end="url(#exArrow1)" filter="url(#roughenLight1)"/>
+                <rect x="70" y="280" width="120" height="40" rx="8" fill="#eef6ff" stroke="#0066cc" stroke-width="1.5" filter="url(#roughen1)"/>
+                <text x="130" y="305" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">1 Consumer</text>
+
+                <!-- Arrow stage 1 → 2 -->
+                <path d="M 222 220 L 268 220" fill="none" stroke="#00796b" stroke-width="2.5" marker-end="url(#exArrowTeal1)" filter="url(#roughenLight1)"/>
+
+                <!-- Stage 2: Partitioned -->
+                <rect x="280" y="55" width="220" height="330" rx="10" fill="#f5f5f7" stroke="#ccc" stroke-width="1.5" stroke-dasharray="6,4" filter="url(#roughen1)"/>
+                <text x="390" y="80" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle">Partitioned by order_id</text>
+                <rect x="300" y="100" width="180" height="35" rx="8" fill="#e0f2f1" stroke="#00796b" stroke-width="1.5" filter="url(#roughen1)"/>
+                <text x="390" y="122" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Producers → hash(order_id)</text>
+                <rect x="300" y="155" width="55" height="55" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5" filter="url(#roughen1)"/>
+                <text x="327" y="188" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">P0</text>
+                <rect x="362" y="155" width="55" height="55" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5" filter="url(#roughen1)"/>
+                <text x="389" y="188" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">P1</text>
+                <rect x="424" y="155" width="55" height="55" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5" filter="url(#roughen1)"/>
+                <text x="451" y="188" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">P2</text>
+                <text x="390" y="240" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Order per partition = ordered events</text>
+                <rect x="300" y="260" width="180" height="35" rx="8" fill="#eef6ff" stroke="#0066cc" stroke-width="1.5" filter="url(#roughen1)"/>
+                <text x="390" y="282" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">N consumers ∥ throughput</text>
+
+                <!-- Arrow stage 2 → 3 -->
+                <path d="M 502 220 L 548 220" fill="none" stroke="#00796b" stroke-width="2.5" marker-end="url(#exArrowTeal1)" filter="url(#roughenLight1)"/>
+
+                <!-- Stage 3: Consumer groups -->
+                <rect x="560" y="55" width="200" height="330" rx="10" fill="#f5f5f7" stroke="#ccc" stroke-width="1.5" stroke-dasharray="6,4" filter="url(#roughen1)"/>
+                <text x="660" y="80" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle">Consumer Groups</text>
+                <rect x="580" y="100" width="160" height="45" rx="8" fill="#e0f2f1" stroke="#00796b" stroke-width="2" filter="url(#roughen1)"/>
+                <text x="660" y="120" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">order-events topic</text>
+                <text x="660" y="135" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle">P0 · P1 · P2</text>
+                <rect x="580" y="165" width="160" height="32" rx="6" fill="#fff3e0" stroke="#00a896" stroke-width="1.5" filter="url(#roughen1)"/>
+                <text x="660" y="185" fill="#00a896" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Group: dispatch</text>
+                <rect x="580" y="205" width="160" height="32" rx="6" fill="#eef6ff" stroke="#0066cc" stroke-width="1.5" filter="url(#roughen1)"/>
+                <text x="660" y="225" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Group: billing</text>
+                <rect x="580" y="245" width="160" height="32" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5" filter="url(#roughen1)"/>
+                <text x="660" y="265" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Group: analytics</text>
+                <text x="660" y="310" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Each group gets ALL messages</text>
+                <text x="660" y="328" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Scale groups independently</text>
+            </svg>
+            <p class="diagram-caption">Food delivery events evolve from a single bottleneck queue to keyed partitions, then fan out to independent consumer groups.</p>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Watch Out</div>
+            <p>Partition count is chosen at topic creation and is painful to change later. Under-partition and you cap throughput; over-partition and you bloat metadata and rebalance times. For interviews, state your key choice (<code>order_id</code>) and justify partition count with rough math: target throughput ÷ per-partition capacity.</p>
+        </div>
+
+        <!-- Section 3: Terminology -->
+        <h2 id="terminology"><span class="section-number">03</span>Terminology & Architecture</h2>
+
+        <p>
+            Before drawing boxes on the whiteboard, align on vocabulary. Kafka's model is simpler than it sounds once you see everything as an <strong>append-only log</strong> sliced into partitions and spread across brokers.
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">📤</div>
+                <h4>Producer</h4>
+                <p>Client that publishes records to a topic. Chooses partition via key hash or round-robin. Batches and compresses for throughput.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">📥</div>
+                <h4>Consumer</h4>
+                <p>Client that reads records from assigned partitions. Pull-based — consumers fetch at their own rate, tracking position via offsets.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🖥️</div>
+                <h4>Broker</h4>
+                <p>A Kafka server storing partition data. A cluster is 3+ brokers for fault tolerance. Each broker hosts leaders and followers.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">📁</div>
+                <h4>Topic</h4>
+                <p>Named category of events — like <code>order-events</code> or <code>stock-ticks</code>. Logical stream; physically split into partitions.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">📊</div>
+                <h4>Partition</h4>
+                <p>Ordered, immutable sequence of records. Unit of parallelism. Ordering guaranteed <em>within</em> a partition, not across.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🔢</div>
+                <h4>Offset</h4>
+                <p>Monotonic ID of a record within a partition. Consumers commit offsets to mark progress — Kafka's cursor, not a traditional queue ack.</p>
+            </div>
+        </div>
+
+        <h3>Message Queue vs Event Stream</h3>
+        <p>
+            Traditional queues (RabbitMQ, SQS) typically delete a message once consumed. Kafka <strong>retains</strong> records for a configurable period — default seven days — regardless of who read them. That retention is what makes it a stream: new consumer groups can rewind and replay history; analytics can batch-read yesterday's data while real-time services process live events.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Aspect</th>
+                    <th>Traditional Queue</th>
+                    <th>Kafka (Event Stream)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Message lifecycle</td>
+                    <td>Deleted after ack</td>
+                    <td>Retained by time/size policy</td>
+                </tr>
+                <tr>
+                    <td>Multiple consumers</td>
+                    <td>Competing consumers split work</td>
+                    <td>Consumer groups — each group gets full copy</td>
+                </tr>
+                <tr>
+                    <td>Ordering</td>
+                    <td>Often global FIFO (single queue)</td>
+                    <td>Per-partition ordering only</td>
+                </tr>
+                <tr>
+                    <td>Replay</td>
+                    <td><span class="cross-icon">✗</span> Not built-in</td>
+                    <td><span class="check-icon">✓</span> Reset offset, re-read</td>
+                </tr>
+                <tr>
+                    <td>Throughput model</td>
+                    <td>Push to consumers</td>
+                    <td>Pull — consumer controls pace</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- DIAGRAM 2: Cluster Architecture -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 2 — Kafka Cluster Architecture</div>
+            <svg viewBox="0 0 780 480" xmlns="http://www.w3.org/2000/svg" style="max-width:780px;">
+                <defs>
+                    <pattern id="dotGrid2" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0"/>
+                    </pattern>
+                    <filter id="roughen2" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="3" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <filter id="roughenLight2" x="-1%" y="-1%" width="102%" height="102%">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="7" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <marker id="exArrow2" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowTeal2" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#00796b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                </defs>
+                <rect width="780" height="480" fill="#fefefe" rx="12"/>
+                <rect width="780" height="480" fill="url(#dotGrid2)" rx="12"/>
+
+                <!-- Producers -->
+                <rect x="30" y="180" width="100" height="120" rx="10" fill="#e0f2f1" stroke="#00796b" stroke-width="2" filter="url(#roughen2)"/>
+                <text x="80" y="230" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" font-weight="600">Producers</text>
+                <text x="80" y="252" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Order · GPS · Pay</text>
+                <path d="M 130 240 L 175 240" fill="none" stroke="#00796b" stroke-width="2" marker-end="url(#exArrowTeal2)" filter="url(#roughenLight2)"/>
+
+                <!-- Broker cluster box -->
+                <rect x="185" y="60" width="410" height="360" rx="12" fill="#f5f5f7" stroke="#333" stroke-width="2" stroke-dasharray="8,4" filter="url(#roughen2)"/>
+                <text x="390" y="88" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" font-weight="600">Kafka Cluster (3 Brokers)</text>
+
+                <!-- Broker 1 -->
+                <rect x="210" y="110" width="110" height="140" rx="8" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5" filter="url(#roughen2)"/>
+                <text x="265" y="135" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">Broker 1</text>
+                <text x="265" y="160" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">P0 Leader</text>
+                <text x="265" y="178" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">P1 Follower</text>
+                <text x="265" y="196" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">P2 Follower</text>
+
+                <!-- Broker 2 -->
+                <rect x="335" y="110" width="110" height="140" rx="8" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5" filter="url(#roughen2)"/>
+                <text x="390" y="135" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">Broker 2</text>
+                <text x="390" y="160" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">P0 Follower</text>
+                <text x="390" y="178" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">P1 Leader</text>
+                <text x="390" y="196" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">P2 Follower</text>
+
+                <!-- Broker 3 -->
+                <rect x="460" y="110" width="110" height="140" rx="8" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5" filter="url(#roughen2)"/>
+                <text x="515" y="135" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">Broker 3</text>
+                <text x="515" y="160" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">P0 Follower</text>
+                <text x="515" y="178" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">P1 Follower</text>
+                <text x="515" y="196" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">P2 Leader</text>
+
+                <!-- Topic label -->
+                <rect x="250" y="280" width="280" height="50" rx="8" fill="#e0f2f1" stroke="#00796b" stroke-width="1.5" filter="url(#roughen2)"/>
+                <text x="390" y="302" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" text-anchor="middle" font-weight="600">Topic: order-events</text>
+                <text x="390" y="320" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">3 partitions · RF=3 · ISR replication</text>
+
+                <!-- ZooKeeper/KRaft note -->
+                <rect x="250" y="350" width="280" height="35" rx="6" fill="#fff3e0" stroke="#00a896" stroke-width="1" stroke-dasharray="4,3" filter="url(#roughen2)"/>
+                <text x="390" y="372" fill="#00a896" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">KRaft / Controller manages leader election</text>
+
+                <!-- Consumers -->
+                <path d="M 595 200 L 640 200" fill="none" stroke="#0066cc" stroke-width="2" marker-end="url(#exArrow2)" filter="url(#roughenLight2)"/>
+                <path d="M 595 280 L 640 280" fill="none" stroke="#00a896" stroke-width="2" marker-end="url(#exArrow2)" filter="url(#roughenLight2)"/>
+
+                <rect x="645" y="130" width="115" height="100" rx="10" fill="#eef6ff" stroke="#0066cc" stroke-width="2" filter="url(#roughen2)"/>
+                <text x="702" y="165" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">Consumer Group</text>
+                <text x="702" y="185" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">dispatch-svc</text>
+                <text x="702" y="205" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">C1 · C2 · C3</text>
+
+                <rect x="645" y="250" width="115" height="100" rx="10" fill="#f0faf8" stroke="#00796b" stroke-width="2" filter="url(#roughen2)"/>
+                <text x="702" y="285" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">Consumer Group</text>
+                <text x="702" y="305" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">billing-svc</text>
+                <text x="702" y="325" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">C1 · C2</text>
+            </svg>
+            <p class="diagram-caption">Producers write to partition leaders; followers replicate. Each consumer group independently reads the same topic.</p>
+        </div>
+
+        <!-- Section 4: How Kafka Works -->
+        <h2 id="how-it-works"><span class="section-number">04</span>How Kafka Works Internally</h2>
+
+        <p>
+            Under the hood, Kafka is embarrassingly simple: a distributed commit log. Complexity lives in how it <strong>partitions, replicates, and serves</strong> that log at scale.
+        </p>
+
+        <h3>Records — The Unit of Data</h3>
+        <p>
+            Every message is a <strong>record</strong> with four parts: a optional <code>key</code> (used for partition routing), a <code>value</code> (payload — JSON, Avro, Protobuf), a <code>timestamp</code>, and optional <code>headers</code> (metadata like trace IDs or content-type). Keys aren't required, but without them records round-robin across partitions and you lose per-entity ordering.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Record Structure</span>
+            <code>{
+  <span class="string">"key"</span>: <span class="string">"ORD-8842"</span>,
+  <span class="string">"value"</span>: { <span class="string">"event"</span>: <span class="string">"RIDER_ASSIGNED"</span>, <span class="string">"riderId"</span>: <span class="string">"R-991"</span> },
+  <span class="string">"timestamp"</span>: <span class="number">1721654400000</span>,
+  <span class="string">"headers"</span>: [{ <span class="string">"trace-id"</span>: <span class="string">"abc-123"</span> }]
+}</code>
+        </div>
+
+        <h3>Append-Only Log & Offsets</h3>
+        <p>
+            Each partition is a sequential log on disk. Producers append; nothing is updated or deleted in place (until retention kicks in). Every record gets an <strong>offset</strong> — 0, 1, 2, … — assigned by the broker. Consumers track their position by committing offsets to an internal topic (<code>__consumer_offsets</code>) or external store.
+        </p>
+        <p>
+            This design is why Kafka is fast: sequential disk writes, OS page cache, zero random I/O. A broker can sustain hundreds of megabytes per second per partition on modest hardware.
+        </p>
+
+        <h3>Replication — Leader, Follower, ISR</h3>
+        <p>
+            Each partition has one <strong>leader</strong> broker handling all reads and writes, and N-1 <strong>followers</strong> that replicate the log. The set of replicas caught up within a configurable lag threshold form the <strong>In-Sync Replica (ISR)</strong> set. If the leader dies, a follower from the ISR is elected — no data loss if producers waited for ISR acks.
+        </p>
+
+        <h3>Pull-Based Consumption</h3>
+        <p>
+            Kafka consumers <strong>poll</strong> for records. The broker doesn't push. This inverts the backpressure model: a slow consumer simply falls behind (increasing <strong>consumer lag</strong>), without slowing producers or other consumer groups. You monitor lag per partition; alert when it crosses SLO thresholds.
+        </p>
+
+        <!-- DIAGRAM 3: Message Write Path -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 3 — Message Write Path & Replication</div>
+            <svg viewBox="0 0 760 340" xmlns="http://www.w3.org/2000/svg" style="max-width:760px;">
+                <defs>
+                    <pattern id="dotGrid3" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0"/>
+                    </pattern>
+                    <filter id="roughen3" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="4" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <filter id="roughenLight3" x="-1%" y="-1%" width="102%" height="102%">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="8" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <marker id="exArrow3" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowTeal3" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#00796b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                </defs>
+                <rect width="760" height="340" fill="#fefefe" rx="12"/>
+                <rect width="760" height="340" fill="url(#dotGrid3)" rx="12"/>
+
+                <!-- Steps -->
+                <rect x="30" y="130" width="95" height="80" rx="10" fill="#e0f2f1" stroke="#00796b" stroke-width="2" filter="url(#roughen3)"/>
+                <text x="77" y="165" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">Producer</text>
+                <text x="77" y="185" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">batch + compress</text>
+
+                <path d="M 125 170 L 155 170" fill="none" stroke="#00796b" stroke-width="2" marker-end="url(#exArrowTeal3)" filter="url(#roughenLight3)"/>
+                <rect x="160" y="130" width="110" height="80" rx="10" fill="#fff3e0" stroke="#00a896" stroke-width="1.5" filter="url(#roughen3)"/>
+                <text x="215" y="160" fill="#00a896" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" font-weight="600">Partitioner</text>
+                <text x="215" y="180" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">hash(key) → P1</text>
+
+                <path d="M 270 170 L 300 170" fill="none" stroke="#333" stroke-width="2" marker-end="url(#exArrow3)" filter="url(#roughenLight3)"/>
+                <rect x="305" y="115" width="120" height="110" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2" filter="url(#roughen3)"/>
+                <text x="365" y="145" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">Leader (B2)</text>
+                <text x="365" y="165" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">append to log</text>
+                <text x="365" y="185" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">offset = 1042</text>
+
+                <!-- Replication arrows -->
+                <path d="M 365 225 C 365 250, 280 260, 230 270" fill="none" stroke="#86868b" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#exArrow3)" filter="url(#roughenLight3)"/>
+                <path d="M 365 225 C 365 250, 450 260, 500 270" fill="none" stroke="#86868b" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#exArrow3)" filter="url(#roughenLight3)"/>
+                <rect x="155" y="255" width="100" height="55" rx="8" fill="#f5f5f7" stroke="#ccc" stroke-width="1.5" filter="url(#roughen3)"/>
+                <text x="205" y="280" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Follower B1</text>
+                <rect x="475" y="255" width="100" height="55" rx="8" fill="#f5f5f7" stroke="#ccc" stroke-width="1.5" filter="url(#roughen3)"/>
+                <text x="525" y="280" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Follower B3</text>
+
+                <path d="M 425 170 L 455 170" fill="none" stroke="#00796b" stroke-width="2" marker-end="url(#exArrowTeal3)" filter="url(#roughenLight3)"/>
+                <rect x="460" y="130" width="120" height="80" rx="10" fill="#e0f2f1" stroke="#00796b" stroke-width="2" filter="url(#roughen3)"/>
+                <text x="520" y="158" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" font-weight="600">Ack to Producer</text>
+                <text x="520" y="178" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">acks=all → ISR</text>
+                <text x="520" y="196" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle">acks=1 → leader only</text>
+
+                <!-- acks legend -->
+                <rect x="600" y="50" width="140" height="200" rx="10" fill="#fefaf6" stroke="#e0e0e0" stroke-width="1.5" stroke-dasharray="6,4" filter="url(#roughen3)"/>
+                <text x="670" y="75" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">acks setting</text>
+                <text x="615" y="100" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10">0 = fire &amp; forget</text>
+                <text x="615" y="125" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10">1 = leader ack</text>
+                <text x="615" y="150" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="600">all = ISR ack ✓</text>
+                <text x="615" y="180" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">Production default</text>
+                <text x="615" y="200" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">for durability</text>
+            </svg>
+            <p class="diagram-caption">Producer selects partition, appends to leader, followers replicate from leader, producer receives ack based on durability setting.</p>
+        </div>
+
+        <h3>Hands-On — CLI & Node.js</h3>
+        <p>
+            The fastest way to build intuition is to spin up a local broker and produce/consume a few messages. Here's the standard CLI flow, then the same idea in Node.js with kafkajs.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Shell</span>
+            <code><span class="comment"># Create a topic with 3 partitions</span>
+kafka-topics.sh --create --topic order-events \
+  --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+<span class="comment"># Produce with keys (order IDs)</span>
+kafka-console-producer.sh --topic order-events \
+  --bootstrap-server localhost:9092 \
+  --property <span class="string">"parse.key=true"</span> \
+  --property <span class="string">"key.separator=:"</span>
+<span class="comment"># Type: ORD-8842:{"event":"PLACED","restaurant":"Taco Palace"}</span>
+
+<span class="comment"># Consume from beginning, showing keys and offsets</span>
+kafka-console-consumer.sh --topic order-events \
+  --bootstrap-server localhost:9092 \
+  --from-beginning \
+  --property <span class="string">print.key=true</span> \
+  --property <span class="string">key.separator=:</span> \
+  --group dispatch-svc</code>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">Node.js · kafkajs</span>
+            <code><span class="keyword">const</span> { Kafka } = <span class="keyword">require</span>(<span class="string">'kafkajs'</span>);
+
+<span class="keyword">const</span> kafka = <span class="keyword">new</span> Kafka({
+  clientId: <span class="string">'order-service'</span>,
+  brokers: [<span class="string">'localhost:9092'</span>]
+});
+
+<span class="keyword">const</span> producer = kafka.producer();
+<span class="keyword">await</span> producer.connect();
+<span class="keyword">await</span> producer.send({
+  topic: <span class="string">'order-events'</span>,
+  acks: <span class="number">-1</span>,  <span class="comment">// wait for all ISR replicas</span>
+  messages: [{
+    key: <span class="string">'ORD-8842'</span>,
+    value: JSON.stringify({ event: <span class="string">'RIDER_ASSIGNED'</span>, riderId: <span class="string">'R-991'</span> }),
+    headers: { <span class="string">'trace-id'</span>: <span class="string">'abc-123'</span> }
+  }]
+});
+
+<span class="keyword">const</span> consumer = kafka.consumer({ groupId: <span class="string">'dispatch-svc'</span> });
+<span class="keyword">await</span> consumer.connect();
+<span class="keyword">await</span> consumer.subscribe({ topic: <span class="string">'order-events'</span> });
+<span class="keyword">await</span> consumer.run({
+  eachMessage: <span class="keyword">async</span> ({ topic, partition, message }) => {
+    console.log({ offset: message.offset, key: message.key?.toString() });
+    <span class="comment">// process event — offset committed after handler succeeds</span>
+  }
+});</code>
+        </div>
+
+        <!-- Section 5: When to Use -->
+        <h2 id="when-to-use"><span class="section-number">05</span>When to Use Kafka in Interviews</h2>
+
+        <p>
+            Not every system needs Kafka. Interviewers want to hear you <strong>choose it deliberately</strong>, not reflexively. Here's a decision framework.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Use Case</th>
+                    <th>Kafka Fit</th>
+                    <th>Alternative</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Event sourcing / audit log</td>
+                    <td><span class="check-icon">●</span> Excellent — replay built-in</td>
+                    <td>EventStoreDB, custom WAL</td>
+                </tr>
+                <tr>
+                    <td>Fire-and-forget task queue</td>
+                    <td><span class="cross-icon">○</span> Overkill — retention overhead</td>
+                    <td>SQS, RabbitMQ, Redis Streams</td>
+                </tr>
+                <tr>
+                    <td>Real-time analytics pipeline</td>
+                    <td><span class="check-icon">●</span> Excellent — multiple consumers</td>
+                    <td>Kinesis, Pulsar</td>
+                </tr>
+                <tr>
+                    <td>CDC (database → downstream)</td>
+                    <td><span class="check-icon">●</span> Excellent — Debezium + Kafka</td>
+                    <td>Custom polling, AWS DMS</td>
+                </tr>
+                <tr>
+                    <td>Request/response RPC</td>
+                    <td><span class="cross-icon">○</span> Wrong tool — use gRPC/REST</td>
+                    <td>Direct HTTP, service mesh</td>
+                </tr>
+                <tr>
+                    <td>Log aggregation at massive scale</td>
+                    <td><span class="check-icon">●</span> Strong — LinkedIn's origin story</td>
+                    <td>Fluentd → Elasticsearch</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="callout">
+            <div class="callout-label">Queue vs Stream — Interview Sound Bite</div>
+            <p>Use a <strong>queue</strong> when one worker should process each task exactly once and discard it. Use a <strong>stream</strong> when events are facts that multiple systems may consume now or later — and you might need to replay them. Kafka is the stream; add a compacted topic or external dedup if you need queue semantics.</p>
+        </div>
+
+        <!-- Section 6: Interview Essentials -->
+        <h2 id="interview-essentials"><span class="section-number">06</span>Interview Essentials</h2>
+
+        <p>
+            These are the topics that separate "I've heard of Kafka" from "I've operated it in production." Work through each with a concrete example from your motivating scenario.
+        </p>
+
+        <h3>Scalability & Hot Partitions</h3>
+        <p>
+            Throughput scales with partition count — but only if load is evenly distributed. A skewed key — imagine every stock tick for <code>AAPL</code> hashing to the same partition, or a celebrity's concert ticket release — creates a <strong>hot partition</strong>. One broker handles disproportionate traffic while others idle.
+        </p>
+
+        <!-- DIAGRAM 4: Hot Partition Strategies -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 4 — Hot Partition Mitigation Strategies</div>
+            <svg viewBox="0 0 760 400" xmlns="http://www.w3.org/2000/svg" style="max-width:760px;">
+                <defs>
+                    <pattern id="dotGrid4" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0"/>
+                    </pattern>
+                    <filter id="roughen4" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="6" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <filter id="roughenLight4" x="-1%" y="-1%" width="102%" height="102%">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="9" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <marker id="exArrow4" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowTeal4" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#00796b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                </defs>
+                <rect width="760" height="400" fill="#fefefe" rx="12"/>
+                <rect width="760" height="400" fill="url(#dotGrid4)" rx="12"/>
+
+                <!-- Problem -->
+                <text x="380" y="30" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" font-weight="700">Problem: Hot Partition P0</text>
+                <rect x="280" y="45" width="200" height="70" rx="10" fill="#e0f2f1" stroke="#00796b" stroke-width="2" filter="url(#roughen4)"/>
+                <text x="380" y="72" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle">P0: 90% of ticket events</text>
+                <text x="380" y="92" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">key = concert_id (one show)</text>
+                <rect x="80" y="55" width="70" height="50" rx="6" fill="#f5f5f7" stroke="#ccc" stroke-width="1" filter="url(#roughen4)"/>
+                <text x="115" y="85" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">P1 idle</text>
+                <rect x="610" y="55" width="70" height="50" rx="6" fill="#f5f5f7" stroke="#ccc" stroke-width="1" filter="url(#roughen4)"/>
+                <text x="645" y="85" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">P2 idle</text>
+
+                <!-- Strategy 1 -->
+                <path d="M 380 115 L 380 135" fill="none" stroke="#333" stroke-width="2" marker-end="url(#exArrow4)" filter="url(#roughenLight4)"/>
+                <rect x="40" y="145" width="210" height="110" rx="10" fill="#eef6ff" stroke="#0066cc" stroke-width="1.5" filter="url(#roughen4)"/>
+                <text x="145" y="172" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">1. Salting</text>
+                <text x="145" y="195" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">key = concert_id + random(0-N)</text>
+                <text x="145" y="215" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Spread load, lose ordering</text>
+                <text x="145" y="235" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Reassemble downstream</text>
+
+                <!-- Strategy 2 -->
+                <rect x="275" y="145" width="210" height="110" rx="10" fill="#e0f2f1" stroke="#00796b" stroke-width="1.5" filter="url(#roughen4)"/>
+                <text x="380" y="172" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">2. Composite Key</text>
+                <text x="380" y="195" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">key = user_id (not concert_id)</text>
+                <text x="380" y="215" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Even spread per buyer</text>
+                <text x="380" y="235" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Order per user preserved</text>
+
+                <!-- Strategy 3 -->
+                <rect x="510" y="145" width="210" height="110" rx="10" fill="#fff3e0" stroke="#00a896" stroke-width="1.5" filter="url(#roughen4)"/>
+                <text x="615" y="172" fill="#00a896" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">3. Burst Topic</text>
+                <text x="615" y="195" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Dedicated high-partition topic</text>
+                <text x="615" y="215" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">for on-sale events only</text>
+                <text x="615" y="235" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Tear down after rush</text>
+
+                <!-- Strategy 4 -->
+                <rect x="160" y="280" width="210" height="100" rx="10" fill="#f0faf8" stroke="#00796b" stroke-width="1.5" filter="url(#roughen4)"/>
+                <text x="265" y="307" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">4. More Partitions</text>
+                <text x="265" y="330" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Only helps if key space</text>
+                <text x="265" y="350" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">has natural cardinality</text>
+
+                <!-- Strategy 5 -->
+                <rect x="390" y="280" width="210" height="100" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5" filter="url(#roughen4)"/>
+                <text x="495" y="307" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">5. Custom Partitioner</text>
+                <text x="495" y="330" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Route hot keys to dedicated</text>
+                <text x="495" y="350" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">partition subset at runtime</text>
+            </svg>
+            <p class="diagram-caption">When one partition absorbs most traffic, salt keys, redesign key choice, or isolate burst traffic — each trades ordering for throughput differently.</p>
+        </div>
+
+        <h3>Fault Tolerance — acks & ISR</h3>
+        <p>
+            Production clusters run replication factor 3 with <code>min.insync.replicas=2</code> and producer <code>acks=all</code>. A broker failure triggers leader election from the ISR — typically seconds of unavailability per affected partition, not data loss. Mention <code>unclean.leader.election.enable=false</code> to prevent electing out-of-sync replicas (trading availability for consistency during disasters).
+        </p>
+
+        <h3>Consumer Failure & Rebalancing</h3>
+        <p>
+            When a consumer joins or leaves a group — crash, deploy, scale-out — Kafka triggers a <strong>rebalance</strong>. Partitions are reassigned across live consumers. During rebalance, processing pauses (classic "stop-the-world" with older protocols; cooperative sticky assignors reduce the blast radius in modern clients).
+        </p>
+
+        <!-- DIAGRAM 5: Consumer Rebalance Timeline -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 5 — Consumer Failure & Rebalance Timeline</div>
+            <svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" style="max-width:760px;">
+                <defs>
+                    <pattern id="dotGrid5" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0"/>
+                    </pattern>
+                    <filter id="roughen5" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="10" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <filter id="roughenLight5" x="-1%" y="-1%" width="102%" height="102%">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="11" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <marker id="exArrow5" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                </defs>
+                <rect width="760" height="300" fill="#fefefe" rx="12"/>
+                <rect width="760" height="300" fill="url(#dotGrid5)" rx="12"/>
+
+                <path d="M 80 40 L 700 40" fill="none" stroke="#ccc" stroke-width="1.5" marker-end="url(#exArrow5)" filter="url(#roughenLight5)"/>
+                <text x="390" y="28" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle">TIME →</text>
+
+                <text x="30" y="90" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" font-weight="700">C1</text>
+                <text x="30" y="140" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" font-weight="700">C2</text>
+                <text x="30" y="190" fill="#00a896" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" font-weight="700">C3</text>
+                <line x1="60" y1="50" x2="60" y2="250" stroke="#e0e0e0" stroke-width="1"/>
+
+                <!-- C1 processing P0 -->
+                <rect x="100" y="75" width="180" height="22" rx="5" fill="#e0f2f1" stroke="#00796b" stroke-width="1.5" filter="url(#roughen5)"/>
+                <text x="190" y="90" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Processing P0 · offset 500→520</text>
+
+                <!-- C2 dies -->
+                <rect x="100" y="125" width="120" height="22" rx="5" fill="#eef6ff" stroke="#0066cc" stroke-width="1.5" filter="url(#roughen5)"/>
+                <text x="160" y="140" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Processing P1</text>
+                <rect x="220" y="125" width="60" height="22" rx="5" fill="#e0f2f1" stroke="#00796b" stroke-width="2" filter="url(#roughen5)"/>
+                <text x="250" y="140" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">💀 CRASH</text>
+
+                <!-- C3 processing P2 -->
+                <rect x="100" y="175" width="180" height="22" rx="5" fill="#f0faf8" stroke="#00a896" stroke-width="1.5" filter="url(#roughen5)"/>
+                <text x="190" y="190" fill="#00a896" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Processing P2 · offset 300→315</text>
+
+                <!-- Rebalance window -->
+                <rect x="290" y="60" width="100" height="170" rx="8" fill="#fff3e0" stroke="#00a896" stroke-width="1.5" stroke-dasharray="5,3" filter="url(#roughen5)" opacity="0.9"/>
+                <text x="340" y="85" fill="#00a896" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" font-weight="600">Rebalance</text>
+                <text x="340" y="105" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle">poll paused</text>
+                <text x="340" y="120" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle">partitions</text>
+                <text x="340" y="135" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle">reassigned</text>
+
+                <!-- After rebalance -->
+                <rect x="410" y="75" width="140" height="22" rx="5" fill="#e0f2f1" stroke="#00796b" stroke-width="1.5" filter="url(#roughen5)"/>
+                <text x="480" y="90" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">C1: P0 + P1 (was C2)</text>
+                <rect x="410" y="175" width="140" height="22" rx="5" fill="#f0faf8" stroke="#00a896" stroke-width="1.5" filter="url(#roughen5)"/>
+                <text x="480" y="190" fill="#00a896" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">C3: P2 (unchanged)</text>
+
+                <!-- Offset commit note -->
+                <rect x="570" y="110" width="170" height="80" rx="8" fill="#fefaf6" stroke="#e0e0e0" stroke-width="1.5" filter="url(#roughen5)"/>
+                <text x="655" y="135" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" font-weight="600">Offset commit</text>
+                <text x="655" y="155" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">P1 rewinds to last</text>
+                <text x="655" y="172" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">committed offset</text>
+
+                <text x="390" y="270" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">session.timeout.ms detects failure → cooperative rebalance → at-least-once redelivery</text>
+            </svg>
+            <p class="diagram-caption">Consumer C2 crashes; the group rebalances; C1 inherits P1 and resumes from the last committed offset — uncommitted messages may be reprocessed.</p>
+        </div>
+
+        <div class="deep-dive open" id="dd-retries">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-retries')">
+                <h4>Deep Dive: Retries, Idempotency & Dead Letter Queues</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Kafka guarantees <strong>at-least-once</strong> delivery by default — if your consumer crashes after processing but before committing offset, the message is redelivered. Design handlers to be <strong>idempotent</strong>: use the event ID or offset as a dedup key in your database.
+                    </p>
+                    <p>
+                        For poison messages that always fail parsing, route to a <strong>Dead Letter Topic (DLT)</strong> after N retries. In Spring Kafka or kafkajs, configure a retry topic with backoff, then forward failures to <code>order-events.DLT</code> for manual inspection. Never block the partition indefinitely on a bad message.
+                    </p>
+                    <p>
+                        Enable producer <strong>idempotence</strong> (<code>enable.idempotence=true</code>) to prevent duplicate writes during network retries — the broker deduplicates using a producer ID + sequence number per partition.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="deep-dive" id="dd-performance">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-performance')">
+                <h4>Deep Dive: Performance — Batching, Compression & Retention</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Producers batch records (<code>linger.ms</code>, <code>batch.size</code>) before sending — trading a few milliseconds of latency for 10× throughput. Enable <strong>compression</strong> (<code>lz4</code> or <code>zstd</code>) on the wire; Kafka stores compressed bytes on disk.
+                    </p>
+                    <p>
+                        Consumers fetch in chunks (<code>fetch.min.bytes</code>, <code>max.poll.records</code>). Tune <code>max.poll.interval.ms</code> so long-running handlers don't get kicked from the group mid-processing.
+                    </p>
+                    <p>
+                        <strong>Retention</strong> is time-based (<code>retention.ms</code>) or size-based (<code>retention.bytes</code>). Compacted topics keep only the latest value per key — useful for changelog streams like <code>user-preferences</code>. For compliance, extend retention or tier to S3 via Kafka Connect.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Senior Signal</div>
+            <p>Volunteer the <strong>exactly-once</strong> story: idempotent producer + transactional writes + read-process-write in a single transaction. It's expensive and not always worth it — but knowing when to reach for it (financial ledger events) vs. at-least-once + idempotent consumers (order notifications) shows production maturity.</p>
+        </div>
+
+        <!-- Section 7: Level Expectations -->
+        <h2 id="levels"><span class="section-number">07</span>Level Expectations</h2>
+
+        <p>
+            Kafka questions scale from "draw the architecture" to "design a multi-region disaster recovery strategy." Here's what interviewers typically expect at each level.
+        </p>
+
+        <div class="level-grid reveal-element">
+            <div class="level-card mid">
+                <div class="level-label">Mid-Level (E4)</div>
+                <h4>Know the Vocabulary</h4>
+                <p>Explain topics, partitions, consumer groups, and offsets. Draw producer → broker → consumer. Describe why partitioning enables scale. Know queue vs stream difference.</p>
+                <span class="level-focus">80% Concepts · 20% Ops</span>
+            </div>
+            <div class="level-card senior">
+                <div class="level-label">Senior (E5)</div>
+                <h4>Own the Trade-offs</h4>
+                <p>Discuss acks, ISR, hot partitions, consumer lag, and rebalancing. Choose partition keys with justification. Design retry/DLT strategy. Mention monitoring (lag, under-replicated partitions).</p>
+                <span class="level-focus">50% Design · 50% Depth</span>
+            </div>
+            <div class="level-card staff">
+                <div class="level-label">Staff+ (E6)</div>
+                <h4>Operate at Scale</h4>
+                <p>Multi-region replication (MirrorMaker 2), tiered storage, KRaft migration, capacity planning math. When <em>not</em> to use Kafka. Cross-team governance for schema registry and topic ownership.</p>
+                <span class="level-focus">30% Design · 70% Depth</span>
+            </div>
+        </div>
+
+        <!-- Section 8: Summary -->
+        <h2 id="summary"><span class="section-number">08</span>Summary</h2>
+
+        <p>
+            Kafka is a distributed commit log dressed up as an event streaming platform. It wins when you need <strong>high throughput, durable retention, and multiple independent consumers</strong> over the same event stream — food delivery pipelines, stock tickers, ticket drops, CDC, and analytics fan-out all fit that mold.
+        </p>
+        <p>
+            For interviews, anchor on a concrete scenario, walk through partition key choice, explain replication with acks and ISR, and proactively mention hot partitions, consumer lag, and at-least-once semantics. The candidates who impress aren't the ones who recite definitions — they're the ones who explain <em>what breaks at 2 AM</em> and how they'd fix it.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Concept</th>
+                    <th>One-Line Recall</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Topic</td>
+                    <td>Named stream of events, split into partitions</td>
+                </tr>
+                <tr>
+                    <td>Partition</td>
+                    <td>Ordered log; unit of parallelism and ordering scope</td>
+                </tr>
+                <tr>
+                    <td>Consumer Group</td>
+                    <td>Cooperative consumers; each partition → one member</td>
+                </tr>
+                <tr>
+                    <td>Offset</td>
+                    <td>Consumer's bookmark in the partition log</td>
+                </tr>
+                <tr>
+                    <td>ISR</td>
+                    <td>Replicas caught up enough to be elected leader safely</td>
+                </tr>
+                <tr>
+                    <td>acks=all</td>
+                    <td>Producer waits for ISR — production durability default</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Final Thought</div>
+            <p>
+                The best Kafka answers sound like a story, not a glossary. Start with the business event ("when the rider marks delivered…"), follow one record from producer to consumer, and name the failure modes along the way. That's how you turn a infrastructure component into a system design answer.
+            </p>
+        </div>
+
+    </article>
+
+    <!-- Author Footer -->
+    <div class="article-footer">
+        <div class="author-card reveal-element">
+            <img src="ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar">
+            <div class="author-info">
+                <h4>Ajay Kotnala</h4>
+                <div class="author-role">Senior Solution Architect · NTT</div>
+                <p>
+                    15+ years designing cloud-native, event-driven architectures at enterprise scale.
+                    Passionate about system design, API-first thinking, and making complex systems feel simple.
+                </p>
+            </div>
+        </div>
+        <a href="index.html" class="back-link">← Back to Portfolio</a>
+    </div>
+
+    <!-- Global Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-bottom">
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank">LinkedIn</a>
+                    <a href="https://github.com/ajaykotnala" target="_blank">GitHub</a>
+                    <a href="https://medium.com/@ajay.kotnalajpr" target="_blank">Medium</a>
+                </div>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll Progress Bar
+        window.addEventListener('scroll', () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrollTop / docHeight) * 100;
+            document.getElementById('progressBar').style.width = progress + '%';
+        });
+
+        // Intersection Observer for scroll-reveal animations
+        document.addEventListener('DOMContentLoaded', () => {
+            const observerOptions = {
+                threshold: 0.12,
+                rootMargin: '0px 0px -40px 0px'
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('active');
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll('.reveal-element').forEach(el => {
+                observer.observe(el);
+            });
+        });
+
+        // Deep Dive Accordion
+        function toggleDeepDive(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle('open');
+        }
+
+        // Smooth scroll for TOC and anchor links
+        document.querySelectorAll('.toc a, a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                const targetId = this.getAttribute('href');
+                if (targetId.startsWith('#')) {
+                    e.preventDefault();
+                    const target = document.querySelector(targetId);
+                    if (target) {
+                        // Nav offset: global nav (44px) + sub nav (52px) + padding
+                        const offset = 110;
+                        const targetPosition = target.getBoundingClientRect().top + window.scrollY - offset;
+                        window.scrollTo({ top: targetPosition, behavior: 'smooth' });
+                    }
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>
