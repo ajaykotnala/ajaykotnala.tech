@@ -1200,7 +1200,7 @@
             <div class="article-meta">
                 <span class="article-category">System Design</span>
                 <span class="article-date">July 2026</span>
-                <span class="article-read-time">22 min read</span>
+                <span class="article-read-time">26 min read</span>
             </div>
             <h1>Apache Kafka <span class="gradient-text">Deep Dive</span>:<br>System Design for Interviews</h1>
             <p class="article-hero-desc">
@@ -1214,7 +1214,7 @@
         <img src="ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar">
         <div class="author-bar-info">
             <div class="author-bar-name">Ajay Kotnala</div>
-            <div class="author-bar-meta">Senior Solution Architect · July 2026 · 22 min read</div>
+            <div class="author-bar-meta">Senior Solution Architect · July 2026 · 26 min read</div>
         </div>
     </div>
 
@@ -1228,6 +1228,8 @@
                 <li><a href="#terminology">Terminology & Architecture</a></li>
                 <li><a href="#how-it-works">How Kafka Works Internally</a></li>
                 <li><a href="#when-to-use">When to Use Kafka in Interviews</a></li>
+                <li><a href="#back-of-envelope">Back-of-Envelope Estimations</a></li>
+                <li><a href="#kafka-vs-rabbitmq">Kafka vs RabbitMQ</a></li>
                 <li><a href="#interview-essentials">Interview Essentials</a></li>
                 <li><a href="#levels">Level Expectations</a></li>
                 <li><a href="#summary">Summary</a></li>
@@ -1777,8 +1779,254 @@ kafka-console-consumer.sh --topic order-events \
             <p>Use a <strong>queue</strong> when one worker should process each task exactly once and discard it. Use a <strong>stream</strong> when events are facts that multiple systems may consume now or later — and you might need to replay them. Kafka is the stream; add a compacted topic or external dedup if you need queue semantics.</p>
         </div>
 
-        <!-- Section 6: Interview Essentials -->
-        <h2 id="interview-essentials"><span class="section-number">06</span>Interview Essentials</h2>
+        <!-- Section 6: Back-of-Envelope Estimations -->
+        <h2 id="back-of-envelope"><span class="section-number">06</span>Back-of-Envelope Estimations</h2>
+
+        <p>
+            Interviewers love when you do napkin math before drawing boxes. It shows you can tell whether Kafka is even the right scale — or whether you're over-engineering a problem that fits in a single RabbitMQ node. Let's walk through the food delivery example from Section 02 and size it like you'd do on a whiteboard.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>State your assumptions out loud. Round aggressively. Interviewers care about <strong>order-of-magnitude reasoning</strong>, not decimal precision. Write: "Assume 500 bytes per event, 7-day retention, RF=3 — that puts us around X TB."</p>
+        </div>
+
+        <h3>Step 1 — Event Volume</h3>
+        <p>Start from business metrics and work backward:</p>
+        <ul>
+            <li><strong>Active metros:</strong> 20 cities at dinner peak</li>
+            <li><strong>Peak events per metro:</strong> ~50,000 events/min (orders, GPS pings, status changes)</li>
+            <li><strong>Aggregate peak write rate:</strong> 50K × 20 = <strong>1M events/min</strong> ≈ <strong>17K events/sec</strong></li>
+            <li><strong>Average off-peak:</strong> assume 25% of peak → ~4K events/sec sustained average</li>
+            <li><strong>Daily volume (avg):</strong> 4K/sec × 86,400 sec ≈ <strong>350M events/day</strong></li>
+        </ul>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">17K</div>
+                <div class="stat-desc">Peak Writes / Sec</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">350M</div>
+                <div class="stat-desc">Events / Day (avg)</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">~500B</div>
+                <div class="stat-desc">Bytes / Event (JSON)</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">~175GB</div>
+                <div class="stat-desc">Raw Ingest / Day</div>
+            </div>
+        </div>
+
+        <h3>Step 2 — Storage (Retention × Replication)</h3>
+        <p>Each event is a small JSON payload — order ID, event type, timestamp, maybe lat/long. Call it <strong>500 bytes</strong> on the wire (headers + key included).</p>
+
+        <div class="code-block">
+            <span class="code-block-label">Napkin Math</span>
+            <code><span class="comment">// Daily raw ingest</span>
+350M events × 500 bytes ≈ <span class="number">175 GB</span>/day
+
+<span class="comment">// With replication factor 3 (RF=3)</span>
+175 GB × 3 ≈ <span class="number">525 GB</span>/day on disk
+
+<span class="comment">// 7-day default retention</span>
+525 GB × 7 ≈ <span class="number">3.7 TB</span> total cluster storage (order-of-magnitude)
+
+<span class="comment">// With lz4 compression (~60% reduction, typical for JSON)</span>
+3.7 TB × 0.4 ≈ <span class="number">~1.5 TB</span> effective storage</code>
+        </div>
+
+        <p>
+            A three-broker cluster with 2 TB NVMe each gives you ~6 TB raw — plenty of headroom for growth, compaction overhead, and segment files that haven't been cleaned yet. If retention stretches to 30 days for audit, multiply storage by ~4× and you're looking at <strong>6–8 TB effective</strong> — still manageable, but now tiered storage or S3 offload becomes worth mentioning.
+        </p>
+
+        <h3>Step 3 — Partition & Consumer Sizing</h3>
+        <p>
+            Rule of thumb: target <strong>5–10 MB/sec per partition</strong> for writes (varies by hardware). At 17K events/sec × 500 bytes ≈ <strong>8.5 MB/sec</strong> peak ingest, you need roughly <strong>12–24 partitions</strong> for the hot <code>order-events</code> topic — call it <strong>24 partitions</strong> for headroom and even key distribution.
+        </p>
+        <p>
+            For consumers: if each dispatch worker processes ~500 events/sec (DB lookup + push notification), one consumer handles ~500/sec. At 17K/sec peak you need <strong>~34 consumer instances</strong> in the dispatch group — but you're capped at <strong>24</strong> (one per partition). That means either optimize handler throughput, add a fan-out topic, or accept consumer lag during spikes. <em>This is exactly the kind of tension interviewers want you to surface.</em>
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Consumer Math</span>
+            <code>Peak ingest:     <span class="number">17,000</span> events/sec
+Handler speed:   <span class="number">500</span> events/sec/consumer
+Consumers needed: 17,000 / 500 = <span class="number">34</span>
+Partition cap:   min(34, partition_count) = min(34, 24) = <span class="number">24</span>
+→ Max throughput at 500/sec each = <span class="number">12,000</span> events/sec
+→ <span class="keyword">Gap:</span> 5,000 events/sec lag accumulates during peak ⚠️</code>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Watch Out</div>
+            <p>When your math shows consumers can't keep up with partition count, don't silently add partitions — that makes it worse (more parallelism but same total handler capacity). Fix the handler, batch writes, or decouple with a faster intermediate step. Partitions scale <strong>writes</strong>; they don't magically scale <strong>processing</strong>.</p>
+        </div>
+
+        <h3>Step 4 — Broker Throughput Check</h3>
+        <p>
+            A well-tuned broker handles ~200–500 MB/sec disk write and ~1M small messages/sec in benchmark conditions. Our peak of 8.5 MB/sec and 17K msg/sec is <strong>nowhere near broker limits</strong> — the bottleneck is consumer processing, not Kafka itself. That's a great interview punchline: "Kafka isn't the constraint here; our downstream dispatch service is."
+        </p>
+
+        <!-- DIAGRAM 6: Back-of-Envelope Flow -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 6 — Back-of-Envelope Sizing Flow</div>
+            <svg viewBox="0 0 760 320" xmlns="http://www.w3.org/2000/svg" style="max-width:760px;">
+                <defs>
+                    <pattern id="dotGrid6" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0"/>
+                    </pattern>
+                    <filter id="roughen6" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="12" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <filter id="roughenLight6" x="-1%" y="-1%" width="102%" height="102%">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="13" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <marker id="exArrow6" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowTeal6" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#00796b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                </defs>
+                <rect width="760" height="320" fill="#fefefe" rx="12"/>
+                <rect width="760" height="320" fill="url(#dotGrid6)" rx="12"/>
+
+                <!-- Step boxes -->
+                <rect x="30" y="100" width="130" height="90" rx="10" fill="#e0f2f1" stroke="#00796b" stroke-width="2" filter="url(#roughen6)"/>
+                <text x="95" y="130" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">① Volume</text>
+                <text x="95" y="150" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">50K/min × 20 metros</text>
+                <text x="95" y="168" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">= 17K events/sec</text>
+
+                <path d="M 160 145 L 185 145" fill="none" stroke="#00796b" stroke-width="2" marker-end="url(#exArrowTeal6)" filter="url(#roughenLight6)"/>
+
+                <rect x="190" y="100" width="130" height="90" rx="10" fill="#eef6ff" stroke="#0066cc" stroke-width="2" filter="url(#roughen6)"/>
+                <text x="255" y="130" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">② Storage</text>
+                <text x="255" y="150" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">175 GB/day raw</text>
+                <text x="255" y="168" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">× RF3 × 7d ≈ 3.7 TB</text>
+
+                <path d="M 320 145 L 345 145" fill="none" stroke="#00796b" stroke-width="2" marker-end="url(#exArrowTeal6)" filter="url(#roughenLight6)"/>
+
+                <rect x="350" y="100" width="130" height="90" rx="10" fill="#fff3e0" stroke="#00a896" stroke-width="2" filter="url(#roughen6)"/>
+                <text x="415" y="130" fill="#00a896" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">③ Partitions</text>
+                <text x="415" y="150" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">8.5 MB/sec peak</text>
+                <text x="415" y="168" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">→ 24 partitions</text>
+
+                <path d="M 480 145 L 505 145" fill="none" stroke="#00796b" stroke-width="2" marker-end="url(#exArrowTeal6)" filter="url(#roughenLight6)"/>
+
+                <rect x="510" y="100" width="130" height="90" rx="10" fill="#fce4ec" stroke="#e8445a" stroke-width="2" filter="url(#roughen6)"/>
+                <text x="575" y="130" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">④ Consumers</text>
+                <text x="575" y="150" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">Need 34, cap at 24</text>
+                <text x="575" y="168" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">→ lag at peak ⚠️</text>
+
+                <path d="M 640 145 L 665 145" fill="none" stroke="#00796b" stroke-width="2" marker-end="url(#exArrowTeal6)" filter="url(#roughenLight6)"/>
+
+                <rect x="670" y="100" width="70" height="90" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2" filter="url(#roughen6)"/>
+                <text x="705" y="135" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" font-weight="600">⑤</text>
+                <text x="705" y="155" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle">Brokers</text>
+                <text x="705" y="172" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle">OK ✓</text>
+
+                <!-- Bottom insight -->
+                <rect x="80" y="230" width="600" height="60" rx="10" fill="#fefaf6" stroke="#00796b" stroke-width="1.5" stroke-dasharray="6,4" filter="url(#roughen6)"/>
+                <text x="380" y="255" fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" text-anchor="middle" font-weight="600">Conclusion: Kafka handles the load easily — optimize consumers or add fan-out</text>
+                <text x="380" y="275" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">3 brokers · 24 partitions · monitor consumer lag as the primary SLO</text>
+            </svg>
+            <p class="diagram-caption">Walk the interviewer through five steps: volume → storage → partitions → consumers → broker headroom. Name the bottleneck when you find it.</p>
+        </div>
+
+        <!-- Section 7: Kafka vs RabbitMQ -->
+        <h2 id="kafka-vs-rabbitmq"><span class="section-number">07</span>Kafka vs RabbitMQ — Quick Comparison</h2>
+
+        <p>
+            "Why not RabbitMQ?" shows up in almost every Kafka interview. Both move messages between services, but they're built for different problems. RabbitMQ is a <strong>smart broker</strong> — it routes, buffers, and pushes messages to consumers with rich delivery semantics. Kafka is a <strong>dumb broker, smart client</strong> — an append-only log that retains data and lets consumers pull at their own pace.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Dimension</th>
+                    <th>Apache Kafka</th>
+                    <th>RabbitMQ</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Core model</td>
+                    <td>Distributed commit log (persistent stream)</td>
+                    <td>Message broker with queues & exchanges</td>
+                </tr>
+                <tr>
+                    <td>Throughput</td>
+                    <td>Millions of msg/sec per cluster</td>
+                    <td>Tens of thousands/sec per node (typical)</td>
+                </tr>
+                <tr>
+                    <td>Delivery</td>
+                    <td>Pull-based — consumer polls</td>
+                    <td>Push-based — broker delivers to consumers</td>
+                </tr>
+                <tr>
+                    <td>Message retention</td>
+                    <td>Retained by policy (hours to forever)</td>
+                    <td>Deleted after ack (default)</td>
+                </tr>
+                <tr>
+                    <td>Replay</td>
+                    <td><span class="check-icon">●</span> Native — reset offset, re-read log</td>
+                    <td><span class="cross-icon">○</span> Not built-in — once ack'd, it's gone</td>
+                </tr>
+                <tr>
+                    <td>Multiple consumers (same data)</td>
+                    <td><span class="check-icon">●</span> Consumer groups — each group gets all events</td>
+                    <td><span class="cross-icon">○</span> Fan-out via exchanges, but no shared replay log</td>
+                </tr>
+                <tr>
+                    <td>Ordering guarantee</td>
+                    <td>Per-partition ordering only</td>
+                    <td>Per-queue ordering (single consumer)</td>
+                </tr>
+                <tr>
+                    <td>Routing flexibility</td>
+                    <td>Topic + partition key (simple)</td>
+                    <td>Exchanges: direct, topic, fanout, headers (rich)</td>
+                </tr>
+                <tr>
+                    <td>Retry / DLQ</td>
+                    <td>Manual — retry topics + DLT pattern</td>
+                    <td><span class="check-icon">●</span> Built-in dead-letter exchanges, TTL, priority queues</td>
+                </tr>
+                <tr>
+                    <td>Ops complexity</td>
+                    <td>Higher — ZooKeeper/KRaft, partitions, ISR tuning</td>
+                    <td>Lower — single-node friendly, familiar queue semantics</td>
+                </tr>
+                <tr>
+                    <td>Best for</td>
+                    <td>Event streaming, analytics fan-out, CDC, audit logs</td>
+                    <td>Task queues, RPC-style work distribution, job processing</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>When to Pick Which — Interview Decision Tree</h3>
+        <p>Use this quick mental checklist on the whiteboard:</p>
+        <ul>
+            <li><strong>Choose Kafka</strong> when multiple teams need the same events, you need replay, throughput is high, or events are facts worth retaining (order lifecycle, clickstream, CDC).</li>
+            <li><strong>Choose RabbitMQ</strong> when you need task distribution with built-in retries, complex routing (route by header/priority), low-latency RPC-style request/worker patterns, or your volume fits comfortably on one cluster node.</li>
+            <li><strong>Use both</strong> in polyglot architectures — Kafka as the durable event backbone, RabbitMQ (or SQS) for per-service task queues that need instant retry/DLQ without custom plumbing.</li>
+        </ul>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Sound Bite</div>
+            <p>"RabbitMQ excels at <strong>getting work done once and moving on</strong>. Kafka excels at <strong>recording what happened and letting anyone catch up later</strong>. For our food delivery pipeline, Kafka fits because dispatch, billing, analytics, and support all need the same order events — and support might replay yesterday's stream. For sending a one-off email, I'd reach for RabbitMQ or SQS instead."</p>
+        </div>
+
+        <!-- Section 8: Interview Essentials -->
+        <h2 id="interview-essentials"><span class="section-number">08</span>Interview Essentials</h2>
 
         <p>
             These are the topics that separate "I've heard of Kafka" from "I've operated it in production." Work through each with a concrete example from your motivating scenario.
@@ -1986,8 +2234,8 @@ kafka-console-consumer.sh --topic order-events \
             <p>Volunteer the <strong>exactly-once</strong> story: idempotent producer + transactional writes + read-process-write in a single transaction. It's expensive and not always worth it — but knowing when to reach for it (financial ledger events) vs. at-least-once + idempotent consumers (order notifications) shows production maturity.</p>
         </div>
 
-        <!-- Section 7: Level Expectations -->
-        <h2 id="levels"><span class="section-number">07</span>Level Expectations</h2>
+        <!-- Section 9: Level Expectations -->
+        <h2 id="levels"><span class="section-number">09</span>Level Expectations</h2>
 
         <p>
             Kafka questions scale from "draw the architecture" to "design a multi-region disaster recovery strategy." Here's what interviewers typically expect at each level.
@@ -2003,7 +2251,7 @@ kafka-console-consumer.sh --topic order-events \
             <div class="level-card senior">
                 <div class="level-label">Senior (E5)</div>
                 <h4>Own the Trade-offs</h4>
-                <p>Discuss acks, ISR, hot partitions, consumer lag, and rebalancing. Choose partition keys with justification. Design retry/DLT strategy. Mention monitoring (lag, under-replicated partitions).</p>
+                <p>Discuss acks, ISR, hot partitions, consumer lag, and rebalancing. Choose partition keys with justification. Run back-of-envelope math for storage and consumer sizing. Design retry/DLT strategy. Mention monitoring (lag, under-replicated partitions).</p>
                 <span class="level-focus">50% Design · 50% Depth</span>
             </div>
             <div class="level-card staff">
@@ -2014,8 +2262,8 @@ kafka-console-consumer.sh --topic order-events \
             </div>
         </div>
 
-        <!-- Section 8: Summary -->
-        <h2 id="summary"><span class="section-number">08</span>Summary</h2>
+        <!-- Section 10: Summary -->
+        <h2 id="summary"><span class="section-number">10</span>Summary</h2>
 
         <p>
             Kafka is a distributed commit log dressed up as an event streaming platform. It wins when you need <strong>high throughput, durable retention, and multiple independent consumers</strong> over the same event stream — food delivery pipelines, stock tickers, ticket drops, CDC, and analytics fan-out all fit that mold.
@@ -2055,6 +2303,10 @@ kafka-console-consumer.sh --topic order-events \
                 <tr>
                     <td>acks=all</td>
                     <td>Producer waits for ISR — production durability default</td>
+                </tr>
+                <tr>
+                    <td>Kafka vs RabbitMQ</td>
+                    <td>Kafka = durable stream + replay; RabbitMQ = task queue + routing</td>
                 </tr>
             </tbody>
         </table>
