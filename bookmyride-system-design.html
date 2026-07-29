@@ -1,0 +1,1930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Designing BookMyRide at Scale — System Design Deep Dive | Ajay Kotnala</title>
+    <meta name="description" content="System design deep dive for BookMyRide — fare quotes, driver matching, Redis geospatial indexing, distributed locks, peak-demand queues, and scaling on-demand ride hailing. By Ajay Kotnala.">
+    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+        /* ===== Apple Design Tokens (matching index.html) ===== */
+        :root {
+            /* Color System */
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-pearl: #fafafc;
+            --color-on-primary: #ffffff;
+
+            /* BookMyRide brand accents */
+            --ride-green: #0ba360;
+            --ride-teal: #3cba92;
+            --ride-gradient: linear-gradient(135deg, #0ba360, #3cba92);
+
+            /* Typography */
+            --font-headline: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-body: "Lora", Georgia, "Times New Roman", serif;
+            --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+
+            /* Border Radii */
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            /* Shadows */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06);
+
+            /* Article */
+            --article-width: 680px;
+        }
+
+        /* ===== Reset ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* ===== 1. Global Navigation Bar (Apple Thin Black Bar) ===== */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            font-family: var(--font-ui);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .global-nav-logo .logo-icon {
+            font-size: 16px;
+            color: var(--color-primary-on-dark);
+        }
+
+        .global-nav-links {
+            display: flex;
+            list-style: none;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .global-nav-links a {
+            color: #cccccc;
+            text-decoration: none;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            letter-spacing: -0.12px;
+            transition: color 0.2s ease;
+        }
+
+        .global-nav-links a:hover {
+            color: #ffffff;
+        }
+
+        .global-nav-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .global-nav-actions a {
+            color: #cccccc;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .global-nav-actions a:hover {
+            color: #ffffff;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ===== 2. Sub Navigation Bar (Frosted Sticky) ===== */
+        .sub-nav-frosted {
+            position: sticky;
+            top: 44px;
+            left: 0;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 999;
+            border-bottom: 1px solid var(--color-divider-soft);
+        }
+
+        .sub-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .sub-nav-title {
+            font-family: var(--font-headline);
+            font-size: 21px;
+            font-weight: 600;
+            color: var(--color-ink);
+            text-decoration: none;
+            letter-spacing: 0.231px;
+        }
+
+        .sub-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sub-nav-link {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink);
+            text-decoration: none;
+            opacity: 0.8;
+            transition: color 0.2s ease, opacity 0.2s ease;
+        }
+
+        .sub-nav-link:hover {
+            color: var(--color-primary);
+            opacity: 1;
+        }
+
+        .sub-nav-button {
+            background: var(--color-primary);
+            color: var(--color-on-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            border-radius: var(--rounded-pill);
+            text-decoration: none;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        .sub-nav-button:hover {
+            background: var(--color-primary-focus);
+        }
+
+        .sub-nav-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== Scroll Progress Bar ===== */
+        .progress-bar {
+            position: fixed;
+            top: 44px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--ride-gradient);
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        /* ===== Article Hero ===== */
+        .article-hero {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(96px + 4rem) 2rem 4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .article-hero-inner {
+            max-width: var(--article-width);
+            width: 100%;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .article-category {
+            display: inline-block;
+            padding: 4px 14px;
+            background: var(--ride-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .article-date {
+            color: var(--color-body-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .article-read-time {
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 13px;
+        }
+
+        .article-read-time::before {
+            content: '·';
+            margin-right: 0.5rem;
+            color: var(--color-body-muted);
+        }
+
+        .article-hero h1 {
+            font-family: var(--font-headline);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+        }
+
+        .article-hero h1 .gradient-text {
+            background: var(--ride-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .article-hero-desc {
+            font-family: var(--font-body);
+            font-size: 20px;
+            color: var(--color-body-muted);
+            line-height: 1.7;
+            max-width: 600px;
+        }
+
+        .article-hero-desc em {
+            font-style: italic;
+            color: var(--color-ink-muted-80);
+        }
+
+        /* ===== Author Bar (Medium-style) ===== */
+        .author-bar {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--color-divider-soft);
+            margin-bottom: 2.5rem;
+        }
+
+        .author-bar-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-bar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .author-bar-name {
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-ink);
+        }
+
+        .author-bar-meta {
+            font-family: var(--font-ui);
+            font-size: 13px;
+            color: var(--color-body-muted);
+        }
+
+        /* ===== Table of Contents ===== */
+        .toc-wrapper {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .toc {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem 2.5rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--ride-gradient);
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toc h3 {
+            font-size: 12px;
+            margin-bottom: 1.2rem;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            padding: 0.35rem 0;
+        }
+
+        .toc li a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 15px;
+            transition: color 0.2s ease, padding-left 0.2s ease;
+            display: inline-block;
+        }
+
+        .toc li a::before {
+            content: counter(toc-counter, decimal-leading-zero) '.';
+            color: var(--ride-green);
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-right: 0.8rem;
+            font-size: 13px;
+        }
+
+        .toc li a:hover {
+            color: var(--color-primary);
+            padding-left: 4px;
+        }
+
+        /* ===== Article Body (Medium-friendly) ===== */
+        .article-body {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .article-body h2 {
+            font-family: var(--font-headline);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-top: 3.5rem;
+            margin-bottom: 1.2rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .article-body h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .article-body h2 .section-number {
+            color: var(--ride-green);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .article-body h3 {
+            font-family: var(--font-headline);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-top: 2.5rem;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .article-body p {
+            font-family: var(--font-body);
+            font-size: 19px;
+            line-height: 1.85;
+            color: var(--color-ink-muted-80);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.003em;
+        }
+
+        .article-body ul, .article-body ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .article-body li {
+            font-family: var(--font-body);
+            color: var(--color-ink-muted-80);
+            margin-bottom: 0.6rem;
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .article-body strong {
+            color: var(--color-ink);
+            font-weight: 600;
+        }
+
+        .article-body em {
+            color: var(--color-ink-muted-80);
+            font-style: italic;
+        }
+
+        .article-body code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--color-canvas-parchment);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--ride-green);
+        }
+
+        /* ===== Callout Boxes ===== */
+        .callout {
+            background: var(--color-canvas-parchment);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 0 var(--rounded-sm) var(--rounded-sm) 0;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .callout.callout-warning {
+            border-left-color: var(--ride-teal);
+            background: #f0faf8;
+        }
+
+        .callout.callout-insight {
+            border-left-color: var(--ride-green);
+            background: #f0faf5;
+        }
+
+        .callout .callout-label {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.6rem;
+            color: var(--color-primary);
+        }
+
+        .callout.callout-warning .callout-label {
+            color: var(--ride-teal);
+        }
+
+        .callout.callout-insight .callout-label {
+            color: var(--ride-green);
+        }
+
+        .callout p {
+            margin-bottom: 0;
+            font-size: 16px !important;
+            line-height: 1.7 !important;
+        }
+
+        /* ===== Code Blocks (GitHub Light Theme) ===== */
+        .code-block {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-hairline);
+            border-radius: var(--rounded-sm);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0 2rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--color-hairline);
+            color: var(--color-body-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 0 var(--rounded-sm) 0 var(--rounded-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--color-ink);
+            line-height: 1.7;
+            white-space: pre;
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .code-block .keyword { color: #cf222e; }
+        .code-block .string { color: #0a3069; }
+        .code-block .comment { color: #6e7781; font-style: italic; }
+        .code-block .type { color: #953800; }
+        .code-block .number { color: #0550ae; }
+
+        /* ===== Entity Cards ===== */
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .entity-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 1.8rem;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .entity-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .entity-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .entity-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .entity-card p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ===== API Endpoint Cards ===== */
+        .api-endpoint {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .api-endpoint:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .api-method-url {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .api-method {
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .api-method.post {
+            background: #f0faf5;
+            color: var(--ride-green);
+        }
+
+        .api-method.patch {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .api-method.get {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .api-url {
+            font-family: var(--font-mono);
+            color: var(--color-ink);
+            font-size: 15px;
+        }
+
+        .api-desc {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 15px !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        /* ===== Excalidraw-Style SVG Architecture Diagrams ===== */
+        .diagram-container {
+            margin: 3rem -2rem;
+            padding: 2rem;
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            overflow-x: auto;
+        }
+
+        .diagram-title {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-body-muted);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .diagram-placeholder {
+            background: var(--color-canvas);
+            border: 2px dashed var(--ride-teal);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+            position: relative;
+        }
+
+        .diagram-placeholder .placeholder-badge {
+            display: inline-block;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--ride-green);
+            background: #f0faf5;
+            padding: 3px 10px;
+            border-radius: var(--rounded-pill);
+            margin-bottom: 0.8rem;
+        }
+
+        .diagram-placeholder h4 {
+            font-family: var(--font-ui);
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--color-ink);
+            margin-bottom: 0.6rem;
+        }
+
+        .diagram-placeholder p,
+        .diagram-placeholder li {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            line-height: 1.65 !important;
+            color: var(--color-ink-muted-80) !important;
+            margin-bottom: 0.4rem !important;
+        }
+
+        .diagram-placeholder ul {
+            margin: 0.5rem 0 0 1.2rem;
+            padding: 0;
+        }
+
+        .diagram-caption {
+            text-align: center;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            margin-top: 1rem;
+            font-style: italic;
+        }
+
+        .diagram-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== Comparison Table ===== */
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 2rem 0;
+            border-radius: var(--rounded-md);
+            overflow: hidden;
+            border: 1px solid var(--color-divider-soft);
+            font-family: var(--font-ui);
+        }
+
+        .comparison-table th {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            background: var(--color-canvas);
+            color: var(--color-ink-muted-80);
+            font-size: 15px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--color-divider-soft);
+            line-height: 1.5;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--color-canvas-parchment);
+        }
+
+        .check-icon { color: var(--color-primary); font-weight: 700; }
+        .cross-icon { color: var(--color-body-muted); font-weight: 700; }
+
+        /* ===== Scale Numbers ===== */
+        .scale-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .scale-stat {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 1.2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition: box-shadow 0.3s ease, transform 0.3s ease;
+        }
+
+        .scale-stat:hover {
+            box-shadow: var(--shadow-card);
+            transform: translateY(-2px);
+        }
+
+        .scale-stat::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--ride-gradient);
+        }
+
+        .scale-stat .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            background: var(--ride-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-headline);
+        }
+
+        .scale-stat .stat-desc {
+            color: var(--color-body-muted);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ===== Deep Dive Accordion ===== */
+        .deep-dive {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            margin: 1.5rem 0;
+            overflow: hidden;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .deep-dive:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .deep-dive-header {
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+
+        .deep-dive-header:hover {
+            background: var(--color-canvas-parchment);
+        }
+
+        .deep-dive-header h4 {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--color-ink);
+        }
+
+        .deep-dive-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-canvas-parchment);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            transition: transform 0.3s ease, background 0.3s ease;
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        .deep-dive.open .deep-dive-toggle {
+            transform: rotate(45deg);
+            background: #f0faf5;
+            color: var(--ride-green);
+        }
+
+        .deep-dive-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .deep-dive.open .deep-dive-content {
+            max-height: 3000px;
+        }
+
+        .deep-dive-content-inner {
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .deep-dive-content-inner p,
+        .deep-dive-content-inner li {
+            font-size: 16px !important;
+        }
+
+        /* ===== Level Expectation Cards ===== */
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .level-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .level-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .level-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .level-card.mid::before { background: var(--color-primary); }
+        .level-card.senior::before { background: var(--ride-teal); }
+        .level-card.staff::before { background: var(--ride-green); }
+
+        .level-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .level-card.mid .level-label { color: var(--color-primary); }
+        .level-card.senior .level-label { color: var(--ride-teal); }
+        .level-card.staff .level-label { color: var(--ride-green); }
+
+        .level-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .level-card p {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .level-focus {
+            display: inline-block;
+            margin-top: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .level-card.mid .level-focus { background: #eef6ff; color: var(--color-primary); }
+        .level-card.senior .level-focus { background: #fef3ef; color: var(--ride-teal); }
+        .level-card.staff .level-focus { background: #f0faf5; color: var(--ride-green); }
+
+        /* ===== Author Footer Card ===== */
+        .article-footer {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+        }
+
+        .author-card {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-canvas);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            flex-shrink: 0;
+        }
+
+        .author-info h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: var(--color-ink);
+        }
+
+        .author-info .author-role {
+            color: var(--color-primary);
+            font-size: 14px;
+            font-family: var(--font-ui);
+            margin-bottom: 0.6rem;
+        }
+
+        .author-info p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-weight: 500;
+            font-size: 15px;
+            transition: gap 0.2s ease;
+        }
+
+        .back-link:hover {
+            gap: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* ===== Global Footer ===== */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .footer-container {
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .social-links a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        .fine-print {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink-muted-48);
+            letter-spacing: -0.12px;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 833px) {
+            .global-nav-links { display: none; }
+            .sub-nav-container { padding: 0 16px; }
+            .article-hero { padding: calc(96px + 2rem) 1.5rem 3rem; }
+            .article-body { padding: 0 1.5rem 4rem; }
+            .toc-wrapper { padding: 0 1.5rem; }
+            .entity-grid { grid-template-columns: 1fr; }
+            .scale-stats { grid-template-columns: 1fr 1fr; }
+            .level-grid { grid-template-columns: 1fr; }
+            .author-card { flex-direction: column; text-align: center; }
+            .diagram-container { margin: 2rem -1rem; padding: 1.5rem 1rem; }
+            .comparison-table { font-size: 14px; }
+            .comparison-table th, .comparison-table td { padding: 8px 10px; }
+            .author-bar { padding: 0 1.5rem; }
+        }
+
+        @media (max-width: 480px) {
+            .scale-stats { grid-template-columns: 1fr; }
+            .footer-bottom { flex-direction: column; align-items: flex-start; }
+        }
+
+        /* ===== Animations ===== */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1), transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .reveal-element.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="progress-bar" id="progressBar"></div>
+
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="index.html" class="global-nav-logo">
+                <span class="logo-icon">[A]</span> Ajay Kotnala
+            </a>
+            <ul class="global-nav-links">
+                <li><a href="index.html#about">About</a></li>
+                <li><a href="index.html#skills">Skills</a></li>
+                <li><a href="index.html#experience">Experience</a></li>
+                <li><a href="index.html#projects">Projects</a></li>
+                <li><a href="index.html#contact">Contact</a></li>
+            </ul>
+            <div class="global-nav-actions">
+                <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/></svg>
+                </a>
+                <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" aria-label="LinkedIn">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z"/></svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <nav class="sub-nav-frosted">
+        <div class="sub-nav-container">
+            <a href="#" class="sub-nav-title">System Design</a>
+            <div class="sub-nav-right">
+                <a href="index.html" class="sub-nav-link">Portfolio</a>
+                <a href="index.html#contact" class="sub-nav-button">Get in Touch</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="article-hero">
+        <div class="article-hero-inner reveal-element active">
+            <div class="article-meta">
+                <span class="article-category">System Design</span>
+                <span class="article-date">July 2026</span>
+                <span class="article-read-time">22 min read</span>
+            </div>
+            <h1>Designing <span class="gradient-text">BookMyRide</span> at Scale:<br>A System Design Deep Dive</h1>
+            <p class="article-hero-desc">
+                You leave the venue at 2am. Surge pricing is active, three friends are splitting the fare, and every rider in a six-block radius is competing for the same handful of drivers. <em>That's</em> when fare quotes, geospatial indexes, and driver locks stop being interview trivia and start being the product.
+            </p>
+        </div>
+    </section>
+
+    <div class="author-bar reveal-element active">
+        <img src="ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar">
+        <div class="author-bar-info">
+            <div class="author-bar-name">Ajay Kotnala</div>
+            <div class="author-bar-meta">Senior Solution Architect · July 2026 · 22 min read</div>
+        </div>
+    </div>
+
+    <div class="toc-wrapper">
+        <div class="toc reveal-element">
+            <h3>In This Article</h3>
+            <ol>
+                <li><a href="#understanding">Understanding the Problem</a></li>
+                <li><a href="#visual-guide">Visual Diagram Guide (Excalidraw)</a></li>
+                <li><a href="#requirements">Defining Requirements</a></li>
+                <li><a href="#entities">Core Entities &amp; Data Model</a></li>
+                <li><a href="#api">The API Surface</a></li>
+                <li><a href="#hld">High-Level Architecture</a></li>
+                <li><a href="#deep-dive-location">Deep Dive: Location &amp; Proximity</a></li>
+                <li><a href="#deep-dive-adaptive">Deep Dive: Adaptive Pings</a></li>
+                <li><a href="#deep-dive-lock">Deep Dive: Driver Locking</a></li>
+                <li><a href="#deep-dive-queue">Deep Dive: Peak Demand</a></li>
+                <li><a href="#deep-dive-timeout">Deep Dive: Driver Timeout</a></li>
+                <li><a href="#deep-dive-scale">Deep Dive: Geo Scaling</a></li>
+                <li><a href="#failure-modes">Failure Modes &amp; Mitigations</a></li>
+                <li><a href="#final">Final Architecture &amp; Interview Bar</a></li>
+            </ol>
+        </div>
+    </div>
+    <article class="article-body">
+
+        <h2 id="understanding"><span class="section-number">01</span>Understanding the Problem</h2>
+        <p>
+            BookMyRide is the kind of product that looks trivial on a napkin — pin a pickup, pin a drop-off, wait for a car — and then quietly becomes one of the hardest distributed systems problems you can draw in an interview. You are coordinating <strong>two moving clients</strong>, a price that must stay honest, and a matching engine that cannot double-book a driver when a stadium lets out and fifty thousand people tap "Request ride" at once.
+        </p>
+        <p>
+            I like this question because it forces the same muscle as real ride-hailing engineering: geospatial data at insane write rates, human-in-the-loop workflows with timeouts, and consistency guarantees that actually matter. If you assign one driver to two rides, someone does not get picked up. If matching drags past a minute, the rider opens a competitor app. The bar is unforgiving.
+        </p>
+        <p>
+            In this walkthrough we will stay above the product line on purpose — fare quote, request, match, accept — and treat ratings, scheduled rides, and vehicle tiers as explicit "below the line" scope. That discipline is what keeps a 45-minute whiteboard session shippable.
+        </p>
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>Confirm the <strong>top three functional requirements</strong> with your interviewer before you draw boxes. Offer a crisp "below the line" list (ratings, GDPR, ride categories) so they can promote or demote items without you guessing.</p>
+        </div>
+
+        <h2 id="visual-guide"><span class="section-number">02</span>Visual Diagram Guide (Excalidraw)</h2>
+        <p>
+            The inline sketches below give you the shape of the system. If you are preparing a whiteboard or an Excalidraw deck, these eight diagrams complement them — each targets a moment where interviewers lean in.
+        </p>
+        <ol>
+            <li><strong>POST /rides end-to-end sequence</strong> — Rider app through gateway, ride row creation, enqueue to matching, push to driver, PATCH accept. <em>Type:</em> sequence diagram. <em>Place:</em> after the API section.</li>
+            <li><strong>Quad-tree / geohash explainer</strong> — How 2D space subdivides and why B-tree lat/long indexes fail for radius search. <em>Type:</em> spatial partition comparison. <em>Place:</em> location deep dive.</li>
+            <li><strong>Adaptive ping interval state machine</strong> — idle, cruising, near-pickup, on-trip with 30s / 5s / 1s intervals. <em>Type:</em> state machine. <em>Place:</em> adaptive location section.</li>
+            <li><strong>Distributed lock lifecycle</strong> — Acquire → notify → accept OR TTL expire → next driver. <em>Type:</em> timeline. <em>Place:</em> driver lock section (pairs with Diagram 3).</li>
+            <li><strong>Geo-partitioned Kafka topics</strong> — Map grid with topic per cell, consumers pinned to region. <em>Type:</em> architecture. <em>Place:</em> peak demand section.</li>
+            <li><strong>FIFO vs priority queue trade-off</strong> — One slow match blocking the head vs VIP/long-wait lane. <em>Type:</em> comparison chart. <em>Place:</em> queue deep dive.</li>
+            <li><strong>Temporal workflow for driver timeout</strong> — offerDriver(D1), waitSignal(10s), offerDriver(D2)... <em>Type:</em> workflow state machine. <em>Place:</em> timeout deep dive.</li>
+            <li><strong>Geo-sharded deployment</strong> — US-East / US-West stacks; cross-shard scatter-gather only at cell boundaries. <em>Type:</em> architecture. <em>Place:</em> scaling section.</li>
+        </ol>
+
+        <h2 id="requirements"><span class="section-number">03</span>Defining Requirements</h2>
+        <h3>Functional — above the line</h3>
+        <ul>
+            <li><strong>Fare estimate</strong> from pickup and destination</li>
+            <li><strong>Request a ride</strong> from an accepted fare quote</li>
+            <li><strong>Match</strong> the rider with a nearby, available driver</li>
+            <li><strong>Driver accept/decline</strong> and navigate to pickup and drop-off</li>
+        </ul>
+        <h3>Below the line</h3>
+        <ul>
+            <li>Post-trip ratings, payment capture, and fare splitting</li>
+            <li>Scheduled rides and multi-category fleets (XL, Comfort, etc.)</li>
+            <li>GDPR-style privacy, full observability stack, multi-region DR</li>
+        </ul>
+        <h3>Non-functional — core</h3>
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat"><div class="stat-value">&lt;1m</div><div class="stat-desc">Match or fail</div></div>
+            <div class="scale-stat"><div class="stat-value">1:1</div><div class="stat-desc">Driver ↔ active offer</div></div>
+            <div class="scale-stat"><div class="stat-value">100k</div><div class="stat-desc">Surge from one venue</div></div>
+            <div class="scale-stat"><div class="stat-value">~2M/s</div><div class="stat-desc">Location writes (fleet scale)</div></div>
+        </div>
+        <table class="comparison-table reveal-element">
+            <thead><tr><th>Requirement</th><th>Priority</th><th>Why it matters</th></tr></thead>
+            <tbody>
+                <tr><td>Sub-minute matching</td><td><span class="check-icon">●</span> Core</td><td>Riders bail when the spinner never ends</td></tr>
+                <tr><td>No double-assign driver</td><td><span class="check-icon">●</span> Core</td><td>Strong consistency on driver availability</td></tr>
+                <tr><td>Peak throughput</td><td><span class="check-icon">●</span> Core</td><td>Events create localized tsunamis</td></tr>
+                <tr><td>Payment &amp; ratings</td><td><span class="cross-icon">○</span> Below line</td><td>Real, but not today's diagram budget</td></tr>
+            </tbody>
+        </table>
+
+        <h2 id="entities"><span class="section-number">04</span>Core Entities &amp; Data Model</h2>
+        <p>Five nouns carry the whole design. You do not need every column on the whiteboard — you need shared vocabulary.</p>
+        <div class="entity-grid reveal-element">
+            <div class="entity-card"><div class="entity-icon">🧳</div><h4>Rider</h4><p>Requests rides, payment profile, identity from auth — never trust a client-supplied rider id.</p></div>
+            <div class="entity-card"><div class="entity-icon">🚗</div><h4>Driver</h4><p>Vehicle metadata, availability state, linked to live location streams.</p></div>
+            <div class="entity-card"><div class="entity-icon">💵</div><h4>Fare</h4><p>Immutable quote: pickup, destination, estimated price and ETA. Created before commit.</p></div>
+            <div class="entity-card"><div class="entity-icon">🛣️</div><h4>Ride</h4><p>Lifecycle from <code>requested</code> through matched, accepted, in-progress, completed.</p></div>
+            <div class="entity-card"><div class="entity-icon">📍</div><h4>Location</h4><p>Latest driver coordinates plus server-side timestamp of last ping.</p></div>
+        </div>
+        <p>
+            Storage split follows access pattern: <strong>PostgreSQL</strong> holds Fare and Ride rows (source of truth for billing and lifecycle). <strong>Redis GEO</strong> holds ephemeral driver positions optimized for radius search. Never mix them — querying Postgres for "drivers within 2km" at ping frequency is how interviews go off the rails.
+        </p>
+
+        <h2 id="api"><span class="section-number">05</span>The API Surface</h2>
+        <p>One endpoint per user-visible capability. Matching stays internal — triggered by ride creation.</p>
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url"><span class="api-method post">POST</span><span class="api-url">/fare</span></div>
+            <p class="api-desc">Create a fare estimate from pickup and destination. Persists a Fare row the rider can accept later.</p>
+        </div>
+        <div class="code-block"><span class="code-block-label">Request Body</span><code>{
+  <span class="string">"pickupLocation"</span>: { <span class="string">"lat"</span>: <span class="number">37.7749</span>, <span class="string">"lng"</span>: <span class="number">-122.4194</span> },
+  <span class="string">"destination"</span>: { <span class="string">"lat"</span>: <span class="number">37.7849</span>, <span class="string">"lng"</span>: <span class="number">-122.4094</span> }
+}</code></div>
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url"><span class="api-method post">POST</span><span class="api-url">/rides</span></div>
+            <p class="api-desc">Confirm ride request. Body carries only <code>fareId</code>; server loads price and coordinates from DB.</p>
+        </div>
+        <div class="code-block"><span class="code-block-label">Request Body</span><code>{ <span class="string">"fareId"</span>: <span class="string">"fare_8x2k9m"</span> }</code></div>
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url"><span class="api-method post">POST</span><span class="api-url">/drivers/location</span></div>
+            <p class="api-desc">Driver heartbeat. <code>driverId</code> comes from JWT/session — never from the JSON body.</p>
+        </div>
+        <div class="code-block"><span class="code-block-label">Request Body</span><code>{ <span class="string">"lat"</span>: <span class="number">37.7749</span>, <span class="string">"long"</span>: <span class="number">-122.4194</span> }</code></div>
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url"><span class="api-method patch">PATCH</span><span class="api-url">/rides/:rideId</span></div>
+            <p class="api-desc">Driver accepts or declines. Response includes pickup and destination for in-app navigation.</p>
+        </div>
+        <div class="code-block"><span class="code-block-label">Request Body</span><code>{ <span class="string">"decision"</span>: <span class="string">"accept"</span> | <span class="string">"deny"</span> }</code></div>
+        <div class="callout callout-warning">
+            <div class="callout-label">🔒 Security</div>
+            <p>Never trust the client for <strong>userId</strong>, <strong>fare amounts</strong>, or <strong>timestamps</strong>. Identity belongs in the token; money belongs in the Fare row; clocks belong on the server.</p>
+        </div>
+        
+        <div class="diagram-placeholder reveal-element">
+            <span class="placeholder-badge">Excalidraw · Sequence diagram</span>
+            <h4>POST /rides End-to-End Sequence</h4>
+            <p><strong>What to draw:</strong> The full path from rider tap to driver notification.</p>
+            <ul>
+                <li>Swimlanes: Rider app, Gateway, Ride Service, Queue, Matching, Redis, Notification, Driver app</li><li>Show fareId validation, Ride row insert, async enqueue, GEOSEARCH, lock acquire, FCM push, PATCH accept</li>
+                <li><strong>Placement:</strong> Immediately after the API section, before HLD step 2.</li>
+            </ul>
+        </div>
+
+        <h2 id="hld"><span class="section-number">06</span>High-Level Architecture (Build-Up)</h2>
+        <p>We grow the design in the same order riders experience the app — quote, commit, match, accept — so the interviewer always knows why the next box appeared.</p>
+        <h3>Step 1 — Fare estimation</h3>
+        <p>Rider Client → API Gateway → Ride Service → third-party Maps API → PostgreSQL (Fare). Gateway handles auth and rate limits; Ride Service calls routing for distance/time, applies pricing rules (base + per-mile + surge multiplier), inserts Fare, returns the entity.</p>
+                <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 2 — Fare Estimate Sequence</div>
+            <svg viewBox="0 0 780 320" xmlns="http://www.w3.org/2000/svg" style="max-width:780px;">
+                                <defs>
+                    <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0"/>
+                    </pattern>
+                    <filter id="roughen" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="2" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <filter id="roughenLight" x="-1%" y="-1%" width="102%" height="102%">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="5" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <marker id="exArrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowGreen" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0ba360" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowBlue" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                </defs>
+                <rect width="780" height="320" fill="#fefefe" rx="12"/>
+                <rect width="780" height="320" fill="url(#dotGrid)" rx="12"/>
+                <text x="40" y="55" fill="#333" font-family="'Segoe Print', cursive" font-size="12" font-weight="700">Rider</text>
+                <text x="40" y="115" fill="#0066cc" font-family="'Segoe Print', cursive" font-size="12" font-weight="700">Gateway</text>
+                <text x="40" y="175" fill="#0ba360" font-family="'Segoe Print', cursive" font-size="12" font-weight="700">Ride Svc</text>
+                <text x="40" y="235" fill="#86868b" font-family="'Segoe Print', cursive" font-size="12" font-weight="700">Maps</text>
+                <text x="40" y="285" fill="#333" font-family="'Segoe Print', cursive" font-size="12" font-weight="700">DB</text>
+                <line x1="130" y1="40" x2="130" y2="300" stroke="#e0e0e0"/>
+                <path d="M 150 25 L 730 25" fill="none" stroke="#ccc" marker-end="url(#exArrow)"/>
+                <text x="440" y="18" fill="#86868b" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">time →</text>
+                <rect x="160" y="48" width="130" height="22" rx="5" fill="#eef6ff" stroke="#333" filter="url(#roughen)"/>
+                <text x="225" y="63" fill="#333" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle">POST /fare</text>
+                <path d="M 225 55 L 225 108" stroke="#333" stroke-width="1.5" marker-end="url(#exArrow)"/>
+                <rect x="280" y="103" width="120" height="22" rx="5" fill="#e3f2fd" stroke="#0066cc" filter="url(#roughen)"/>
+                <text x="340" y="118" fill="#0066cc" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle">forward + auth</text>
+                <path d="M 340 115 L 340 168" stroke="#0066cc" stroke-width="1.5" marker-end="url(#exArrowBlue)"/>
+                <rect x="400" y="163" width="140" height="22" rx="5" fill="#e8f5e9" stroke="#0ba360" filter="url(#roughen)"/>
+                <text x="470" y="178" fill="#0ba360" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle">route + pricing</text>
+                <path d="M 470 175 L 470 228" stroke="#0ba360" stroke-width="1.5" marker-end="url(#exArrowGreen)"/>
+                <rect x="520" y="223" width="100" height="22" rx="5" fill="#f5f5f7" stroke="#ccc" filter="url(#roughen)"/>
+                <text x="570" y="238" fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle">distance/ETA</text>
+                <path d="M 570 235 L 570 278" stroke="#333" stroke-width="1.5" marker-end="url(#exArrow)"/>
+                <rect x="600" y="273" width="110" height="22" rx="5" fill="#e8f5e9" stroke="#0ba360" filter="url(#roughen)"/>
+                <text x="655" y="288" fill="#0ba360" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle">INSERT Fare</text>
+                <path d="M 655 285 L 655 200 L 200 200 L 200 70" fill="none" stroke="#0ba360" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#exArrowGreen)"/>
+                <text x="420" y="195" fill="#0ba360" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle">Fare &#123;id, amount, eta&#125;</text>
+            </svg>
+            <p class="diagram-caption">Server computes price from stored route data — the client never sends a fare amount.</p>
+        </div>
+        <h3>Step 2 — Ride request</h3>
+        <p>Add a Ride table. <code>POST /rides</code> validates the fareId is fresh (typically 5–10 minute TTL), creates a row in <code>requested</code> state linked to the Fare, then kicks off matching — synchronously in a small interview, asynchronously via queue in production.</p>
+        <h3>Step 3 — Matching</h3>
+        <p>Introduce Driver Client, Location Service, and Ride Matching Service. Drivers stream location; matching queries nearby availability, ranks by ETA and rating, and locks one candidate at a time.</p>
+        <h3>Step 4 — Accept flow &amp; notifications</h3>
+        <p>Notification Service pushes via APNS/FCM. Driver PATCH updates ride to <code>accepted</code> and returns coordinates for client-side navigation. Rider gets a real-time update via WebSocket or push — whichever your interviewer prefers.</p>
+                <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 1 — BookMyRide Production Architecture</div>
+            <svg viewBox="0 0 820 560" xmlns="http://www.w3.org/2000/svg" style="max-width:820px;">
+                                <defs>
+                    <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0"/>
+                    </pattern>
+                    <filter id="roughen" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="2" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <filter id="roughenLight" x="-1%" y="-1%" width="102%" height="102%">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="5" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <marker id="exArrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowGreen" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0ba360" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowBlue" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                </defs>
+                <rect width="820" height="560" fill="#fefefe" rx="12"/>
+                <rect width="820" height="560" fill="url(#dotGrid)" rx="12"/>
+                <rect x="25" y="80" width="95" height="130" rx="14" fill="#eef6ff" stroke="#333" stroke-width="2" filter="url(#roughen)"/>
+                <text x="72" y="145" fill="#333" font-family="'Segoe Print', cursive" font-size="20" text-anchor="middle">🧳</text>
+                <text x="72" y="168" fill="#333" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle">Rider</text>
+                <rect x="25" y="340" width="95" height="130" rx="14" fill="#e8f5e9" stroke="#0ba360" stroke-width="2" filter="url(#roughen)"/>
+                <text x="72" y="405" fill="#0ba360" font-family="'Segoe Print', cursive" font-size="20" text-anchor="middle">🚗</text>
+                <text x="72" y="428" fill="#333" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle">Driver</text>
+                <rect x="155" y="210" width="120" height="100" rx="10" fill="#e3f2fd" stroke="#0066cc" stroke-width="2" filter="url(#roughen)"/>
+                <text x="215" y="252" fill="#0066cc" font-family="'Segoe Print', cursive" font-size="13" text-anchor="middle" font-weight="600">API Gateway</text>
+                <text x="215" y="272" fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle">Auth · JWT</text>
+                <path d="M 120 145 C 135 175, 145 210, 155 235" fill="none" stroke="#333" stroke-width="2" marker-end="url(#exArrow)" filter="url(#roughenLight)"/>
+                <path d="M 120 405 C 135 340, 145 290, 155 265" fill="none" stroke="#0ba360" stroke-width="2" marker-end="url(#exArrowGreen)" filter="url(#roughenLight)"/>
+                <rect x="310" y="70" width="130" height="95" rx="10" fill="#e8f5e9" stroke="#0ba360" stroke-width="2" filter="url(#roughen)"/>
+                <text x="375" y="108" fill="#0ba360" font-family="'Segoe Print', cursive" font-size="13" text-anchor="middle" font-weight="600">Ride Service</text>
+                <text x="375" y="128" fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle">Fare · Ride state</text>
+                <rect x="310" y="195" width="130" height="95" rx="10" fill="#fff8e1" stroke="#3cba92" stroke-width="2" filter="url(#roughen)"/>
+                <text x="375" y="233" fill="#0ba360" font-family="'Segoe Print', cursive" font-size="12" text-anchor="middle" font-weight="600">Location Svc</text>
+                <text x="375" y="253" fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle">Driver pings</text>
+                <rect x="310" y="320" width="130" height="95" rx="10" fill="#f0faf5" stroke="#0ba360" stroke-width="2" filter="url(#roughen)"/>
+                <text x="375" y="358" fill="#0ba360" font-family="'Segoe Print', cursive" font-size="12" text-anchor="middle" font-weight="600">Matching</text>
+                <text x="375" y="378" fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle">Rank · Lock</text>
+                <rect x="310" y="445" width="130" height="70" rx="10" fill="#fff3e0" stroke="#3cba92" stroke-width="1.5" filter="url(#roughen)"/>
+                <text x="375" y="478" fill="#3cba92" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle">Notifications</text>
+                <text x="375" y="495" fill="#86868b" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle">APNS / FCM</text>
+                <path d="M 275 235 C 292 180, 300 130, 310 115" fill="none" stroke="#0066cc" stroke-width="1.5" marker-end="url(#exArrowBlue)" filter="url(#roughenLight)"/>
+                <path d="M 275 260 C 292 240, 300 225, 310 242" fill="none" stroke="#0ba360" stroke-width="1.5" marker-end="url(#exArrowGreen)" filter="url(#roughenLight)"/>
+                <rect x="480" y="100" width="115" height="80" rx="10" fill="#fce4ec" stroke="#333" stroke-width="1.5" filter="url(#roughen)"/>
+                <text x="537" y="135" fill="#333" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle">Maps API</text>
+                <rect x="480" y="210" width="115" height="95" rx="10" fill="#ffebee" stroke="#c62828" stroke-width="2" filter="url(#roughen)"/>
+                <text x="537" y="248" fill="#c62828" font-family="'Segoe Print', cursive" font-size="12" text-anchor="middle" font-weight="600">Redis GEO</text>
+                <text x="537" y="268" fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle">GEOADD · GEOSEARCH</text>
+                <rect x="480" y="340" width="115" height="80" rx="10" fill="#e3f2fd" stroke="#0066cc" stroke-width="1.5" filter="url(#roughen)"/>
+                <text x="537" y="375" fill="#0066cc" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle">Kafka / SQS</text>
+                <text x="537" y="392" fill="#86868b" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle">Geo partitions</text>
+                <ellipse cx="680" cy="130" rx="50" ry="16" fill="#e8f5e9" stroke="#333" stroke-width="1.8" filter="url(#roughen)"/>
+                <path d="M 630 130 L 630 175" stroke="#333" stroke-width="1.8"/>
+                <path d="M 730 130 L 730 175" stroke="#333" stroke-width="1.8"/>
+                <ellipse cx="680" cy="175" rx="50" ry="16" fill="#e8f5e9" stroke="#333" stroke-width="1.8" filter="url(#roughen)"/>
+                <rect x="630" y="130" width="100" height="45" fill="#e8f5e9" stroke="none"/>
+                <text x="680" y="158" fill="#333" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle">PostgreSQL</text>
+                <text x="680" y="172" fill="#86868b" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle">Fare · Ride</text>
+                <path d="M 440 117 C 455 117, 468 118, 478 120" fill="none" stroke="#333" stroke-width="1.5" marker-end="url(#exArrow)"/>
+                <path d="M 440 242 C 455 242, 468 242, 478 252" fill="none" stroke="#0ba360" stroke-width="1.5" marker-end="url(#exArrowGreen)"/>
+                <path d="M 440 367 C 455 367, 468 360, 478 355" fill="none" stroke="#0066cc" stroke-width="1.5" marker-end="url(#exArrowBlue)"/>
+                <path d="M 595 140 C 615 140, 635 138, 628 145" fill="none" stroke="#333" stroke-width="1.5" marker-end="url(#exArrow)"/>
+            </svg>
+            <p class="diagram-caption">After deep dives: matching reads Redis geo, ride requests buffer in geo-partitioned queues, and fare/ride state lives in PostgreSQL.</p>
+        </div>
+
+        <h2 id="deep-dive-location"><span class="section-number">07</span>Deep Dive: Driver Location &amp; Proximity</h2>
+        <p>Ten million drivers pinging every five seconds is roughly two million writes per second. Pair that with naive "compute distance to every row" and your HLD dies before the first surge pricing joke.</p>
+        
+        <div class="diagram-placeholder reveal-element">
+            <span class="placeholder-badge">Excalidraw · Comparison / spatial partition</span>
+            <h4>Geohash / Quad-Tree Spatial Index</h4>
+            <p><strong>What to draw:</strong> Why B-tree lat/long indexes fail for radius search.</p>
+            <ul>
+                <li>Left panel: bounding-box query scanning irrelevant rows</li><li>Right panel: geohash grid with neighboring cells highlighted around pickup pin</li>
+                <li><strong>Placement:</strong> Inside the location deep dive, before the Redis 'great' approach.</li>
+            </ul>
+        </div>
+        <div class="deep-dive open" id="dd-geo-bad">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-geo-bad')">
+                <h4>Bad — per-update DB writes + table scan</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content"><div class="deep-dive-content-inner">
+                <p>Write every ping to PostgreSQL or DynamoDB and, on each match, scan drivers in a bounding box. B-tree indexes on lat/long do not understand radius search; cost explodes with fleet size.</p>
+                <p>At on-demand Dynamo pricing, multi-million WRU/sec is a six-figure daily line item — fine for a horror story in an interview, not fine for a P&amp;L.</p>
+            </div></div>
+        </div>
+        <div class="deep-dive" id="dd-geo-good">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-geo-good')">
+                <h4>Good — batch writes + PostGIS / quad-tree</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content"><div class="deep-dive-content-inner">
+                <p>Aggregate pings over a short window, flush in batches, and query with PostGIS or a quad-tree index. Writes drop; searches become logarithmic in practice.</p>
+                <p>Trade-off: batched positions lag reality by the flush interval — drivers look "behind" during fast matching unless you shrink the batch aggressively.</p>
+            </div></div>
+        </div>
+        <div class="deep-dive" id="dd-geo-great">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-geo-great')">
+                <h4>Great — Redis GEOADD / GEOSEARCH + stale cleanup</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content"><div class="deep-dive-content-inner">
+                <p>Redis geohashes each driver into a sorted set; <code>GEOADD</code> overwrites the previous point so you always have the latest fix. <code>GEOSEARCH</code> pulls candidates in a radius in sub-millisecond time at high QPS.</p>
+                <p>Run a companion sorted set keyed by last-seen timestamp; a periodic sweeper evicts drivers silent for ~30s. Durability? Accept ephemeral loss — pings rebuild in seconds. Sentinel + AOF if you want belt and suspenders.</p>
+            </div></div>
+        </div>
+                <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 4 — Naive DB vs Redis Geo + Peak Queue</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width:780px;">
+                                <defs>
+                    <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0"/>
+                    </pattern>
+                    <filter id="roughen" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="2" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <filter id="roughenLight" x="-1%" y="-1%" width="102%" height="102%">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="5" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <marker id="exArrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowGreen" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0ba360" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowBlue" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12"/>
+                <rect width="780" height="400" fill="url(#dotGrid)" rx="12"/>
+                <text x="390" y="35" fill="#c62828" font-family="'Segoe Print', cursive" font-size="14" text-anchor="middle" font-weight="700">❌ Table scan on every match</text>
+                <rect x="40" y="55" width="300" height="120" rx="10" fill="#ffebee" stroke="#c62828" stroke-width="1.5" filter="url(#roughen)"/>
+                <text x="190" y="85" fill="#333" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle">2M writes/sec → DB meltdown</text>
+                <text x="190" y="105" fill="#86868b" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">O(n) distance calc per driver</text>
+                <text x="190" y="125" fill="#86868b" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">Stale rows, $200k/day Dynamo</text>
+                <text x="390" y="210" fill="#0ba360" font-family="'Segoe Print', cursive" font-size="14" text-anchor="middle" font-weight="700">✓ Redis GEO + geo-partitioned queue</text>
+                <rect x="40" y="230" width="300" height="130" rx="10" fill="#e8f5e9" stroke="#0ba360" stroke-width="2" filter="url(#roughen)"/>
+                <text x="190" y="260" fill="#0ba360" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle">GEOADD overwrites last position</text>
+                <text x="190" y="280" fill="#86868b" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">GEOSEARCH in O(log N + M)</text>
+                <text x="190" y="300" fill="#86868b" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">Companion ZSET for stale cleanup</text>
+                <rect x="420" y="55" width="320" height="305" rx="10" fill="#eef6ff" stroke="#0066cc" stroke-width="1.5" filter="url(#roughen)"/>
+                <text x="580" y="85" fill="#0066cc" font-family="'Segoe Print', cursive" font-size="12" text-anchor="middle" font-weight="600">Concert surge (100k)</text>
+                <rect x="450" y="105" width="260" height="35" rx="6" fill="#fff" stroke="#3cba92" filter="url(#roughen)"/>
+                <text x="580" y="127" fill="#333" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">queue:geo:lat-lon-cell</text>
+                <rect x="450" y="155" width="260" height="35" rx="6" fill="#fff" stroke="#3cba92" filter="url(#roughen)"/>
+                <text x="580" y="177" fill="#333" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">Matching workers scale out</text>
+                <rect x="450" y="205" width="260" height="35" rx="6" fill="#fff" stroke="#3cba92" filter="url(#roughen)"/>
+                <text x="580" y="227" fill="#333" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">Offset commit after match</text>
+                <rect x="450" y="255" width="260" height="35" rx="6" fill="#fff" stroke="#3cba92" filter="url(#roughen)"/>
+                <text x="580" y="277" fill="#333" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">Priority lane for long waits</text>
+                <text x="580" y="330" fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle">No dropped POST /rides during crash</text>
+            </svg>
+            <p class="diagram-caption">Location and demand scale on different axes — in-memory geo for reads, durable queues for ride intent.</p>
+        </div>
+
+        <h2 id="deep-dive-adaptive"><span class="section-number">08</span>Deep Dive: Adaptive Location Pings</h2>
+        <p>Not every design problem lives in the data center. The driver app can back off when stationary, tighten when speed or heading changes, and ping aggressively near an assigned pickup. That cuts bandwidth and write load without lying about position during active matching.</p>
+        
+        <div class="diagram-placeholder reveal-element">
+            <span class="placeholder-badge">Excalidraw · State machine</span>
+            <h4>Adaptive Ping Interval State Machine</h4>
+            <p><strong>What to draw:</strong> How the driver client changes heartbeat frequency based on context.</p>
+            <ul>
+                <li>States: idle (30s), cruising (15s), matched-to-pickup (5s), on-trip (3s)</li><li>Transitions labeled with sensor triggers: speed, distance-to-pickup, ride status</li>
+                <li><strong>Placement:</strong> Adaptive location deep dive section.</li>
+            </ul>
+        </div>
+        <div class="callout">
+            <div class="callout-label">Client-side matters</div>
+            <p>Interviewers reward candidates who sketch the <strong>driver client</strong> as more than a box — motion sensors, GPS accuracy tiers, and backoff policies are legitimate scalability tools.</p>
+        </div>
+
+        <h2 id="deep-dive-lock"><span class="section-number">09</span>Deep Dive: One Driver, One Offer</h2>
+        <p>Strong consistency here means: at most one outstanding ride request per driver, and one driver candidate actively pinged per ride attempt (before timeout cascade). Ticketmaster seat holds use the same mental model.</p>
+        <div class="deep-dive" id="dd-lock-bad">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-lock-bad')"><h4>Bad — in-memory lock in the matching service</h4><div class="deep-dive-toggle">+</div></div>
+            <div class="deep-dive-content"><div class="deep-dive-content-inner">
+                <p>Each instance tracks locked drivers locally. Horizontal scaling guarantees two instances can pick the same driver; crashes strand locks forever.</p>
+            </div></div>
+        </div>
+        <div class="deep-dive" id="dd-lock-db">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-lock-db')"><h4>Okay — DB status flag + cron unlock</h4><div class="deep-dive-toggle">+</div></div>
+            <div class="deep-dive-content"><div class="deep-dive-content-inner">
+                <p>Mark driver <code>outstanding_request</code> in PostgreSQL transactionally. Coordination improves, but in-process timers die on restart; cron-based expiry adds lag and ops glue.</p>
+            </div></div>
+        </div>
+        <div class="deep-dive open" id="dd-lock-redis">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-lock-redis')"><h4>Great — Redis distributed lock with 10s TTL</h4><div class="deep-dive-toggle">+</div></div>
+            <div class="deep-dive-content"><div class="deep-dive-content-inner">
+                <p><code>SET lock:{driverId} {rideId} NX EX 10</code>. Only the holder may notify that driver. Accept deletes the key; silence lets TTL free the driver automatically — no orphaned in-memory timers.</p>
+            </div></div>
+        </div>
+                <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 3 — Matching + Driver Lock Timeline</div>
+            <svg viewBox="0 0 760 360" xmlns="http://www.w3.org/2000/svg" style="max-width:760px;">
+                                <defs>
+                    <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0"/>
+                    </pattern>
+                    <filter id="roughen" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="2" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <filter id="roughenLight" x="-1%" y="-1%" width="102%" height="102%">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="5" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                    <marker id="exArrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowGreen" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0ba360" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                    <marker id="exArrowBlue" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </marker>
+                </defs>
+                <rect width="760" height="360" fill="#fefefe" rx="12"/>
+                <rect width="760" height="360" fill="url(#dotGrid)" rx="12"/>
+                <text x="25" y="70" fill="#0ba360" font-family="'Segoe Print', cursive" font-size="12" font-weight="700">Matching</text>
+                <text x="25" y="170" fill="#c62828" font-family="'Segoe Print', cursive" font-size="12" font-weight="700">Redis lock</text>
+                <text x="25" y="270" fill="#0066cc" font-family="'Segoe Print', cursive" font-size="12" font-weight="700">Driver</text>
+                <line x1="115" y1="45" x2="115" y2="330" stroke="#e0e0e0"/>
+                <path d="M 135 30 L 720 30" fill="none" stroke="#ccc" marker-end="url(#exArrow)"/>
+                <rect x="150" y="58" width="150" height="24" rx="6" fill="#e8f5e9" stroke="#0ba360" filter="url(#roughen)"/>
+                <text x="225" y="74" fill="#0ba360" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">GEOSEARCH nearby drivers</text>
+                <rect x="320" y="58" width="120" height="24" rx="6" fill="#f0faf5" stroke="#0ba360" filter="url(#roughen)"/>
+                <text x="380" y="74" fill="#333" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">Pick driver D1</text>
+                <rect x="460" y="155" width="180" height="28" rx="6" fill="#ffebee" stroke="#c62828" stroke-width="2" filter="url(#roughen)"/>
+                <text x="550" y="173" fill="#c62828" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">SET lock:D1 TTL=10s</text>
+                <rect x="460" y="255" width="140" height="24" rx="6" fill="#eef6ff" stroke="#0066cc" filter="url(#roughen)"/>
+                <text x="530" y="271" fill="#0066cc" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">Push: new ride</text>
+                <rect x="620" y="255" width="100" height="24" rx="6" fill="#e8f5e9" stroke="#0ba360" filter="url(#roughen)"/>
+                <text x="670" y="271" fill="#0ba360" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">PATCH accept</text>
+                <rect x="620" y="155" width="100" height="28" rx="6" fill="#f5f5f7" stroke="#ccc" filter="url(#roughen)"/>
+                <text x="670" y="173" fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle">DEL lock</text>
+                <rect x="150" y="300" width="200" height="30" rx="8" fill="#fff3e0" stroke="#3cba92" stroke-dasharray="4,2" filter="url(#roughen)"/>
+                <text x="250" y="320" fill="#3cba92" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle">If TTL expires → next driver D2</text>
+            </svg>
+            <p class="diagram-caption">One driver, one outstanding offer — the Redis TTL is your countdown timer without in-process timers.</p>
+        </div>
+
+        <h2 id="deep-dive-queue"><span class="section-number">10</span>Deep Dive: Peak Demand &amp; Queues</h2>
+        <p>When the arena empties, synchronous matching in the request thread will drop work long before you finish autoscaling. Persist intent first.</p>
+        
+        <div class="diagram-placeholder reveal-element">
+            <span class="placeholder-badge">Excalidraw · Architecture diagram</span>
+            <h4>Geo-Partitioned Kafka Topics</h4>
+            <p><strong>What to draw:</strong> How concert surge fans out across consumers without one hot partition.</p>
+            <ul>
+                <li>Map grid with topic per geohash cell</li><li>Matching workers pinned to metro region consuming only local partitions</li>
+                <li><strong>Placement:</strong> Peak demand queue section.</li>
+            </ul>
+        </div>
+        <div class="deep-dive" id="dd-queue-bad">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-queue-bad')"><h4>Bad — process inline, no buffer</h4><div class="deep-dive-toggle">+</div></div>
+            <div class="deep-dive-content"><div class="deep-dive-content-inner">
+                <p>Crash mid-match loses the ride. Burst traffic overwhelms matching pods before HPA adds capacity.</p>
+            </div></div>
+        </div>
+        <div class="deep-dive" id="dd-queue-good">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-queue-good')"><h4>Good — Kafka / SQS with geo-partitioned topics</h4><div class="deep-dive-toggle">+</div></div>
+            <div class="deep-dive-content"><div class="deep-dive-content-inner">
+                <p>Enqueue ride id after DB insert; workers commit offset only after a driver accepts or the candidate list exhausts. Partition by geohash cell so a concert surge fans out across consumers in that metro.</p>
+            </div></div>
+        </div>
+        <div class="deep-dive" id="dd-queue-great">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-queue-great')"><h4>Great — priority lane vs strict FIFO</h4><div class="deep-dive-toggle">+</div></div>
+            <div class="deep-dive-content"><div class="deep-dive-content-inner">
+                <p>Pure FIFO lets one pathological match block thousands behind it. A secondary priority stream (wait time, rider tier, distance to nearest driver) improves UX while keeping FIFO within a cell for fairness debates you can have with the interviewer.</p>
+            </div></div>
+        </div>
+        
+        <div class="diagram-placeholder reveal-element">
+            <span class="placeholder-badge">Excalidraw · Comparison chart</span>
+            <h4>FIFO vs Priority Queue Trade-off</h4>
+            <p><strong>What to draw:</strong> Fairness vs responsiveness when one match blocks the queue head.</p>
+            <ul>
+                <li>Side-by-side: strict FIFO with one slow match blocking 100k riders vs dual-lane with priority for long waits</li>
+                <li><strong>Placement:</strong> Queue deep dive 'great' approach.</li>
+            </ul>
+        </div>
+
+        <h2 id="deep-dive-timeout"><span class="section-number">11</span>Deep Dive: Driver Timeout &amp; Human-in-the-Loop</h2>
+        <p>Phones slide under seats. Drivers miss pushes. Something must advance the workflow when ten seconds pass with no PATCH.</p>
+        <div class="deep-dive" id="dd-timeout-delay">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-timeout-delay')"><h4>Good — delay queue per offer</h4><div class="deep-dive-toggle">+</div></div>
+            <div class="deep-dive-content"><div class="deep-dive-content-inner">
+                <p>Schedule an SQS delayed message when notifying D1. On fire, if ride still unassigned, offer D2 — and cancel stale delays on accept to avoid double assignment.</p>
+            </div></div>
+        </div>
+        <div class="deep-dive" id="dd-timeout-temporal">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-timeout-temporal')"><h4>Great — Temporal / Step Functions durable workflow</h4><div class="deep-dive-toggle">+</div></div>
+            <div class="deep-dive-content"><div class="deep-dive-content-inner">
+                <p>Model matching as a workflow: offer → wait for signal or timer → branch. State survives process restarts; Uber's Cadence DNA is literally this problem class. Trade-off: new operational surface — worth it when revenue rides on zero dropped requests.</p>
+            </div></div>
+        </div>
+        
+        <div class="diagram-placeholder reveal-element">
+            <span class="placeholder-badge">Excalidraw · Workflow / state machine</span>
+            <h4>Temporal Workflow — Driver Timeout</h4>
+            <p><strong>What to draw:</strong> Durable orchestration for offer → wait → retry without in-process timers.</p>
+            <ul>
+                <li>Activities: offerDriver(D1), waitSignal(10s), onTimeout offerDriver(D2), onAccept complete</li><li>Show workflow history surviving worker restart</li>
+                <li><strong>Placement:</strong> Driver timeout deep dive, 'great' approach.</li>
+            </ul>
+        </div>
+
+        <h2 id="deep-dive-scale"><span class="section-number">12</span>Deep Dive: Scaling Beyond One Region</h2>
+        <p>Vertical scaling is the answer you mention only to dismiss — bigger boxes, downtime to resize, hard ceiling. Horizontal scaling with <strong>geo sharding</strong> puts riders, queues, Redis, and read replicas close to demand. Scatter-gather appears only when a search radius straddles shard boundaries — rare if cells align with geohash prefixes.</p>
+        
+        <div class="diagram-placeholder reveal-element">
+            <span class="placeholder-badge">Excalidraw · Architecture diagram</span>
+            <h4>Geo-Sharded Deployment</h4>
+            <p><strong>What to draw:</strong> Regional stacks with scatter-gather only at shard boundaries.</p>
+            <ul>
+                <li>US-East and US-West stacks each with own Gateway, Redis, Queue, PostgreSQL replica</li><li>Dashed cross-shard arrow only when search radius straddles cell boundary</li>
+                <li><strong>Placement:</strong> Final scaling section.</li>
+            </ul>
+        </div>
+
+        <h2 id="failure-modes"><span class="section-number">13</span>Failure Modes &amp; Mitigations</h2>
+        <p>Production ride-hailing is a catalog of things going wrong at 2am. Here is the short list interviewers expect you to name unprompted:</p>
+        <table class="comparison-table reveal-element">
+            <thead><tr><th>Failure</th><th>Impact</th><th>Mitigation</th></tr></thead>
+            <tbody>
+                <tr><td>Double-assign driver</td><td>Two riders, one car</td><td>Redis lock with TTL; idempotent accept handler</td></tr>
+                <tr><td>Stale driver in geo index</td><td>Match to offline driver</td><td>Last-seen sweeper; exclude locked/outstanding drivers</td></tr>
+                <tr><td>Matching worker crash</td><td>Lost ride request</td><td>Durable queue + at-least-once processing with ride idempotency</td></tr>
+                <tr><td>Maps API outage</td><td>No fare quotes</td><td>Cached routes for popular corridors; graceful degradation message</td></tr>
+                <tr><td>Redis cluster failover</td><td>Brief geo blindness</td><td>Sentinel/AOF; matching retries after sub-second blip</td></tr>
+                <tr><td>Expired fare accepted</td><td>Price mismatch</td><td>Server-side fare TTL check on POST /rides</td></tr>
+            </tbody>
+        </table>
+
+        <h2 id="final"><span class="section-number">14</span>Final Architecture &amp; Interview Bar</h2>
+        <table class="comparison-table reveal-element">
+            <thead><tr><th>Component</th><th>Technology</th><th>Rationale</th></tr></thead>
+            <tbody>
+                <tr><td>API Gateway</td><td>Kong / AWS API GW</td><td>JWT validation, rate limits</td></tr>
+                <tr><td>Ride Service</td><td>Stateless service</td><td>Fare + ride state machine</td></tr>
+                <tr><td>Location Service</td><td>Stateless ingest</td><td>Normalize pings → Redis GEO</td></tr>
+                <tr><td>Matching Service</td><td>Workers + queue</td><td>Rank, lock, notify</td></tr>
+                <tr><td>Primary DB</td><td>PostgreSQL</td><td>Fare, Ride, billing truth</td></tr>
+                <tr><td>Live positions</td><td>Redis GEO</td><td>Write-heavy geospatial index</td></tr>
+                <tr><td>Match backlog</td><td>Kafka / SQS</td><td>Surge absorption + recovery</td></tr>
+                <tr><td>Workflow (optional)</td><td>Temporal</td><td>Timeouts across restarts</td></tr>
+                <tr><td>Push</td><td>APNS / FCM</td><td>Driver offer delivery</td></tr>
+            </tbody>
+        </table>
+        <h3>What's expected at each level?</h3>
+        <div class="level-grid reveal-element">
+            <div class="level-card mid">
+                <div class="level-label">Mid-Level</div>
+                <h4>Solid HLD + one lock story</h4>
+                <p>APIs and entities clean; sequential HLD; knows spatial search cannot be a table scan; implements DB or app lock with known flaws.</p>
+                <span class="level-focus">80% Breadth · 20% Depth</span>
+            </div>
+            <div class="level-card senior">
+                <div class="level-label">Senior</div>
+                <h4>Two deep dives with trade-offs</h4>
+                <p>Fast HLD; detail on Redis geo OR queueing OR Redis TTL locks; discusses FIFO vs priority and client adaptive pings.</p>
+                <span class="level-focus">60% Breadth · 40% Depth</span>
+            </div>
+            <div class="level-card staff">
+                <div class="level-label">Staff+</div>
+                <h4>Three+ areas, production nuance</h4>
+                <p>Proactively connects surge queues, durable workflows, geo sharding, and security; interviewer learns something new.</p>
+                <span class="level-focus">40% Breadth · 60% Depth</span>
+            </div>
+        </div>
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Final Thought</div>
+            <p>BookMyRide interviews reward engineers who separate <strong>intent</strong> (durable ride rows + queues) from <strong>ephemeral truth</strong> (live driver map in Redis) and who never let the client set the price. That split is how real fleets survive concert night.</p>
+        </div>
+    </article><!-- Author Footer -->
+    <div class="article-footer">
+        <div class="author-card reveal-element">
+            <img src="ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar">
+            <div class="author-info">
+                <h4>Ajay Kotnala</h4>
+                <div class="author-role">Senior Solution Architect · NTT</div>
+                <p>
+                    15+ years designing cloud-native, event-driven architectures at enterprise scale.
+                    Passionate about system design, API-first thinking, and making complex systems feel simple.
+                </p>
+            </div>
+        </div>
+        <a href="index.html" class="back-link">← Back to Portfolio</a>
+    </div>
+
+    <!-- Global Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-bottom">
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank">LinkedIn</a>
+                    <a href="https://github.com/ajaykotnala" target="_blank">GitHub</a>
+                    <a href="https://medium.com/@ajay.kotnalajpr" target="_blank">Medium</a>
+                </div>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll Progress Bar
+        window.addEventListener('scroll', () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrollTop / docHeight) * 100;
+            document.getElementById('progressBar').style.width = progress + '%';
+        });
+
+        // Intersection Observer for scroll-reveal animations
+        document.addEventListener('DOMContentLoaded', () => {
+            const observerOptions = {
+                threshold: 0.12,
+                rootMargin: '0px 0px -40px 0px'
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('active');
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll('.reveal-element').forEach(el => {
+                observer.observe(el);
+            });
+        });
+
+        // Deep Dive Accordion
+        function toggleDeepDive(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle('open');
+        }
+
+        // Smooth scroll for TOC and anchor links
+        document.querySelectorAll('.toc a, a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                const targetId = this.getAttribute('href');
+                if (targetId.startsWith('#')) {
+                    e.preventDefault();
+                    const target = document.querySelector(targetId);
+                    if (target) {
+                        // Nav offset: global nav (44px) + sub nav (52px) + padding
+                        const offset = 110;
+                        const targetPosition = target.getBoundingClientRect().top + window.scrollY - offset;
+                        window.scrollTo({ top: targetPosition, behavior: 'smooth' });
+                    }
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>
