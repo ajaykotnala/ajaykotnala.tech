@@ -1291,24 +1291,7 @@
             <p>Confirm the <strong>top three functional requirements</strong> with your interviewer before you draw boxes. Offer a crisp "below the line" list (ratings, GDPR, ride categories) so they can promote or demote items without you guessing.</p>
         </div>
 
-        <h2 id="visual-guide"><span class="section-number">02</span>Visual Diagram Guide (Excalidraw)</h2>
-        <p>
-            The inline sketches below give you the shape of the system. If you are preparing a whiteboard or an Excalidraw deck, these ten diagrams complement them — each targets a moment where interviewers lean in.
-        </p>
-        <ol>
-            <li><strong>Production architecture overview</strong> — Rider and driver clients, gateway, ride/location/matching services, Redis GEO, Kafka, PostgreSQL. <em>Type:</em> architecture diagram. <em>Place:</em> end of HLD build-up.</li>
-            <li><strong>POST /rides end-to-end sequence</strong> — Rider app through gateway, ride row creation, enqueue to matching, push to driver, PATCH accept. <em>Type:</em> sequence diagram. <em>Place:</em> after the API section.</li>
-            <li><strong>Ride lifecycle state machine</strong> — requested → matching → offered → accepted → in_progress → completed (with cancel/no_driver branches). <em>Type:</em> state machine. <em>Place:</em> entities or HLD step 2.</li>
-            <li><strong>Quad-tree / geohash explainer</strong> — How 2D space subdivides and why B-tree lat/long indexes fail for radius search. <em>Type:</em> spatial partition comparison. <em>Place:</em> location deep dive.</li>
-            <li><strong>Adaptive ping interval state machine</strong> — idle, cruising, near-pickup, on-trip with 30s / 5s / 1s intervals. <em>Type:</em> state machine. <em>Place:</em> adaptive location section.</li>
-            <li><strong>Distributed lock lifecycle</strong> — Acquire → notify → accept OR TTL expire → next driver. <em>Type:</em> timeline. <em>Place:</em> driver lock section (pairs with inline Diagram 3).</li>
-            <li><strong>Geo-partitioned Kafka topics</strong> — Map grid with topic per cell, consumers pinned to region. <em>Type:</em> architecture. <em>Place:</em> peak demand section.</li>
-            <li><strong>FIFO vs priority queue trade-off</strong> — One slow match blocking the head vs VIP/long-wait lane. <em>Type:</em> comparison chart. <em>Place:</em> queue deep dive.</li>
-            <li><strong>Temporal workflow for driver timeout</strong> — offerDriver(D1), waitSignal(10s), offerDriver(D2)... <em>Type:</em> workflow state machine. <em>Place:</em> timeout deep dive.</li>
-            <li><strong>Geo-sharded deployment</strong> — US-East / US-West stacks; cross-shard scatter-gather only at cell boundaries. <em>Type:</em> architecture. <em>Place:</em> scaling section.</li>
-        </ol>
-
-        <h2 id="requirements"><span class="section-number">03</span>Defining Requirements</h2>
+        <h2 id="requirements"><span class="section-number">02</span>Defining Requirements</h2>
         <h3>Functional — above the line</h3>
         <ul>
             <li><strong>Fare estimate</strong> from pickup and destination</li>
@@ -1339,7 +1322,7 @@
             </tbody>
         </table>
 
-        <h2 id="entities"><span class="section-number">04</span>Core Entities &amp; Data Model</h2>
+        <h2 id="entities"><span class="section-number">03</span>Core Entities &amp; Data Model</h2>
         <p>Five nouns carry the whole design. You do not need every column on the whiteboard — you need shared vocabulary.</p>
         <div class="entity-grid reveal-element">
             <div class="entity-card"><div class="entity-icon">🧳</div><h4>Rider</h4><p>Requests rides, payment profile, identity from auth — never trust a client-supplied rider id.</p></div>
@@ -1409,7 +1392,7 @@
             <p class="diagram-caption">Every state a Ride row passes through — timeout loops back to matching; rider cancel is valid until the trip starts.</p>
         </div>
 
-        <h2 id="api"><span class="section-number">05</span>The API Surface</h2>
+        <h2 id="api"><span class="section-number">04</span>The API Surface</h2>
         <p>One endpoint per user-visible capability. Matching stays internal — triggered by ride creation.</p>
         <div class="api-endpoint reveal-element">
             <div class="api-method-url"><span class="api-method post">POST</span><span class="api-url">/fare</span></div>
@@ -1490,7 +1473,7 @@
             <p class="diagram-caption">From rider tap to driver notification — fareId validation, durable enqueue, geo search, lock, push, and accept.</p>
         </div>
 
-        <h2 id="hld"><span class="section-number">06</span>High-Level Architecture (Build-Up)</h2>
+        <h2 id="hld"><span class="section-number">05</span>High-Level Architecture (Build-Up)</h2>
         <p>We grow the design in the same order riders experience the app — quote, commit, match, accept — so the interviewer always knows why the next box appeared.</p>
         <h3>Step 1 — Fare estimation</h3>
         <p>Rider Client → API Gateway → Ride Service → third-party Maps API → PostgreSQL (Fare). Gateway handles auth and rate limits; Ride Service calls routing for distance/time, applies pricing rules (base + per-mile + surge multiplier), inserts Fare, returns the entity.</p>
@@ -1629,7 +1612,7 @@
             <p class="diagram-caption">After deep dives: matching reads Redis geo, ride requests buffer in geo-partitioned queues, and fare/ride state lives in PostgreSQL.</p>
         </div>
 
-        <h2 id="deep-dive-location"><span class="section-number">07</span>Deep Dive: Driver Location &amp; Proximity</h2>
+        <h2 id="deep-dive-location"><span class="section-number">06</span>Deep Dive: Driver Location &amp; Proximity</h2>
         <p>Ten million drivers pinging every five seconds is roughly two million writes per second. Pair that with naive "compute distance to every row" and your HLD dies before the first surge pricing joke.</p>
         
         <div class="diagram-container reveal-element">
@@ -1763,7 +1746,7 @@
             <p class="diagram-caption">Location and demand scale on different axes — in-memory geo for reads, durable queues for ride intent.</p>
         </div>
 
-        <h2 id="deep-dive-adaptive"><span class="section-number">08</span>Deep Dive: Adaptive Location Pings</h2>
+        <h2 id="deep-dive-adaptive"><span class="section-number">07</span>Deep Dive: Adaptive Location Pings</h2>
         <p>Not every design problem lives in the data center. The driver app can back off when stationary, tighten when speed or heading changes, and ping aggressively near an assigned pickup. That cuts bandwidth and write load without lying about position during active matching.</p>
         
         <div class="diagram-container reveal-element">
@@ -1813,7 +1796,7 @@
             <p>Interviewers reward candidates who sketch the <strong>driver client</strong> as more than a box — motion sensors, GPS accuracy tiers, and backoff policies are legitimate scalability tools.</p>
         </div>
 
-        <h2 id="deep-dive-lock"><span class="section-number">09</span>Deep Dive: One Driver, One Offer</h2>
+        <h2 id="deep-dive-lock"><span class="section-number">08</span>Deep Dive: One Driver, One Offer</h2>
         <p>Strong consistency here means: at most one outstanding ride request per driver, and one driver candidate actively pinged per ride attempt (before timeout cascade). Ticketmaster seat holds use the same mental model.</p>
         <div class="deep-dive" id="dd-lock-bad">
             <div class="deep-dive-header" onclick="toggleDeepDive('dd-lock-bad')"><h4>Bad — in-memory lock in the matching service</h4><div class="deep-dive-toggle">+</div></div>
@@ -1883,7 +1866,7 @@
             <p class="diagram-caption">One driver, one outstanding offer — the Redis TTL is your countdown timer without in-process timers.</p>
         </div>
 
-        <h2 id="deep-dive-queue"><span class="section-number">10</span>Deep Dive: Peak Demand &amp; Queues</h2>
+        <h2 id="deep-dive-queue"><span class="section-number">09</span>Deep Dive: Peak Demand &amp; Queues</h2>
         <p>When the arena empties, synchronous matching in the request thread will drop work long before you finish autoscaling. Persist intent first.</p>
         
         <div class="diagram-container reveal-element">
@@ -2106,7 +2089,7 @@
             <p class="diagram-caption">Strict FIFO lets one slow match block everyone — a priority lane based on wait time and proximity keeps surge riders moving.</p>
         </div>
 
-        <h2 id="deep-dive-timeout"><span class="section-number">11</span>Deep Dive: Driver Timeout &amp; Human-in-the-Loop</h2>
+        <h2 id="deep-dive-timeout"><span class="section-number">10</span>Deep Dive: Driver Timeout &amp; Human-in-the-Loop</h2>
         <p>Phones slide under seats. Drivers miss pushes. Something must advance the workflow when ten seconds pass with no PATCH.</p>
         <div class="deep-dive" id="dd-timeout-delay">
             <div class="deep-dive-header" onclick="toggleDeepDive('dd-timeout-delay')"><h4>Good — delay queue per offer</h4><div class="deep-dive-toggle">+</div></div>
@@ -2209,7 +2192,7 @@
             <p class="diagram-caption">Temporal models matching as a durable workflow — offer, wait, branch. State survives restarts; no orphaned in-process timers.</p>
         </div>
 
-        <h2 id="deep-dive-scale"><span class="section-number">12</span>Deep Dive: Scaling Beyond One Region</h2>
+        <h2 id="deep-dive-scale"><span class="section-number">11</span>Deep Dive: Scaling Beyond One Region</h2>
         <p>Vertical scaling is the answer you mention only to dismiss — bigger boxes, downtime to resize, hard ceiling. Horizontal scaling with <strong>geo sharding</strong> puts riders, queues, Redis, and read replicas close to demand. Scatter-gather appears only when a search radius straddles shard boundaries — rare if cells align with geohash prefixes.</p>
         
         <div class="diagram-container reveal-element">
@@ -2411,7 +2394,7 @@
             <p class="diagram-caption">Money moves after trip completion — event-driven, idempotent, and never trusting the client amount.</p>
         </div>
 
-        <h2 id="failure-modes"><span class="section-number">13</span>Failure Modes &amp; Mitigations</h2>
+        <h2 id="failure-modes"><span class="section-number">12</span>Failure Modes &amp; Mitigations</h2>
         <p>Production ride-hailing is a catalog of things going wrong at 2am. Here is the short list interviewers expect you to name unprompted:</p>
         <table class="comparison-table reveal-element">
             <thead><tr><th>Failure</th><th>Impact</th><th>Mitigation</th></tr></thead>
@@ -2425,7 +2408,7 @@
             </tbody>
         </table>
 
-        <h2 id="final"><span class="section-number">14</span>Final Architecture &amp; Interview Bar</h2>
+        <h2 id="final"><span class="section-number">13</span>Final Architecture &amp; Interview Bar</h2>
         <table class="comparison-table reveal-element">
             <thead><tr><th>Component</th><th>Technology</th><th>Rationale</th></tr></thead>
             <tbody>
