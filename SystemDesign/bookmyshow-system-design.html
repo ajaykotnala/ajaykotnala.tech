@@ -1,0 +1,3281 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Designing BookMyShow at Scale — System Design Deep Dive | Ajay Kotnala</title>
+    <meta name="description"
+        content="A comprehensive system design breakdown of BookMyShow — covering ticket booking consistency, distributed locking, search optimization with Elasticsearch, and scaling to handle 10 million concurrent users during popular events. Written by Ajay Kotnala, Senior Solution Architect." />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+        rel="stylesheet" />
+    <style>
+        /* ===== Apple Design Tokens (matching index.html) ===== */
+        :root {
+            /* Color System */
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-pearl: #fafafc;
+            --color-on-primary: #ffffff;
+
+            /* BookMyShow brand accents */
+            --bms-red: #c4242d;
+            --bms-coral: #e23744;
+            --bms-gradient: linear-gradient(135deg, #c4242d, #e23744);
+
+            /* Typography */
+            --font-headline:
+                system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+                sans-serif;
+            --font-body: "Lora", Georgia, "Times New Roman", serif;
+            --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+
+            /* Border Radii */
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            /* Shadows */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06);
+
+            /* Article */
+            --article-width: 680px;
+        }
+
+        /* ===== Reset ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* ===== 1. Global Navigation Bar (Apple Thin Black Bar) ===== */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            font-family: var(--font-ui);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .global-nav-logo .logo-icon {
+            font-size: 16px;
+            color: var(--color-primary-on-dark);
+        }
+
+        .global-nav-links {
+            display: flex;
+            list-style: none;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .global-nav-links a {
+            color: #cccccc;
+            text-decoration: none;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            letter-spacing: -0.12px;
+            transition: color 0.2s ease;
+        }
+
+        .global-nav-links a:hover {
+            color: #ffffff;
+        }
+
+        .global-nav-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .global-nav-actions a {
+            color: #cccccc;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .global-nav-actions a:hover {
+            color: #ffffff;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ===== 2. Sub Navigation Bar (Frosted Sticky) ===== */
+        .sub-nav-frosted {
+            position: sticky;
+            top: 44px;
+            left: 0;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 999;
+            border-bottom: 1px solid var(--color-divider-soft);
+        }
+
+        .sub-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .sub-nav-title {
+            font-family: var(--font-headline);
+            font-size: 21px;
+            font-weight: 600;
+            color: var(--color-ink);
+            text-decoration: none;
+            letter-spacing: 0.231px;
+        }
+
+        .sub-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sub-nav-link {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink);
+            text-decoration: none;
+            opacity: 0.8;
+            transition:
+                color 0.2s ease,
+                opacity 0.2s ease;
+        }
+
+        .sub-nav-link:hover {
+            color: var(--color-primary);
+            opacity: 1;
+        }
+
+        .sub-nav-button {
+            background: var(--color-primary);
+            color: var(--color-on-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            border-radius: var(--rounded-pill);
+            text-decoration: none;
+            transition:
+                background 0.2s ease,
+                transform 0.1s ease;
+        }
+
+        .sub-nav-button:hover {
+            background: var(--color-primary-focus);
+        }
+
+        .sub-nav-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== Scroll Progress Bar ===== */
+        .progress-bar {
+            position: fixed;
+            top: 44px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--bms-gradient);
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        /* ===== Article Hero ===== */
+        .article-hero {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(96px + 4rem) 2rem 4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .article-hero-inner {
+            max-width: var(--article-width);
+            width: 100%;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .article-category {
+            display: inline-block;
+            padding: 4px 14px;
+            background: var(--bms-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .article-date {
+            color: var(--color-body-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .article-read-time {
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 13px;
+        }
+
+        .article-read-time::before {
+            content: "·";
+            margin-right: 0.5rem;
+            color: var(--color-body-muted);
+        }
+
+        .article-hero h1 {
+            font-family: var(--font-headline);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+        }
+
+        .article-hero h1 .gradient-text {
+            background: var(--bms-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .article-hero-desc {
+            font-family: var(--font-body);
+            font-size: 20px;
+            color: var(--color-body-muted);
+            line-height: 1.7;
+            max-width: 600px;
+        }
+
+        .article-hero-desc em {
+            font-style: italic;
+            color: var(--color-ink-muted-80);
+        }
+
+        /* ===== Author Bar (Medium-style) ===== */
+        .author-bar {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--color-divider-soft);
+            margin-bottom: 2.5rem;
+        }
+
+        .author-bar-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-bar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .author-bar-name {
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-ink);
+        }
+
+        .author-bar-meta {
+            font-family: var(--font-ui);
+            font-size: 13px;
+            color: var(--color-body-muted);
+        }
+
+        /* ===== Table of Contents ===== */
+        .toc-wrapper {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .toc {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem 2.5rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--bms-gradient);
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toc h3 {
+            font-size: 12px;
+            margin-bottom: 1.2rem;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            padding: 0.35rem 0;
+        }
+
+        .toc li a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 15px;
+            transition:
+                color 0.2s ease,
+                padding-left 0.2s ease;
+            display: inline-block;
+        }
+
+        .toc li a::before {
+            content: counter(toc-counter, decimal-leading-zero) ".";
+            color: var(--bms-red);
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-right: 0.8rem;
+            font-size: 13px;
+        }
+
+        .toc li a:hover {
+            color: var(--color-primary);
+            padding-left: 4px;
+        }
+
+        /* ===== Article Body (Medium-friendly) ===== */
+        .article-body {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .article-body h2 {
+            font-family: var(--font-headline);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-top: 3.5rem;
+            margin-bottom: 1.2rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .article-body h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .article-body h2 .section-number {
+            color: var(--bms-red);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .article-body h3 {
+            font-family: var(--font-headline);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-top: 2.5rem;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .article-body p {
+            font-family: var(--font-body);
+            font-size: 19px;
+            line-height: 1.85;
+            color: var(--color-ink-muted-80);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.003em;
+        }
+
+        .article-body ul,
+        .article-body ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .article-body li {
+            font-family: var(--font-body);
+            color: var(--color-ink-muted-80);
+            margin-bottom: 0.6rem;
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .article-body strong {
+            color: var(--color-ink);
+            font-weight: 600;
+        }
+
+        .article-body em {
+            color: var(--color-ink-muted-80);
+            font-style: italic;
+        }
+
+        .article-body code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--color-canvas-parchment);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--bms-red);
+        }
+
+        /* ===== Callout Boxes ===== */
+        .callout {
+            background: var(--color-canvas-parchment);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 0 var(--rounded-sm) var(--rounded-sm) 0;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .callout.callout-warning {
+            border-left-color: #e56b47;
+            background: #fef7f5;
+        }
+
+        .callout.callout-insight {
+            border-left-color: var(--bms-red);
+            background: #fdf5f6;
+        }
+
+        .callout .callout-label {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.6rem;
+            color: var(--color-primary);
+        }
+
+        .callout.callout-warning .callout-label {
+            color: #e56b47;
+        }
+
+        .callout.callout-insight .callout-label {
+            color: var(--bms-red);
+        }
+
+        .callout p {
+            margin-bottom: 0;
+            font-size: 16px !important;
+            line-height: 1.7 !important;
+        }
+
+        /* ===== Code Blocks (GitHub Light Theme) ===== */
+        .code-block {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-hairline);
+            border-radius: var(--rounded-sm);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0 2rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--color-hairline);
+            color: var(--color-body-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 0 var(--rounded-sm) 0 var(--rounded-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--color-ink);
+            line-height: 1.7;
+            white-space: pre;
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .code-block .keyword {
+            color: #cf222e;
+        }
+
+        .code-block .string {
+            color: #0a3069;
+        }
+
+        .code-block .comment {
+            color: #6e7781;
+            font-style: italic;
+        }
+
+        .code-block .type {
+            color: #953800;
+        }
+
+        .code-block .number {
+            color: #0550ae;
+        }
+
+        /* ===== Entity Cards ===== */
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .entity-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 1.8rem;
+            text-align: center;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .entity-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .entity-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .entity-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .entity-card p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ===== API Endpoint Cards ===== */
+        .api-endpoint {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0;
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .api-endpoint:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .api-method-url {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .api-method {
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .api-method.post {
+            background: #fdf5f6;
+            color: var(--bms-red);
+        }
+
+        .api-method.get {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .api-url {
+            font-family: var(--font-mono);
+            color: var(--color-ink);
+            font-size: 15px;
+        }
+
+        .api-desc {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 15px !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        /* ===== Excalidraw-Style SVG Architecture Diagrams ===== */
+        .diagram-container {
+            margin: 3rem -2rem;
+            padding: 2rem;
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            overflow-x: auto;
+        }
+
+        .diagram-title {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-body-muted);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .diagram-caption {
+            text-align: center;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            margin-top: 1rem;
+            font-style: italic;
+        }
+
+        .diagram-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== Comparison Table ===== */
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 2rem 0;
+            border-radius: var(--rounded-md);
+            overflow: hidden;
+            border: 1px solid var(--color-divider-soft);
+            font-family: var(--font-ui);
+        }
+
+        .comparison-table th {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            background: var(--color-canvas);
+            color: var(--color-ink-muted-80);
+            font-size: 15px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--color-divider-soft);
+            line-height: 1.5;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--color-canvas-parchment);
+        }
+
+        .check-icon {
+            color: var(--color-primary);
+            font-weight: 700;
+        }
+
+        .cross-icon {
+            color: var(--color-body-muted);
+            font-weight: 700;
+        }
+
+        /* ===== Scale Numbers ===== */
+        .scale-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .scale-stat {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 1.2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition:
+                box-shadow 0.3s ease,
+                transform 0.3s ease;
+        }
+
+        .scale-stat:hover {
+            box-shadow: var(--shadow-card);
+            transform: translateY(-2px);
+        }
+
+        .scale-stat::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--bms-gradient);
+        }
+
+        .scale-stat .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            background: var(--bms-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-headline);
+        }
+
+        .scale-stat .stat-desc {
+            color: var(--color-body-muted);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ===== Deep Dive Accordion ===== */
+        .deep-dive {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            margin: 1.5rem 0;
+            overflow: hidden;
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .deep-dive:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .deep-dive-header {
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+
+        .deep-dive-header:hover {
+            background: var(--color-canvas-parchment);
+        }
+
+        .deep-dive-header h4 {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--color-ink);
+        }
+
+        .deep-dive-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-canvas-parchment);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            transition:
+                transform 0.3s ease,
+                background 0.3s ease;
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        .deep-dive.open .deep-dive-toggle {
+            transform: rotate(45deg);
+            background: #fdf5f6;
+            color: var(--bms-red);
+        }
+
+        .deep-dive-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .deep-dive.open .deep-dive-content {
+            max-height: 5000px;
+        }
+
+        .deep-dive-content-inner {
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .deep-dive-content-inner p,
+        .deep-dive-content-inner li {
+            font-size: 16px !important;
+        }
+
+        /* ===== Level Expectation Cards ===== */
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .level-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .level-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .level-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .level-card.mid::before {
+            background: var(--color-primary);
+        }
+
+        .level-card.senior::before {
+            background: #e56b47;
+        }
+
+        .level-card.staff::before {
+            background: var(--bms-red);
+        }
+
+        .level-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .level-card.mid .level-label {
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-label {
+            color: #e56b47;
+        }
+
+        .level-card.staff .level-label {
+            color: var(--bms-red);
+        }
+
+        .level-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .level-card p {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .level-focus {
+            display: inline-block;
+            margin-top: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .level-card.mid .level-focus {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-focus {
+            background: #fef3ef;
+            color: #e56b47;
+        }
+
+        .level-card.staff .level-focus {
+            background: #fdf5f6;
+            color: var(--bms-red);
+        }
+
+        /* ===== Author Footer Card ===== */
+        .article-footer {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+        }
+
+        .author-card {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-canvas);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            flex-shrink: 0;
+        }
+
+        .author-info h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: var(--color-ink);
+        }
+
+        .author-info .author-role {
+            color: var(--color-primary);
+            font-size: 14px;
+            font-family: var(--font-ui);
+            margin-bottom: 0.6rem;
+        }
+
+        .author-info p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+        }
+
+        .back-links-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-weight: 500;
+            font-size: 15px;
+            transition: gap 0.2s ease;
+        }
+
+        .back-link:hover {
+            gap: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* ===== Global Footer ===== */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .footer-container {
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .social-links a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        .fine-print {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink-muted-48);
+            letter-spacing: -0.12px;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 833px) {
+            .global-nav-links {
+                display: none;
+            }
+
+            .sub-nav-container {
+                padding: 0 16px;
+            }
+
+            .article-hero {
+                padding: calc(96px + 2rem) 1.5rem 3rem;
+            }
+
+            .article-body {
+                padding: 0 1.5rem 4rem;
+            }
+
+            .toc-wrapper {
+                padding: 0 1.5rem;
+            }
+
+            .entity-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .scale-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .level-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .author-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .diagram-container {
+                margin: 2rem -1rem;
+                padding: 1.5rem 1rem;
+            }
+
+            .comparison-table {
+                font-size: 14px;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 8px 10px;
+            }
+
+            .author-bar {
+                padding: 0 1.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .scale-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        /* ===== Animations ===== */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(24px);
+            transition:
+                opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1),
+                transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .reveal-element.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- 1. Global Navigation Bar -->
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="index.html" class="global-nav-logo">
+                <span class="logo-icon">[AK]</span>
+                Ajay Kotnala
+            </a>
+            <div class="global-nav-actions">
+                <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
+                    </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" aria-label="LinkedIn">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. Sticky Sub Navigation Bar -->
+    <nav class="sub-nav-frosted">
+        <div class="sub-nav-container">
+            <a href="#" class="sub-nav-title">System Design</a>
+            <div class="sub-nav-right">
+                <a href="./index.html" class="sub-nav-link">System Design Articles</a>
+                <a href="../index.html" class="sub-nav-link">Portfolio</a>
+                <a href="../index.html#contact" class="sub-nav-button">Get in Touch</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Article Hero -->
+    <section class="article-hero">
+        <div class="article-hero-inner reveal-element active">
+            <div class="article-meta">
+                <span class="article-category">System Design</span>
+                <span class="article-date">July 2026</span>
+                <span class="article-read-time">22 min read</span>
+            </div>
+            <h1>
+                Designing
+                <span class="gradient-text">BookMyShow</span>
+                at Scale:
+                <br />
+                A System Design Deep Dive
+            </h1>
+            <p class="article-hero-desc">
+                How do you build a system where 10 million fans hit "Book Now" at the exact same second — and not a
+                single seat gets double-sold? Let's break it down, from
+                <em>event discovery</em>
+                and search to distributed locks and virtual waiting rooms.
+            </p>
+        </div>
+    </section>
+
+    <!-- Author Bar (Medium-style) -->
+    <div class="author-bar reveal-element active">
+        <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar" />
+        <div class="author-bar-info">
+            <div class="author-bar-name">Ajay Kotnala</div>
+            <div class="author-bar-meta">Senior Solution Architect · July 2026 · 22 min read</div>
+        </div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc-wrapper">
+        <div class="toc reveal-element">
+            <h3>In This Article</h3>
+            <ol>
+                <li><a href="#understanding">Understanding the Problem</a></li>
+                <li><a href="#requirements">Defining Requirements</a></li>
+                <li><a href="#entities">Core Entities & Data Model</a></li>
+                <li><a href="#api">The API Surface</a></li>
+                <li><a href="#hld">High-Level Architecture</a></li>
+                <li><a href="#deep-dive-booking">Deep Dive: Ticket Reservation & No Double Booking</a></li>
+                <li><a href="#deep-dive-scaling">Deep Dive: Scaling Reads for Viral Events</a></li>
+                <li><a href="#deep-dive-realtime">Deep Dive: Real-Time Seat Maps & Waiting Rooms</a></li>
+                <li><a href="#deep-dive-search">Deep Dive: Search at Scale & Final Architecture</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Article Body -->
+    <article class="article-body">
+        <!-- Section 1: Understanding the Problem -->
+        <h2 id="understanding">
+            <span class="section-number">01</span>
+            Understanding the Problem
+        </h2>
+
+        <p>
+            BookMyShow is one of those platforms that looks simple on the surface. You open the app, browse upcoming
+            concerts, pick your seats, pay, and you're done. Easy, right?
+        </p>
+        <p>
+            Not quite. Beneath that clean event listing and slick seat picker lies a system that has to handle some
+            truly gnarly engineering challenges. Think about a Taylor Swift concert dropping tickets at noon.
+            <strong>Millions of fans</strong>
+            flood the platform simultaneously. Every single one of them is clicking on the same event, staring at
+            the same seat map, and racing to grab the same front-row seats. And the system
+            <em>cannot</em>
+            sell the same seat twice.
+        </p>
+        <p>
+            That combination — extreme read throughput for browsing, strict write consistency for booking, and a
+            healthy dose of real-time UX to keep users sane — is what makes this system design question a perennial
+            favorite in interviews. It forces you to navigate the tension between availability and consistency, and
+            there's no single right answer. Just trade-offs.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>
+                This question is about the
+                <strong>booking pipeline</strong>
+                — not about payment processing, user authentication, or admin dashboards. Keep your scope tight:
+                viewing events, searching for them, and booking tickets without double-selling. Everything else is
+                "below the line."
+            </p>
+        </div>
+
+        <!-- Section 2: Requirements -->
+        <h2 id="requirements">
+            <span class="section-number">02</span>
+            Defining Requirements
+        </h2>
+
+        <h3>Functional Requirements</h3>
+        <p>
+            Let's keep our scope tight and prioritize the top three features. Everything else shows product
+            thinking, but we won't be designing for it:
+        </p>
+        <ul>
+            <li>
+                <strong>View events</strong>
+                — browse event details, venue info, performer bios, and an interactive seat map showing availability
+            </li>
+            <li>
+                <strong>Search for events</strong>
+                — find events by keyword, date range, location, or event type with sub-500ms latency
+            </li>
+            <li>
+                <strong>Book tickets</strong>
+                — select seats, reserve them temporarily, complete payment, and confirm the booking with zero
+                double-sells
+            </li>
+        </ul>
+
+        <h3>Non-Functional Requirements</h3>
+        <p>
+            These are the engineering qualities that separate a working prototype from a production system that can
+            survive a Coldplay concert going on sale:
+        </p>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">10M</div>
+                <div class="stat-desc">Concurrent Users</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">100:1</div>
+                <div class="stat-desc">Read : Write Ratio</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">&lt;500ms</div>
+                <div class="stat-desc">Search Latency</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">0</div>
+                <div class="stat-desc">Double Bookings</div>
+            </div>
+        </div>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Requirement</th>
+                    <th>Priority</th>
+                    <th>Why It Matters</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Availability for search & viewing</td>
+                    <td>
+                        <span class="check-icon">●</span>
+                        Must have
+                    </td>
+                    <td>Browsing must never go down — it's the front door to revenue</td>
+                </tr>
+                <tr>
+                    <td>Consistency for booking</td>
+                    <td>
+                        <span class="check-icon">●</span>
+                        Must have
+                    </td>
+                    <td>Double-selling a seat is a legal and PR nightmare</td>
+                </tr>
+                <tr>
+                    <td>Scalable to viral events</td>
+                    <td>
+                        <span class="check-icon">●</span>
+                        Must have
+                    </td>
+                    <td>10M users hitting one event page at once is our design target</td>
+                </tr>
+                <tr>
+                    <td>Low-latency search</td>
+                    <td>
+                        <span class="check-icon">●</span>
+                        Must have
+                    </td>
+                    <td>Users expect autocomplete-fast results; anything slower feels broken</td>
+                </tr>
+                <tr>
+                    <td>GDPR & data protection</td>
+                    <td>
+                        <span class="cross-icon">○</span>
+                        Out of scope
+                    </td>
+                    <td>Important, but a separate domain</td>
+                </tr>
+                <tr>
+                    <td>CI/CD & fault tolerance</td>
+                    <td>
+                        <span class="cross-icon">○</span>
+                        Out of scope
+                    </td>
+                    <td>Assumed to exist, not the focus</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Section 3: Core Entities -->
+        <h2 id="entities">
+            <span class="section-number">03</span>
+            Core Entities & Data Model
+        </h2>
+
+        <p>
+            Before we start drawing architecture diagrams, let's establish the fundamental data objects our system
+            revolves around. Think of these as the
+            <em>nouns</em>
+            in our system's vocabulary. We don't need to nail every column right now — just get aligned on what
+            exists and how things relate.
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">🎪</div>
+                <h4>Event</h4>
+                <p>
+                    The central entity — stores name, description, date, type, and links to its venue and
+                    performers.
+                </p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">👤</div>
+                <h4>User</h4>
+                <p>A person interacting with the platform — browsing events, searching, and purchasing tickets.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🎤</div>
+                <h4>Performer</h4>
+                <p>
+                    The artist, band, team, or company performing. Could be a comedian, an orchestra, or an IPL
+                    team.
+                </p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🏟️</div>
+                <h4>Venue</h4>
+                <p>
+                    The physical location — address, capacity, and a seat map (JSON structure defining sections,
+                    rows, and seat coordinates).
+                </p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🎫</div>
+                <h4>Ticket</h4>
+                <p>
+                    One ticket per seat per event. Tracks section, row, seat number, price, and status (available →
+                    reserved → sold).
+                </p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">📋</div>
+                <h4>Booking</h4>
+                <p>
+                    Groups multiple tickets into a single transaction — tracks user, total price, payment status,
+                    and timestamps.
+                </p>
+            </div>
+        </div>
+
+        <p>
+            You could fold booking data into the Ticket entity, but keeping a separate Booking makes life easier
+            when a user buys multiple seats in one transaction — you need a single order with a shared payment
+            status and total price.
+        </p>
+
+        <div class="callout">
+            <div class="callout-label">Design Decision</div>
+            <p>
+                When a new event is created, we generate a Ticket record for
+                <strong>every seat</strong>
+                in the venue based on the venue's seat map. The client fetches this data to render the interactive
+                seat picker, combining the seat map coordinates with each ticket's status.
+            </p>
+        </div>
+
+        <!-- Section 4: API Design -->
+        <h2 id="api">
+            <span class="section-number">04</span>
+            The API Surface
+        </h2>
+
+        <p>
+            The API is your contract with the outside world. We need exactly one endpoint per functional requirement
+            — simple, clean, and easy to reason about. We'll evolve these as the design matures.
+        </p>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method get">GET</span>
+                <span class="api-url">/events/:eventId</span>
+            </div>
+            <p class="api-desc">
+                Fetch full details for an event — including venue info, performer bios, and the complete ticket list
+                (to render the seat map with real-time availability). This is the most heavily trafficked endpoint.
+            </p>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">Response</span>
+            <code>
+                    <span class="keyword">→</span>
+                    Event & Venue & Performer & Ticket[]
+
+                    <span class="comment">// Tickets are needed to render the seat map</span>
+                    <span class="comment">// Each ticket includes: section, row, seat, price, status</span>
+                </code>
+        </div>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method get">GET</span>
+                <span class="api-url">/events/search?keyword={}&start={}&end={}&page={}</span>
+            </div>
+            <p class="api-desc">
+                Search for events by keyword, date range, event type, or location. Returns a paginated list of
+                matching events. Later, we'll supercharge this with Elasticsearch.
+            </p>
+        </div>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method post">POST</span>
+                <span class="api-url">/bookings/:eventId</span>
+            </div>
+            <p class="api-desc">
+                Initiate a booking for selected tickets. Initially a single endpoint; we'll split this into reserve
+                + confirm as we add distributed locking in the deep dives.
+            </p>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">Request Body</span>
+            <code>
+                    {
+                    <span class="string">"ticketIds"</span>
+                    : [
+                    <span class="string">"ticket_A12"</span>
+                    ,
+                    <span class="string">"ticket_A13"</span>
+                    ],
+                    <span class="string">"paymentDetails"</span>
+                    : { ... } }
+                </code>
+        </div>
+
+        <div class="callout">
+            <div class="callout-label">Design Decision</div>
+            <p>
+                We're starting with a simple "book in one step" API. As we dig into the reservation flow later,
+                we'll split this into a
+                <strong>two-phase process</strong>
+                : first reserve (lock the seats), then confirm (process payment). Communicate this intent to your
+                interviewer early.
+            </p>
+        </div>
+
+        <!-- Section 5: High-Level Design -->
+        <h2 id="hld">
+            <span class="section-number">05</span>
+            High-Level Architecture
+        </h2>
+
+        <p>
+            Now we get to the fun part — assembling the pieces. We'll walk through each functional requirement and
+            build up the system layer by layer. The goal here is
+            <strong>functional correctness first</strong>
+            , then we'll optimize in the deep dives.
+        </p>
+
+        <h3>1. View Event Flow</h3>
+        <p>
+            When a user navigates to an event page, they expect to see all the details — event name, date, venue,
+            performers, and crucially, the interactive seat map showing which seats are still available. Here's the
+            straightforward flow:
+        </p>
+
+        <!-- DIAGRAM 1: View Event Flow -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 1 — View Event Architecture</div>
+            <svg viewBox="0 0 780 320" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughen" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="2" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <filter id="roughenLight" x="-1%" y="-1%" width="102%" height="102%">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="5" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                    <marker id="exArrowRed" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#C4242D" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                    <marker id="exArrowBlue" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+
+                <rect width="780" height="320" fill="#fefefe" rx="12" />
+                <rect width="780" height="320" fill="url(#dotGrid)" rx="12" />
+
+                <!-- Client -->
+                <rect x="30" y="100" width="110" height="120" rx="16" fill="#eef6ff" stroke="#333" stroke-width="2"
+                    filter="url(#roughen)" />
+                <rect x="42" y="118" width="86" height="78" rx="6" fill="#ffffff" stroke="#999" stroke-width="1"
+                    filter="url(#roughenLight)" />
+                <text x="85" y="155" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="20"
+                    text-anchor="middle">
+                    🌐
+                </text>
+                <text x="85" y="178" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Client
+                </text>
+
+                <!-- Arrow: Client → Gateway -->
+                <path d="M 142 160 C 160 158, 180 162, 198 160" fill="none" stroke="#333" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+                <text x="170" y="148" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    GET /events/:id
+                </text>
+
+                <!-- API Gateway -->
+                <rect x="205" y="100" width="130" height="120" rx="10" fill="#e3f2fd" stroke="#0066cc" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="270" y="148" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">
+                    API
+                </text>
+                <text x="270" y="168" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">
+                    Gateway
+                </text>
+                <text x="270" y="195" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Auth · Rate Limit
+                </text>
+
+                <!-- Arrow: Gateway → Event Service -->
+                <path d="M 335 160 C 355 158, 380 162, 408 160" fill="none" stroke="#0066cc" stroke-width="2"
+                    stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#exArrowBlue)"
+                    filter="url(#roughenLight)" />
+
+                <!-- Event Service -->
+                <rect x="415" y="95" width="150" height="130" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="490" y="143" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">
+                    Event
+                </text>
+                <text x="490" y="163" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">
+                    Service
+                </text>
+                <text x="490" y="190" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Events · Venues
+                </text>
+                <text x="490" y="205" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Performers · Tickets
+                </text>
+
+                <!-- Arrow: Event Service → DB -->
+                <path d="M 565 160 C 585 158, 605 162, 625 160" fill="none" stroke="#2e7d32" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+
+                <!-- Events DB (cylinder) -->
+                <ellipse cx="700" cy="125" rx="55" ry="18" fill="#e8f5e9" stroke="#333" stroke-width="1.8"
+                    filter="url(#roughen)" />
+                <path d="M 645 125 L 645 175" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)" />
+                <path d="M 755 125 L 755 175" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)" />
+                <ellipse cx="700" cy="175" rx="55" ry="18" fill="#e8f5e9" stroke="#333" stroke-width="1.8"
+                    filter="url(#roughen)" />
+                <rect x="645" y="125" width="110" height="50" fill="#e8f5e9" stroke="none" />
+                <text x="700" y="158" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="600">
+                    Events DB
+                </text>
+                <text x="700" y="178" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    PostgreSQL
+                </text>
+
+                <!-- Labels -->
+                <text x="85" y="80" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    ① Request
+                </text>
+                <text x="270" y="80" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    ② Route
+                </text>
+                <text x="490" y="75" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    ③ Query & Return
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                The view flow is intentionally simple — Client → Gateway → Event Service → PostgreSQL. We'll layer
+                caching on top in the deep dives.
+            </p>
+        </div>
+
+        <h3>2. Search Events Flow</h3>
+        <p>
+            Users need to find events before they can view them. Our search takes a combination of keywords, dates,
+            location, and event type. For now, we'll connect a Search Service directly to our database — it's not
+            optimal, but it works as a starting point.
+        </p>
+
+        <!-- DIAGRAM 2: Search Flow -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 2 — Search Events Architecture</div>
+            <svg viewBox="0 0 780 320" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <rect width="780" height="320" fill="#fefefe" rx="12" />
+                <rect width="780" height="320" fill="url(#dotGrid)" rx="12" />
+
+                <!-- Client -->
+                <rect x="30" y="100" width="110" height="120" rx="16" fill="#eef6ff" stroke="#333" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="85" y="155" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="20"
+                    text-anchor="middle">
+                    🔍
+                </text>
+                <text x="85" y="178" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Client
+                </text>
+
+                <!-- Arrow -->
+                <path d="M 142 160 C 160 158, 175 162, 198 160" fill="none" stroke="#333" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+
+                <!-- Load Balancer -->
+                <rect x="205" y="115" width="100" height="90" rx="10" fill="#fff3e0" stroke="#e56b47" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="255" y="155" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">
+                    Load
+                </text>
+                <text x="255" y="173" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">
+                    Balancer
+                </text>
+
+                <!-- Arrow -->
+                <path d="M 305 160 C 320 158, 335 162, 355 160" fill="none" stroke="#333" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+
+                <!-- API Gateway -->
+                <rect x="362" y="115" width="105" height="90" rx="10" fill="#e3f2fd" stroke="#0066cc" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="414" y="155" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">
+                    API GW
+                </text>
+                <text x="414" y="173" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Auth · Route
+                </text>
+
+                <!-- Arrow -->
+                <path d="M 467 160 C 485 158, 500 162, 518 160" fill="none" stroke="#0066cc" stroke-width="2"
+                    stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#exArrowBlue)"
+                    filter="url(#roughenLight)" />
+
+                <!-- Search Service -->
+                <rect x="525" y="100" width="110" height="120" rx="10" fill="#fce4ec" stroke="#C4242D" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="580" y="148" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">
+                    Search
+                </text>
+                <text x="580" y="168" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">
+                    Service
+                </text>
+                <text x="580" y="195" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Filter · Paginate
+                </text>
+
+                <!-- Arrow to DB -->
+                <path d="M 580 220 C 580 240, 580 250, 580 265" fill="none" stroke="#C4242D" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrowRed)" filter="url(#roughenLight)" />
+
+                <!-- Events DB -->
+                <ellipse cx="580" cy="268" rx="45" ry="14" fill="#fce4ec" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <path d="M 535 268 L 535 298" stroke="#333" stroke-width="1.5" filter="url(#roughenLight)" />
+                <path d="M 625 268 L 625 298" stroke="#333" stroke-width="1.5" filter="url(#roughenLight)" />
+                <ellipse cx="580" cy="298" rx="45" ry="14" fill="#fce4ec" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <rect x="535" y="268" width="90" height="30" fill="#fce4ec" stroke="none" />
+                <text x="580" y="290" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    Events DB
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                A naive search that queries PostgreSQL directly. This works for low traffic but won't survive a
+                <code>LIKE '%Taylor%'</code>
+                at scale.
+            </p>
+        </div>
+
+        <h3>3. Book Tickets Flow</h3>
+        <p>
+            Here's where things get interesting. The critical constraint:
+            <strong>two users must never pay for the same seat</strong>
+            . To handle this, we need a database that supports ACID transactions. We'll use PostgreSQL with proper
+            isolation levels.
+        </p>
+
+        <!-- DIAGRAM 3: Simple Booking Flow -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 3 — Simple Booking Architecture</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGrid)" rx="12" />
+
+                <!-- Client -->
+                <rect x="30" y="50" width="110" height="120" rx="16" fill="#eef6ff" stroke="#333" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="85" y="103" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="20"
+                    text-anchor="middle">
+                    🎫
+                </text>
+                <text x="85" y="128" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Client
+                </text>
+                <text x="85" y="145" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Seat Selection
+                </text>
+
+                <!-- Arrow -->
+                <path d="M 142 110 C 165 108, 185 112, 205 110" fill="none" stroke="#333" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+
+                <!-- API Gateway -->
+                <rect x="212" y="65" width="110" height="90" rx="10" fill="#e3f2fd" stroke="#0066cc" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="267" y="105" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">
+                    API GW
+                </text>
+                <text x="267" y="125" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Auth · Route
+                </text>
+
+                <!-- Arrow -->
+                <path d="M 322 110 C 345 108, 365 112, 388 110" fill="none" stroke="#0066cc" stroke-width="2"
+                    stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#exArrowBlue)"
+                    filter="url(#roughenLight)" />
+
+                <!-- Booking Service -->
+                <rect x="395" y="45" width="155" height="130" rx="10" fill="#fce4ec" stroke="#C4242D" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="472" y="90" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">
+                    Booking
+                </text>
+                <text x="472" y="110" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">
+                    Service
+                </text>
+                <text x="472" y="138" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Check · Reserve
+                </text>
+                <text x="472" y="153" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Confirm · Update
+                </text>
+
+                <!-- Arrow to DB -->
+                <path d="M 550 110 C 575 108, 600 112, 628 110" fill="none" stroke="#C4242D" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrowRed)" filter="url(#roughenLight)" />
+
+                <!-- DB (Tickets + Bookings) -->
+                <ellipse cx="700" cy="80" rx="55" ry="18" fill="#fce4ec" stroke="#333" stroke-width="1.8"
+                    filter="url(#roughen)" />
+                <path d="M 645 80 L 645 130" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)" />
+                <path d="M 755 80 L 755 130" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)" />
+                <ellipse cx="700" cy="130" rx="55" ry="18" fill="#fce4ec" stroke="#333" stroke-width="1.8"
+                    filter="url(#roughen)" />
+                <rect x="645" y="80" width="110" height="50" fill="#fce4ec" stroke="none" />
+                <text x="700" y="108" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    Tickets &
+                </text>
+                <text x="700" y="123" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    Bookings
+                </text>
+                <text x="700" y="145" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    PostgreSQL
+                </text>
+
+                <!-- Arrow to Stripe -->
+                <path d="M 472 175 C 472 210, 472 240, 472 260" fill="none" stroke="#C4242D" stroke-width="2"
+                    stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#exArrowRed)"
+                    filter="url(#roughenLight)" />
+
+                <!-- Stripe -->
+                <rect x="395" y="265" width="155" height="80" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"
+                    stroke-dasharray="5,3" filter="url(#roughen)" />
+                <text x="472" y="300" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">
+                    Stripe
+                </text>
+                <text x="472" y="320" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Payment Processor
+                </text>
+                <text x="472" y="335" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Webhooks → Confirm
+                </text>
+
+                <!-- Note box -->
+                <rect x="30" y="250" width="320" height="100" rx="10" fill="#fefaf6" stroke="#e0e0e0" stroke-width="1.5"
+                    stroke-dasharray="6,4" filter="url(#roughen)" />
+                <text x="190" y="278" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="600">
+                    Transaction Steps
+                </text>
+                <text x="50" y="300" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11">
+                    ① Check ticket availability
+                </text>
+                <text x="50" y="318" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11">
+                    ② Update status → "booked"
+                </text>
+                <text x="50" y="336" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11">
+                    ③ Create booking record
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                The booking service handles the critical path: check availability, lock the seat, process payment
+                via Stripe, and confirm.
+            </p>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Watch Out</div>
+            <p>
+                This design has a fundamental flaw: users fill out payment details, hit "Confirm," and
+                <em>then</em>
+                discover their seat was taken while they were typing their credit card number. We'll fix this with a
+                reservation timer in our first deep dive.
+            </p>
+        </div>
+
+        <p>
+            You may notice that our Event Service and Booking Service share the same database. The "database per
+            service" rule is often repeated, but it's not a hard-and-fast rule. Here, sharing makes sense because
+            tickets, events, and bookings are tightly coupled, we need ACID transactions, and splitting would add
+            complexity for zero benefit. Weigh the trade-offs, don't parrot architectural dogma.
+        </p>
+
+        <!-- Section 6: Deep Dive - Booking -->
+        <h2 id="deep-dive-booking">
+            <span class="section-number">06</span>
+            Deep Dive: Ticket Reservation & No Double Booking
+        </h2>
+
+        <p>
+            If you've ever booked a flight or concert ticket, you've probably seen that anxiety-inducing countdown
+            timer:
+            <strong>"Complete your purchase in 9:47 or your seats will be released."</strong>
+            That timer isn't just a UX trick — it's the heartbeat of a critical distributed systems problem.
+        </p>
+        <p>
+            We need three guarantees: (1) a seat is locked for a user while they're checking out, (2) if they
+            abandon checkout, the seat becomes available again, and (3) two users never successfully pay for the
+            same seat. Let's explore the approaches, from bad to great.
+        </p>
+
+        <div class="deep-dive" id="dd-dblocks">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-dblocks')">
+                <h4>❌ Bad: Long-Running Database Locks</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        A tempting but terrible idea: use
+                        <code>SELECT FOR UPDATE</code>
+                        to lock the ticket row for the entire checkout duration. The lock is held until the
+                        transaction commits or rolls back.
+                    </p>
+                    <p>
+                        The problem? Database locks are designed for
+                        <strong>millisecond-scale operations</strong>
+                        , not 10-minute checkout flows. Holding a transaction open for that long strains connection
+                        pools, risks deadlocks, and can grind the entire database to a halt under load. If the app
+                        crashes mid-lock, you're stuck with orphaned locks. This is a non-starter for production.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="deep-dive" id="dd-statuscron">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-statuscron')">
+                <h4>🟡 Good: Status Field + Cron Job</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        A better approach: add a
+                        <code>status</code>
+                        field to the Ticket table (
+                        <code>available</code>
+                        ,
+                        <code>reserved</code>
+                        ,
+                        <code>booked</code>
+                        ) plus a
+                        <code>reserved_at</code>
+                        timestamp. When a user selects a seat, we update the status to
+                        <code>reserved</code>
+                        and record the time. A cron job periodically scans for tickets where status is
+                        <code>reserved</code>
+                        and the reservation has expired, flipping them back to
+                        <code>available</code>
+                        .
+                    </p>
+                    <p>
+                        This works, but the cron job introduces
+                        <strong>delay</strong>
+                        between when a reservation expires and when the seat actually becomes available again. For a
+                        sold-out Taylor Swift show, those extra seconds of latency mean frustrated fans staring at a
+                        "no seats available" screen while expired reservations sit unreleased.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="deep-dive" id="dd-expiry">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-expiry')">
+                <h4>🟢 Better: Expiration-Based Status Check</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        The key insight: a ticket's
+                        <em>real</em>
+                        status is the
+                        <strong>combination</strong>
+                        of two fields — its status AND whether its reservation has expired. Rather than relying on a
+                        cron job to flip expired reservations, we bake the expiry check directly into our
+                        transaction:
+                    </p>
+                    <ol>
+                        <li>Begin transaction</li>
+                        <li>
+                            Check if ticket is
+                            <code>AVAILABLE</code>
+                            OR (
+                            <code>RESERVED</code>
+                            but expired)
+                        </li>
+                        <li>
+                            Update to
+                            <code>RESERVED</code>
+                            with expiration = now + 10 minutes
+                        </li>
+                        <li>Commit</li>
+                    </ol>
+                    <p>
+                        This eliminates the cron dependency for correctness. We can still run a sweep job for
+                        tidiness (keeping the table readable), but the system's
+                        <em>behavior</em>
+                        doesn't depend on it. The trade-off is slightly more complex read queries since every check
+                        needs to evaluate two conditions.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="deep-dive open" id="dd-redis">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-redis')">
+                <h4>🚀 Great: Redis Distributed Lock with TTL</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        The production-grade solution. PostgreSQL gives us strong consistency for the final booking,
+                        but it doesn't natively support row-level TTLs. Redis does — and since it's in-memory, lock
+                        acquisition is
+                        <strong>blazing fast</strong>
+                        under high concurrency.
+                    </p>
+                    <p>
+                        Here's how it works: when a user selects a seat, we acquire a Redis lock using
+                        <code>SET ticket:{id} user:{id} NX EX 600</code>
+                        (NX = set only if not exists, EX = expire in 600 seconds). This is an
+                        <strong>atomic</strong>
+                        operation — only one client wins. If the lock succeeds, the seat is reserved. If the TTL
+                        expires (user abandoned checkout), Redis automatically releases the lock. No cron jobs, no
+                        race conditions.
+                    </p>
+                    <p>
+                        The ticket table in PostgreSQL now only has two states:
+                        <code>available</code>
+                        and
+                        <code>booked</code>
+                        . All temporary reservation logic lives in Redis. When payment succeeds, we write the final
+                        state to PostgreSQL inside a transaction with OCC (Optimistic Concurrency Control) to
+                        guarantee no double-booking even if the Redis lock expired a split second before payment
+                        completed.
+                    </p>
+                    <p>
+                        For multi-seat bookings, acquire locks sequentially per ticket. If any lock fails, release
+                        the ones you already acquired. A Redis Lua script can make multi-lock acquisition atomic if
+                        tickets hash to the same node.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <p>Let's go with the Redis distributed lock. Here's the complete booking flow:</p>
+
+        <!-- DIAGRAM 4: Booking with Distributed Lock -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 4 — Booking Flow with Redis Distributed Lock</div>
+            <svg viewBox="0 0 780 520" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <rect width="780" height="520" fill="#fefefe" rx="12" />
+                <rect width="780" height="520" fill="url(#dotGrid)" rx="12" />
+
+                <!-- Step labels on left -->
+                <text x="20" y="75" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    font-weight="700">
+                    ① Select Seat
+                </text>
+                <text x="20" y="168" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    font-weight="700">
+                    ② Lock in Redis
+                </text>
+                <text x="20" y="245" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    font-weight="700">
+                    ③ Create Booking
+                </text>
+                <text x="20" y="325" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    font-weight="700">
+                    ④ Payment
+                </text>
+                <text x="20" y="430" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    font-weight="700">
+                    ⑤ Confirm
+                </text>
+
+                <!-- Client Column -->
+                <rect x="120" y="30" width="100" height="50" rx="10" fill="#eef6ff" stroke="#333" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="170" y="60" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">
+                    Client
+                </text>
+
+                <!-- Booking Service Column -->
+                <rect x="290" y="30" width="120" height="50" rx="10" fill="#fce4ec" stroke="#C4242D" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="350" y="60" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="600">
+                    Booking Svc
+                </text>
+
+                <!-- Redis Column -->
+                <rect x="480" y="30" width="100" height="50" rx="10" fill="#fff3e0" stroke="#e56b47" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="530" y="60" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">
+                    Redis
+                </text>
+
+                <!-- Stripe Column -->
+                <rect x="650" y="30" width="100" height="50" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="700" y="60" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">
+                    Stripe
+                </text>
+
+                <!-- Vertical lifelines -->
+                <line x1="170" y1="80" x2="170" y2="500" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="4,4" />
+                <line x1="350" y1="80" x2="350" y2="500" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="4,4" />
+                <line x1="530" y1="80" x2="530" y2="500" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="4,4" />
+                <line x1="700" y1="80" x2="700" y2="500" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="4,4" />
+
+                <!-- Step 1: Client → Booking (POST /bookings) -->
+                <path d="M 170 100 L 340 100" fill="none" stroke="#333" stroke-width="2" marker-end="url(#exArrow)"
+                    filter="url(#roughenLight)" />
+                <text x="255" y="93" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    POST /bookings
+                </text>
+
+                <!-- Step 2: Booking → Redis (SET NX EX) -->
+                <path d="M 350 145 L 520 145" fill="none" stroke="#e56b47" stroke-width="2" marker-end="url(#exArrow)"
+                    filter="url(#roughenLight)" />
+                <text x="435" y="138" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    SET ticket:id NX EX 600
+                </text>
+
+                <!-- Redis response -->
+                <path d="M 520 170 L 360 170" fill="none" stroke="#e56b47" stroke-width="1.5" stroke-dasharray="5,3"
+                    marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+                <text x="440" y="185" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    OK (locked for 10 min)
+                </text>
+
+                <!-- Step 3: Booking writes to DB -->
+                <rect x="310" y="215" width="160" height="35" rx="8" fill="#f5f5f7" stroke="#ccc" stroke-width="1"
+                    filter="url(#roughen)" />
+                <text x="390" y="237" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Write booking: in-progress
+                </text>
+
+                <!-- Step 4: Return bookingId to client -->
+                <path d="M 350 270 L 180 270" fill="none" stroke="#333" stroke-width="1.5" stroke-dasharray="5,3"
+                    marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+                <text x="265" y="263" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    bookingId + redirect
+                </text>
+
+                <!-- Step 5: Client → Stripe (payment) -->
+                <path d="M 170 310 L 690 310" fill="none" stroke="#2e7d32" stroke-width="2" marker-end="url(#exArrow)"
+                    filter="url(#roughenLight)" />
+                <text x="430" y="303" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Stripe.js tokenize → PaymentIntent
+                </text>
+
+                <!-- Timer box -->
+                <rect x="120" y="340" width="100" height="30" rx="6" fill="#fdf5f6" stroke="#C4242D" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <text x="170" y="360" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    ⏱ 9:47 left
+                </text>
+
+                <!-- Step 6: Stripe webhook → Booking -->
+                <path d="M 700 380 L 360 380" fill="none" stroke="#2e7d32" stroke-width="2" stroke-dasharray="6,4"
+                    marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+                <text x="530" y="373" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Webhook: payment_success
+                </text>
+
+                <!-- Step 7: Confirm -->
+                <rect x="290" y="410" width="180" height="50" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="380" y="433" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    ✓ Ticket → sold
+                </text>
+                <text x="380" y="450" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    ✓ Booking → confirmed
+                </text>
+
+                <!-- TTL expiry note -->
+                <rect x="480" y="420" width="150" height="40" rx="8" fill="#fff3e0" stroke="#e56b47" stroke-width="1.5"
+                    stroke-dasharray="5,3" filter="url(#roughen)" />
+                <text x="555" y="438" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    If TTL expires →
+                </text>
+                <text x="555" y="452" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    auto-release lock
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                The full booking flow: Redis lock → 10-minute timer → Stripe payment → webhook confirmation. If the
+                timer expires, Redis auto-releases.
+            </p>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Edge Case: TTL Expires During Payment</div>
+            <p>
+                What if User A's lock expires at minute 10 but Stripe confirms at minute 11? User B could have
+                grabbed the lock in between. The safety net is our PostgreSQL transaction with OCC — only one write
+                succeeds for a given ticket. The losing user gets an automatic Stripe refund. Set the TTL
+                generously, and consider extending the lock when payment is initiated.
+            </p>
+        </div>
+
+        <!-- Section 7: Deep Dive - Scaling Reads -->
+        <h2 id="deep-dive-scaling">
+            <span class="section-number">07</span>
+            Deep Dive: Scaling Reads for Viral Events
+        </h2>
+
+        <p>
+            When a massive event goes on sale, the event detail page gets absolutely
+            <strong>hammered</strong>
+            . Thousands of users refresh the same page waiting for tickets to drop. Our PostgreSQL database, no
+            matter how well-tuned, can't handle 10 million concurrent reads of the same event data.
+        </p>
+        <p>
+            The good news? Event details, venue information, and performer bios rarely change. This is a perfect
+            candidate for aggressive caching.
+        </p>
+
+        <h3>The Caching Strategy</h3>
+        <ul>
+            <li>
+                <strong>Read-through cache</strong>
+                with Redis or Memcached in front of PostgreSQL
+            </li>
+            <li>
+                Cache key-value pairs like
+                <code>event:{eventId}</code>
+                → serialized event object
+            </li>
+            <li>
+                <strong>Long TTLs</strong>
+                for static data (venue info, performer bios) — hours or days
+            </li>
+            <li>
+                <strong>Short TTLs</strong>
+                for dynamic data (ticket availability) — seconds to minutes
+            </li>
+            <li>
+                <strong>Event-driven invalidation</strong>
+                — database triggers notify the cache when event data changes
+            </li>
+        </ul>
+
+        <h3>Horizontal Scaling</h3>
+        <p>
+            The Event Service is stateless, so we can spin up as many instances as needed behind a load balancer.
+            Use
+            <strong>Least Connections</strong>
+            routing to distribute traffic evenly. During a major on-sale event, auto-scale the service fleet based
+            on request rate.
+        </p>
+
+        <!-- DIAGRAM 5: Caching Architecture -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 5 — Caching Architecture for High-Read Traffic</div>
+            <svg viewBox="0 0 780 380" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <rect width="780" height="380" fill="#fefefe" rx="12" />
+                <rect width="780" height="380" fill="url(#dotGrid)" rx="12" />
+
+                <!-- Clients -->
+                <rect x="30" y="50" width="80" height="50" rx="10" fill="#eef6ff" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <text x="70" y="80" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle">
+                    Client 1
+                </text>
+                <rect x="30" y="115" width="80" height="50" rx="10" fill="#eef6ff" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <text x="70" y="145" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle">
+                    Client 2
+                </text>
+                <rect x="30" y="180" width="80" height="50" rx="10" fill="#eef6ff" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <text x="70" y="210" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle">
+                    Client N
+                </text>
+
+                <!-- Arrows to LB -->
+                <path d="M 110 75 L 158 120" fill="none" stroke="#333" stroke-width="1.5" marker-end="url(#exArrow)"
+                    filter="url(#roughenLight)" />
+                <path d="M 110 140 L 158 140" fill="none" stroke="#333" stroke-width="1.5" marker-end="url(#exArrow)"
+                    filter="url(#roughenLight)" />
+                <path d="M 110 205 L 158 160" fill="none" stroke="#333" stroke-width="1.5" marker-end="url(#exArrow)"
+                    filter="url(#roughenLight)" />
+
+                <!-- Load Balancer -->
+                <rect x="165" y="105" width="85" height="70" rx="10" fill="#fff3e0" stroke="#e56b47" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="207" y="138" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    Load
+                </text>
+                <text x="207" y="155" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    Balancer
+                </text>
+
+                <!-- Arrows to Event Services -->
+                <path d="M 250 125 L 298 90" fill="none" stroke="#333" stroke-width="1.5" marker-end="url(#exArrow)"
+                    filter="url(#roughenLight)" />
+                <path d="M 250 155 L 298 175" fill="none" stroke="#333" stroke-width="1.5" marker-end="url(#exArrow)"
+                    filter="url(#roughenLight)" />
+
+                <!-- Event Service 1 -->
+                <rect x="305" y="55" width="110" height="65" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="360" y="85" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    Event Svc ①
+                </text>
+                <text x="360" y="102" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Stateless
+                </text>
+
+                <!-- Event Service 2 -->
+                <rect x="305" y="145" width="110" height="65" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="360" y="175" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    Event Svc ②
+                </text>
+                <text x="360" y="192" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Stateless
+                </text>
+
+                <!-- Arrows to Cache -->
+                <path d="M 415 87 L 478 110" fill="none" stroke="#C4242D" stroke-width="2" marker-end="url(#exArrowRed)"
+                    filter="url(#roughenLight)" />
+                <path d="M 415 177 L 478 150" fill="none" stroke="#C4242D" stroke-width="2"
+                    marker-end="url(#exArrowRed)" filter="url(#roughenLight)" />
+
+                <!-- Redis Cache -->
+                <rect x="485" y="85" width="130" height="95" rx="10" fill="#fce4ec" stroke="#C4242D" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="550" y="118" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">
+                    Redis
+                </text>
+                <text x="550" y="138" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">
+                    Cache
+                </text>
+                <text x="550" y="160" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Read-Through
+                </text>
+
+                <!-- Cache miss arrow to DB -->
+                <path d="M 550 180 C 550 210, 550 230, 550 255" fill="none" stroke="#333" stroke-width="1.5"
+                    stroke-dasharray="5,3" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+                <text x="575" y="220" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    miss
+                </text>
+
+                <!-- PostgreSQL -->
+                <ellipse cx="550" cy="260" rx="55" ry="16" fill="#e8f5e9" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <path d="M 495 260 L 495 300" stroke="#333" stroke-width="1.5" filter="url(#roughenLight)" />
+                <path d="M 605 260 L 605 300" stroke="#333" stroke-width="1.5" filter="url(#roughenLight)" />
+                <ellipse cx="550" cy="300" rx="55" ry="16" fill="#e8f5e9" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <rect x="495" y="260" width="110" height="40" fill="#e8f5e9" stroke="none" />
+                <text x="550" y="285" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    PostgreSQL
+                </text>
+
+                <!-- Invalidation triggers -->
+                <rect x="30" y="280" width="240" height="80" rx="10" fill="#fefaf6" stroke="#e0e0e0" stroke-width="1.5"
+                    stroke-dasharray="6,4" filter="url(#roughen)" />
+                <text x="150" y="305" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    Cache Invalidation
+                </text>
+                <text x="48" y="325" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10">
+                    ⚡ Event data updated by admin
+                </text>
+                <text x="48" y="345" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10">
+                    ⚡ TTL expiration (long for static)
+                </text>
+
+                <!-- Cache hit label -->
+                <rect x="625" y="105" width="80" height="30" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <text x="665" y="125" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="600">
+                    ~99% hits
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Multiple stateless Event Service instances sit behind a load balancer, all backed by a shared Redis
+                cache. Cache hits serve ~99% of requests.
+            </p>
+        </div>
+
+        <!-- Section 8: Deep Dive - Real-Time -->
+        <h2 id="deep-dive-realtime">
+            <span class="section-number">08</span>
+            Deep Dive: Real-Time Seat Maps & Waiting Rooms
+        </h2>
+
+        <p>
+            With popular events, the seat map goes stale
+            <em>fast</em>
+            . Users click on a seat, get an error because someone else grabbed it a second ago, and frustration
+            builds. We need real-time updates and, for truly viral events, a way to control the stampede altogether.
+        </p>
+
+        <h3>Server-Sent Events for Live Seat Updates</h3>
+        <p>
+            For moderately popular events, we can use
+            <strong>Server-Sent Events (SSE)</strong>
+            to push seat status changes to the client in real-time. SSE is a unidirectional channel from server to
+            client — perfect for broadcasting "seat A12 just got reserved" without the overhead of a full WebSocket
+            connection.
+        </p>
+        <p>
+            When any seat's status changes (reserved or booked), the Booking Service publishes an event. All
+            connected clients viewing that event's seat map receive the update instantly, and the UI greys out the
+            taken seat without a page refresh.
+        </p>
+
+        <h3>Virtual Waiting Room for Viral Events</h3>
+        <p>
+            But SSE alone won't save us during the "Taylor Swift problem." When 10 million users hit the booking
+            page simultaneously, the seat map becomes a chaotic seizure of disappearing seats. A better experience:
+            <strong>don't show the seat map until it's your turn.</strong>
+        </p>
+
+        <!-- DIAGRAM 6: Virtual Waiting Room -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 6 — Virtual Waiting Room Architecture</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGrid)" rx="12" />
+
+                <!-- Queue of users -->
+                <rect x="30" y="120" width="120" height="180" rx="12" fill="#eef6ff" stroke="#333" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="90" y="155" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="600">
+                    Waiting Users
+                </text>
+                <text x="90" y="185" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="22"
+                    text-anchor="middle">
+                    👤👤👤
+                </text>
+                <text x="90" y="215" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="22"
+                    text-anchor="middle">
+                    👤👤👤
+                </text>
+                <text x="90" y="245" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="22"
+                    text-anchor="middle">
+                    👤👤👤
+                </text>
+                <text x="90" y="275" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle">
+                    10M+ in queue
+                </text>
+
+                <!-- Arrow to Queue Service -->
+                <path d="M 150 210 C 170 208, 190 212, 215 210" fill="none" stroke="#333" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+
+                <!-- Queue Service -->
+                <rect x="222" y="135" width="140" height="150" rx="10" fill="#fff3e0" stroke="#e56b47" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="292" y="175" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">
+                    Queue
+                </text>
+                <text x="292" y="195" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">
+                    Service
+                </text>
+                <text x="292" y="222" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Redis Sorted Set
+                </text>
+                <text x="292" y="238" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    SSE position updates
+                </text>
+                <text x="292" y="268" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    ⏱ "You are #4,521"
+                </text>
+
+                <!-- Arrow: dequeue -->
+                <path d="M 362 210 C 382 208, 402 212, 425 210" fill="none" stroke="#2e7d32" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+                <text x="393" y="198" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Admit
+                </text>
+
+                <!-- Admitted Users → Booking -->
+                <rect x="432" y="135" width="140" height="150" rx="10" fill="#fce4ec" stroke="#C4242D" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="502" y="175" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">
+                    Booking
+                </text>
+                <text x="502" y="195" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">
+                    Service
+                </text>
+                <text x="502" y="222" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Seat map shown
+                </text>
+                <text x="502" y="238" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    SSE seat updates
+                </text>
+                <text x="502" y="260" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Reserve → Pay → Confirm
+                </text>
+
+                <!-- Redis: Admitted Set -->
+                <rect x="432" y="310" width="140" height="55" rx="10" fill="#fff3e0" stroke="#e56b47" stroke-width="1.5"
+                    stroke-dasharray="5,3" filter="url(#roughen)" />
+                <text x="502" y="335" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    Redis: admitted set
+                </text>
+                <text x="502" y="352" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Session ID + TTL
+                </text>
+
+                <!-- Arrow: Booking ↔ Admitted -->
+                <path d="M 502 285 C 502 292, 502 300, 502 308" fill="none" stroke="#e56b47" stroke-width="1.5"
+                    stroke-dasharray="4,3" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+
+                <!-- Arrow to DB/Stripe -->
+                <path d="M 572 210 C 600 208, 620 212, 645 210" fill="none" stroke="#C4242D" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrowRed)" filter="url(#roughenLight)" />
+
+                <!-- DB + Stripe -->
+                <rect x="652" y="155" width="100" height="110" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="702" y="195" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="600">
+                    PostgreSQL
+                </text>
+                <text x="702" y="215" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="600">
+                    + Stripe
+                </text>
+                <text x="702" y="240" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Final confirmation
+                </text>
+
+                <!-- Admin toggle -->
+                <rect x="222" y="50" width="140" height="40" rx="8" fill="#f5f5f7" stroke="#ccc" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <text x="292" y="72" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    🔧 Admin-enabled per event
+                </text>
+                <path d="M 292 90 L 292 133" fill="none" stroke="#ccc" stroke-width="1" stroke-dasharray="4,3"
+                    filter="url(#roughenLight)" />
+            </svg>
+            <p class="diagram-caption">
+                For viral events, users enter a virtual queue. The Queue Service uses SSE to push position updates
+                and gradually admits users to the booking page.
+            </p>
+        </div>
+
+        <p>
+            The queue is backed by a
+            <strong>Redis sorted set</strong>
+            (timestamp as score for FIFO ordering). Users get SSE updates with their position and estimated wait
+            time. When admitted, their session ID is added to an
+            <code>admitted:{eventId}</code>
+            set in Redis with a TTL. The Booking Service checks this set before allowing any reservation —
+            unadmitted users are rejected.
+        </p>
+
+        <!-- Section 9: Deep Dive - Search + Final -->
+        <h2 id="deep-dive-search">
+            <span class="section-number">09</span>
+            Deep Dive: Search at Scale & Final Architecture
+        </h2>
+
+        <p>
+            Our current search implementation queries PostgreSQL directly. Let's be honest about what that means at
+            scale:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">SQL</span>
+            <code>
+                    <span class="comment">-- This is a performance disaster</span>
+                    <span class="keyword">SELECT</span>
+                    *
+                    <span class="keyword">FROM</span>
+                    Events
+                    <span class="keyword">WHERE</span>
+                    name
+                    <span class="keyword">LIKE</span>
+                    <span class="string">'%Taylor%'</span>
+                    <span class="keyword">OR</span>
+                    description
+                    <span class="keyword">LIKE</span>
+                    <span class="string">'%Taylor%'</span>
+                </code>
+        </div>
+
+        <p>
+            That
+            <code>LIKE '%Taylor%'</code>
+            wildcard forces a
+            <strong>full table scan</strong>
+            . No index can help with a leading wildcard. As the events table grows, this query gets slower and
+            slower. We need something purpose-built for text search.
+        </p>
+
+        <h3>The Evolution of Search</h3>
+
+        <div class="deep-dive" id="dd-indexes">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-indexes')">
+                <h4>Step 1: Database Indexes & Full-Text Search</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Start with B-tree indexes on frequently queried columns (event date, performer name, venue
+                        location). Then layer on PostgreSQL's built-in
+                        <strong>full-text search</strong>
+                        using
+                        <code>tsvector</code>
+                        and GIN indexes. This turns "Taylor" into a fast token lookup instead of a wildcard scan.
+                    </p>
+                    <p>
+                        This handles exact and stemmed word matching well, but falls short on fuzzy matching. When
+                        someone types "Tayler Swft," PostgreSQL's full-text search won't help.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="deep-dive open" id="dd-elastic">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-elastic')">
+                <h4>Step 2: Elasticsearch + CDC for Real-Time Sync</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        For production-grade search, add
+                        <strong>Elasticsearch</strong>
+                        . It uses inverted indexes for sub-millisecond full-text search, supports fuzzy matching
+                        (handling typos like "Tayler Swft" → "Taylor Swift"), and excels at complex multi-field
+                        queries.
+                    </p>
+                    <p>
+                        To keep Elasticsearch in sync with PostgreSQL, use
+                        <strong>Change Data Capture (CDC)</strong>
+                        — tools like Debezium stream every insert, update, and delete from PostgreSQL into the
+                        Elasticsearch index in near real-time.
+                    </p>
+                    <p>
+                        Layer a
+                        <strong>search result cache</strong>
+                        (Redis, keyed by query parameters with a 24-hour TTL) on top to serve repeated queries
+                        without hitting Elasticsearch at all. Elasticsearch also has built-in shard-level query
+                        caching for frequently accessed data.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- DIAGRAM 7: Search Architecture -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 7 — Elasticsearch Search Architecture with CDC</div>
+            <svg viewBox="0 0 780 420" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <rect width="780" height="420" fill="#fefefe" rx="12" />
+                <rect width="780" height="420" fill="url(#dotGrid)" rx="12" />
+
+                <!-- Client -->
+                <rect x="30" y="50" width="100" height="70" rx="10" fill="#eef6ff" stroke="#333" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="80" y="82" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="600">
+                    🔍 Client
+                </text>
+                <text x="80" y="102" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    "Tayler Swft"
+                </text>
+
+                <!-- Arrow to Search Service -->
+                <path d="M 130 85 C 155 83, 175 87, 200 85" fill="none" stroke="#333" stroke-width="2"
+                    marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+
+                <!-- Search Service -->
+                <rect x="207" y="40" width="130" height="90" rx="10" fill="#fce4ec" stroke="#C4242D" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="272" y="73" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">
+                    Search
+                </text>
+                <text x="272" y="93" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">
+                    Service
+                </text>
+                <text x="272" y="118" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Fuzzy · Paginate
+                </text>
+
+                <!-- Arrow to Cache -->
+                <path d="M 272 130 C 272 150, 272 165, 272 182" fill="none" stroke="#C4242D" stroke-width="2"
+                    marker-end="url(#exArrowRed)" filter="url(#roughenLight)" />
+                <text x="290" y="157" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    check cache
+                </text>
+
+                <!-- Search Cache -->
+                <rect x="207" y="185" width="130" height="65" rx="10" fill="#fff3e0" stroke="#e56b47" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="272" y="215" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="600">
+                    Search Cache
+                </text>
+                <text x="272" y="235" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Redis · TTL 24h
+                </text>
+
+                <!-- Arrow (miss) to Elasticsearch -->
+                <path d="M 337 218 C 360 216, 385 220, 410 218" fill="none" stroke="#333" stroke-width="1.5"
+                    stroke-dasharray="5,3" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+                <text x="373" y="208" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    miss
+                </text>
+
+                <!-- Elasticsearch -->
+                <rect x="417" y="50" width="160" height="130" rx="10" fill="#e3f2fd" stroke="#0066cc" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="497" y="90" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="16"
+                    text-anchor="middle" font-weight="600">
+                    Elasticsearch
+                </text>
+                <text x="497" y="118" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Inverted Index
+                </text>
+                <text x="497" y="135" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Fuzzy Matching
+                </text>
+                <text x="497" y="152" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Shard-Level Cache
+                </text>
+
+                <!-- CDC Pipeline -->
+                <rect x="417" y="250" width="160" height="65" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"
+                    stroke-dasharray="5,3" filter="url(#roughen)" />
+                <text x="497" y="278" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="600">
+                    CDC Pipeline
+                </text>
+                <text x="497" y="298" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Debezium / Kafka
+                </text>
+
+                <!-- Arrow: CDC → ES -->
+                <path d="M 497 250 C 497 230, 497 210, 497 182" fill="none" stroke="#2e7d32" stroke-width="2"
+                    stroke-dasharray="5,3" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+                <text x="515" y="220" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    sync
+                </text>
+
+                <!-- PostgreSQL -->
+                <ellipse cx="497" cy="355" rx="55" ry="16" fill="#e8f5e9" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <path d="M 442 355 L 442 390" stroke="#333" stroke-width="1.5" filter="url(#roughenLight)" />
+                <path d="M 552 355 L 552 390" stroke="#333" stroke-width="1.5" filter="url(#roughenLight)" />
+                <ellipse cx="497" cy="390" rx="55" ry="16" fill="#e8f5e9" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <rect x="442" y="355" width="110" height="35" fill="#e8f5e9" stroke="none" />
+                <text x="497" y="378" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="600">
+                    PostgreSQL
+                </text>
+
+                <!-- Arrow: PG → CDC -->
+                <path d="M 497 340 C 497 330, 497 320, 497 315" fill="none" stroke="#2e7d32" stroke-width="2"
+                    marker-end="url(#exArrow)" filter="url(#roughenLight)" />
+                <text x="515" y="332" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    WAL
+                </text>
+
+                <!-- Fuzzy match demo -->
+                <rect x="620" y="75" width="135" height="65" rx="10" fill="#fdf5f6" stroke="#C4242D" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <text x="687" y="97" fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="600">
+                    Fuzzy Match
+                </text>
+                <text x="687" y="115" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    "Tayler Swft"
+                </text>
+                <text x="687" y="130" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    → Taylor Swift ✓
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Elasticsearch handles fuzzy search, CDC keeps it in sync with PostgreSQL, and Redis caches repeated
+                queries. A typo like "Tayler Swft" still finds the right event.
+            </p>
+        </div>
+
+        <h3>Final Architecture Summary</h3>
+        <p>
+            Let's zoom out and see the complete picture — every component, every technology choice, and why it's
+            there.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Component</th>
+                    <th>Technology</th>
+                    <th>Rationale</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>API Gateway</td>
+                    <td>Kong / AWS API GW</td>
+                    <td>Auth, rate limiting, request routing</td>
+                </tr>
+                <tr>
+                    <td>Event Service</td>
+                    <td>Stateless microservice</td>
+                    <td>Horizontally scaled, serves event/venue/performer data</td>
+                </tr>
+                <tr>
+                    <td>Search Service</td>
+                    <td>Stateless microservice</td>
+                    <td>Delegates to Elasticsearch, caches hot queries</td>
+                </tr>
+                <tr>
+                    <td>Booking Service</td>
+                    <td>Stateless microservice</td>
+                    <td>Reservation, payment integration, confirmation</td>
+                </tr>
+                <tr>
+                    <td>Primary Database</td>
+                    <td>PostgreSQL</td>
+                    <td>ACID transactions, source of truth for all entities</td>
+                </tr>
+                <tr>
+                    <td>Distributed Lock</td>
+                    <td>Redis (SET NX EX)</td>
+                    <td>10-minute seat reservation with auto-expiry</td>
+                </tr>
+                <tr>
+                    <td>Event / Read Cache</td>
+                    <td>Redis / Memcached</td>
+                    <td>Absorbs 99% of read traffic for event pages</td>
+                </tr>
+                <tr>
+                    <td>Search Engine</td>
+                    <td>Elasticsearch</td>
+                    <td>Full-text, fuzzy search with inverted indexes</td>
+                </tr>
+                <tr>
+                    <td>Data Sync</td>
+                    <td>Debezium / Kafka CDC</td>
+                    <td>Real-time PostgreSQL → Elasticsearch sync</td>
+                </tr>
+                <tr>
+                    <td>Real-Time Updates</td>
+                    <td>SSE (Server-Sent Events)</td>
+                    <td>Push seat availability changes to clients</td>
+                </tr>
+                <tr>
+                    <td>Virtual Queue</td>
+                    <td>Redis Sorted Set + SSE</td>
+                    <td>Manages stampede for viral events</td>
+                </tr>
+                <tr>
+                    <td>Payment</td>
+                    <td>Stripe (Webhooks)</td>
+                    <td>PCI-compliant, idempotent webhook handling</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>What's Expected at Each Level?</h3>
+        <p>
+            Interviewers calibrate expectations based on seniority. Here's a rough guide for the BookMyShow problem:
+        </p>
+
+        <div class="level-grid reveal-element">
+            <div class="level-card mid">
+                <div class="level-label">Mid-Level (E4)</div>
+                <h4>Build the Foundation</h4>
+                <p>
+                    Clearly define API endpoints and data model. Land on a functional HLD covering viewing,
+                    searching, and booking. Solve "no double booking" with at least the status field + cron
+                    approach.
+                </p>
+                <span class="level-focus">80% Breadth · 20% Depth</span>
+            </div>
+            <div class="level-card senior">
+                <div class="level-label">Senior (E5)</div>
+                <h4>Drive the Depth</h4>
+                <p>
+                    Speed through the HLD, then spend time on distributed locking, Elasticsearch for search, and
+                    caching strategies. Proactively surface the "stale seat map" problem and propose SSE.
+                </p>
+                <span class="level-focus">60% Breadth · 40% Depth</span>
+            </div>
+            <div class="level-card staff">
+                <div class="level-label">Staff+ (E6)</div>
+                <h4>Own the Conversation</h4>
+                <p>
+                    Breeze through the basics, then deep-dive into Redis TTL edge cases, CDC consistency guarantees,
+                    virtual waiting rooms, and Stripe webhook idempotency. The interviewer follows your lead.
+                </p>
+                <span class="level-focus">40% Breadth · 60% Depth</span>
+            </div>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Final Thought</div>
+            <p>
+                The best candidates don't just build a system that works — they build a system with
+                <strong>tunable knobs</strong>
+                . Redis TTLs, cache expiration strategies, queue admission rates, Elasticsearch fuzzy thresholds —
+                these parameters give operations teams control without requiring code changes. That's what separates
+                textbook architecture from production-ready engineering.
+            </p>
+        </div>
+    </article>
+
+    <!-- Author Footer -->
+    <div class="article-footer">
+        <div class="author-card reveal-element">
+            <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar" />
+            <div class="author-info">
+                <h4>Ajay Kotnala</h4>
+                <div class="author-role">Senior Solution Architect · NTT</div>
+                <p>
+                    15+ years designing cloud-native, event-driven architectures at enterprise scale. Passionate
+                    about system design, API-first thinking, and making complex systems feel simple.
+                </p>
+            </div>
+        </div>
+        <div class="back-links-row">
+            <a href="../index.html" class="back-link">← Back to Portfolio</a>
+            <a href="./index.html" class="back-link">Back to System Design Articles →</a>
+        </div>
+    </div>
+
+    <!-- Global Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-bottom">
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank">LinkedIn</a>
+                    <a href="https://github.com/ajaykotnala" target="_blank">GitHub</a>
+                    <a href="https://medium.com/@ajay.kotnalajpr" target="_blank">Medium</a>
+                </div>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll Progress Bar
+        window.addEventListener("scroll", () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrollTop / docHeight) * 100;
+            document.getElementById("progressBar").style.width = progress + "%";
+        });
+
+        // Intersection Observer for scroll-reveal animations
+        document.addEventListener("DOMContentLoaded", () => {
+            const observerOptions = {
+                threshold: 0.12,
+                rootMargin: "0px 0px -40px 0px",
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("active");
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll(".reveal-element").forEach((el) => {
+                observer.observe(el);
+            });
+        });
+
+        // Deep Dive Accordion
+        function toggleDeepDive(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle("open");
+        }
+
+        // Smooth scroll for TOC and anchor links
+        document.querySelectorAll('.toc a, a[href^="#"]').forEach((anchor) => {
+            anchor.addEventListener("click", function (e) {
+                const targetId = this.getAttribute("href");
+                if (targetId.startsWith("#")) {
+                    e.preventDefault();
+                    const target = document.querySelector(targetId);
+                    if (target) {
+                        // Nav offset: global nav (44px) + sub nav (52px) + padding
+                        const offset = 110;
+                        const targetPosition = target.getBoundingClientRect().top + window.scrollY - offset;
+                        window.scrollTo({ top: targetPosition, behavior: "smooth" });
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

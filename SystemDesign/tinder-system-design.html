@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Designing Tinder at Scale — System Design Deep Dive | Ajay Kotnala</title>
-    <meta name="description" content="A comprehensive system design breakdown of Tinder — covering feed generation, swiping consistency, geo-spatial indexing, and scaling to 20M daily active users. Written by Ajay Kotnala, Senior Solution Architect.">
-    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
+    <meta name="description"
+        content="A comprehensive system design breakdown of Tinder — covering feed generation, swiping consistency, geo-spatial indexing, and scaling to 20M daily active users. Written by Ajay Kotnala, Senior Solution Architect.">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+        rel="stylesheet">
     <style>
         /* ===== Apple Design Tokens (matching index.html) ===== */
         :root {
@@ -496,7 +500,8 @@
             letter-spacing: -0.003em;
         }
 
-        .article-body ul, .article-body ol {
+        .article-body ul,
+        .article-body ol {
             margin-bottom: 1.5rem;
             padding-left: 1.5rem;
         }
@@ -607,11 +612,26 @@
             border-radius: 0;
         }
 
-        .code-block .keyword { color: #cf222e; }
-        .code-block .string { color: #0a3069; }
-        .code-block .comment { color: #6e7781; font-style: italic; }
-        .code-block .type { color: #953800; }
-        .code-block .number { color: #0550ae; }
+        .code-block .keyword {
+            color: #cf222e;
+        }
+
+        .code-block .string {
+            color: #0a3069;
+        }
+
+        .code-block .comment {
+            color: #6e7781;
+            font-style: italic;
+        }
+
+        .code-block .type {
+            color: #953800;
+        }
+
+        .code-block .number {
+            color: #0550ae;
+        }
 
         /* ===== Entity Cards ===== */
         .entity-grid {
@@ -785,8 +805,15 @@
             background: var(--color-canvas-parchment);
         }
 
-        .check-icon { color: var(--color-primary); font-weight: 700; }
-        .cross-icon { color: var(--color-body-muted); font-weight: 700; }
+        .check-icon {
+            color: var(--color-primary);
+            font-weight: 700;
+        }
+
+        .cross-icon {
+            color: var(--color-body-muted);
+            font-weight: 700;
+        }
 
         /* ===== Scale Numbers ===== */
         .scale-stats {
@@ -948,9 +975,17 @@
             height: 3px;
         }
 
-        .level-card.mid::before { background: var(--color-primary); }
-        .level-card.senior::before { background: var(--tinder-orange); }
-        .level-card.staff::before { background: var(--tinder-pink); }
+        .level-card.mid::before {
+            background: var(--color-primary);
+        }
+
+        .level-card.senior::before {
+            background: var(--tinder-orange);
+        }
+
+        .level-card.staff::before {
+            background: var(--tinder-pink);
+        }
 
         .level-label {
             font-family: var(--font-mono);
@@ -961,9 +996,17 @@
             font-weight: 700;
         }
 
-        .level-card.mid .level-label { color: var(--color-primary); }
-        .level-card.senior .level-label { color: var(--tinder-orange); }
-        .level-card.staff .level-label { color: var(--tinder-pink); }
+        .level-card.mid .level-label {
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-label {
+            color: var(--tinder-orange);
+        }
+
+        .level-card.staff .level-label {
+            color: var(--tinder-pink);
+        }
 
         .level-card h4 {
             font-family: var(--font-ui);
@@ -990,9 +1033,20 @@
             font-weight: 600;
         }
 
-        .level-card.mid .level-focus { background: #eef6ff; color: var(--color-primary); }
-        .level-card.senior .level-focus { background: #fef3ef; color: var(--tinder-orange); }
-        .level-card.staff .level-focus { background: #fdf5f6; color: var(--tinder-pink); }
+        .level-card.mid .level-focus {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-focus {
+            background: #fef3ef;
+            color: var(--tinder-orange);
+        }
+
+        .level-card.staff .level-focus {
+            background: #fdf5f6;
+            color: var(--tinder-pink);
+        }
 
         /* ===== Author Footer Card ===== */
         .article-footer {
@@ -1017,7 +1071,7 @@
             border-radius: 50%;
             object-fit: cover;
             border: 3px solid var(--color-canvas);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
             flex-shrink: 0;
         }
 
@@ -1043,11 +1097,18 @@
             line-height: 1.55 !important;
         }
 
+        .back-links-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
         .back-link {
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
-            margin-top: 1.5rem;
             color: var(--color-primary);
             text-decoration: none;
             font-family: var(--font-ui);
@@ -1108,24 +1169,71 @@
 
         /* ===== Responsive ===== */
         @media (max-width: 833px) {
-            .global-nav-links { display: none; }
-            .sub-nav-container { padding: 0 16px; }
-            .article-hero { padding: calc(96px + 2rem) 1.5rem 3rem; }
-            .article-body { padding: 0 1.5rem 4rem; }
-            .toc-wrapper { padding: 0 1.5rem; }
-            .entity-grid { grid-template-columns: 1fr; }
-            .scale-stats { grid-template-columns: 1fr 1fr; }
-            .level-grid { grid-template-columns: 1fr; }
-            .author-card { flex-direction: column; text-align: center; }
-            .diagram-container { margin: 2rem -1rem; padding: 1.5rem 1rem; }
-            .comparison-table { font-size: 14px; }
-            .comparison-table th, .comparison-table td { padding: 8px 10px; }
-            .author-bar { padding: 0 1.5rem; }
+            .global-nav-links {
+                display: none;
+            }
+
+            .sub-nav-container {
+                padding: 0 16px;
+            }
+
+            .article-hero {
+                padding: calc(96px + 2rem) 1.5rem 3rem;
+            }
+
+            .article-body {
+                padding: 0 1.5rem 4rem;
+            }
+
+            .toc-wrapper {
+                padding: 0 1.5rem;
+            }
+
+            .entity-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .scale-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .level-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .author-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .diagram-container {
+                margin: 2rem -1rem;
+                padding: 1.5rem 1rem;
+            }
+
+            .comparison-table {
+                font-size: 14px;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 8px 10px;
+            }
+
+            .author-bar {
+                padding: 0 1.5rem;
+            }
         }
 
         @media (max-width: 480px) {
-            .scale-stats { grid-template-columns: 1fr; }
-            .footer-bottom { flex-direction: column; align-items: flex-start; }
+            .scale-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                align-items: flex-start;
+            }
         }
 
         /* ===== Animations ===== */
@@ -1141,6 +1249,7 @@
         }
     </style>
 </head>
+
 <body>
 
     <!-- Progress Bar -->
@@ -1149,16 +1258,9 @@
     <!-- 1. Global Navigation Bar -->
     <header class="global-nav">
         <div class="global-nav-container">
-            <a href="index.html" class="global-nav-logo">
-                <span class="logo-icon">[A]</span> Ajay Kotnala
+            <a href="../index.html" class="global-nav-logo">
+                <span class="logo-icon">[AK]</span> Ajay Kotnala
             </a>
-            <ul class="global-nav-links">
-                <li><a href="index.html#about">About</a></li>
-                <li><a href="index.html#skills">Skills</a></li>
-                <li><a href="index.html#experience">Experience</a></li>
-                <li><a href="index.html#projects">Projects</a></li>
-                <li><a href="index.html#contact">Contact</a></li>
-            </ul>
             <div class="global-nav-actions">
                 <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
                     <svg class="nav-icon" viewBox="0 0 24 24">
@@ -1187,8 +1289,9 @@
         <div class="sub-nav-container">
             <a href="#" class="sub-nav-title">System Design</a>
             <div class="sub-nav-right">
-                <a href="index.html" class="sub-nav-link">Portfolio</a>
-                <a href="index.html#contact" class="sub-nav-button">Get in Touch</a>
+                <a href="./index.html" class="sub-nav-link">System Design Articles</a>
+                <a href="../index.html" class="sub-nav-link">Portfolio</a>
+                <a href="../index.html#contact" class="sub-nav-button">Get in Touch</a>
             </div>
         </div>
     </nav>
@@ -1203,14 +1306,16 @@
             </div>
             <h1>Designing <span class="gradient-text">Tinder</span> at Scale:<br>A System Design Deep Dive</h1>
             <p class="article-hero-desc">
-                How do you architect a system where millions of people are furiously swiping, every second hoping the next profile might be <em>"the one"</em>? Let's break it down — from feed generation and geo-spatial queries to swipe consistency and push notifications.
+                How do you architect a system where millions of people are furiously swiping, every second hoping the
+                next profile might be <em>"the one"</em>? Let's break it down — from feed generation and geo-spatial
+                queries to swipe consistency and push notifications.
             </p>
         </div>
     </section>
 
     <!-- Author Bar (Medium-style) -->
     <div class="author-bar reveal-element active">
-        <img src="ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar">
+        <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar">
         <div class="author-bar-info">
             <div class="author-bar-name">Ajay Kotnala</div>
             <div class="author-bar-meta">Senior Solution Architect · July 2026 · 18 min read</div>
@@ -1242,18 +1347,27 @@
         <h2 id="understanding"><span class="section-number">01</span>Understanding the Problem</h2>
 
         <p>
-            At its core, Tinder is deceptively simple. You open the app, see a profile, and make a snap judgment — swipe right if you're interested, swipe left if you're not. If two people swipe right on each other, <strong>boom</strong>, it's a match, and the conversation can begin.
+            At its core, Tinder is deceptively simple. You open the app, see a profile, and make a snap judgment — swipe
+            right if you're interested, swipe left if you're not. If two people swipe right on each other,
+            <strong>boom</strong>, it's a match, and the conversation can begin.
         </p>
         <p>
-            But beneath that buttery-smooth swiping experience lies a monster of a system. We're talking about <strong>20 million daily active users</strong>, each firing off roughly 100 swipes per day. That's 2 billion swipes. <em>Per day.</em> And every single one of those swipes needs to be processed quickly, consistently, and without showing the same profile twice.
+            But beneath that buttery-smooth swiping experience lies a monster of a system. We're talking about
+            <strong>20 million daily active users</strong>, each firing off roughly 100 swipes per day. That's 2 billion
+            swipes. <em>Per day.</em> And every single one of those swipes needs to be processed quickly, consistently,
+            and without showing the same profile twice.
         </p>
         <p>
-            The beauty of this system design question — and what makes it a favorite in interviews — is that it forces you to think about the full stack: real-time geolocation, massive write throughput, consistency guarantees, and a recommendation feed that loads faster than the user can lose patience.
+            The beauty of this system design question — and what makes it a favorite in interviews — is that it forces
+            you to think about the full stack: real-time geolocation, massive write throughput, consistency guarantees,
+            and a recommendation feed that loads faster than the user can lose patience.
         </p>
 
         <div class="callout callout-insight">
             <div class="callout-label">💡 Interview Tip</div>
-            <p>This question focuses on the <strong>recommendation feed and swiping experience</strong>, not on chat, image uploads, or premium features. If you're unsure what to prioritize, have a quick conversation with your interviewer — they'll steer you toward the most complex or unique functionality.</p>
+            <p>This question focuses on the <strong>recommendation feed and swiping experience</strong>, not on chat,
+                image uploads, or premium features. If you're unsure what to prioritize, have a quick conversation with
+                your interviewer — they'll steer you toward the most complex or unique functionality.</p>
         </div>
 
         <!-- Section 2: Requirements -->
@@ -1263,7 +1377,8 @@
         <p>Let's keep our scope tight. These are the features we <em>need</em> to build:</p>
         <ul>
             <li><strong>Profile creation</strong> with preferences — age range, interests, maximum distance</li>
-            <li><strong>Feed generation</strong> — a stack of potential matches filtered by the user's preferences and current location</li>
+            <li><strong>Feed generation</strong> — a stack of potential matches filtered by the user's preferences and
+                current location</li>
             <li><strong>Swiping</strong> — right for "yes," left for "no," processed one at a time</li>
             <li><strong>Match notification</strong> — both users are notified when there's a mutual "yes"</li>
         </ul>
@@ -1331,19 +1446,23 @@
         <h2 id="entities"><span class="section-number">03</span>Core Entities & Data Model</h2>
 
         <p>
-            Before we jump into designing APIs or drawing architecture diagrams, let's ground ourselves with the fundamental data objects our system revolves around. Think of these as the <em>nouns</em> in our system's vocabulary.
+            Before we jump into designing APIs or drawing architecture diagrams, let's ground ourselves with the
+            fundamental data objects our system revolves around. Think of these as the <em>nouns</em> in our system's
+            vocabulary.
         </p>
 
         <div class="entity-grid reveal-element">
             <div class="entity-card">
                 <div class="entity-icon">👤</div>
                 <h4>User</h4>
-                <p>A person using the app — both as the active swiper <em>and</em> as a profile shown to others. Includes preferences like age range, interests, and max distance.</p>
+                <p>A person using the app — both as the active swiper <em>and</em> as a profile shown to others.
+                    Includes preferences like age range, interests, and max distance.</p>
             </div>
             <div class="entity-card">
                 <div class="entity-icon">👆</div>
                 <h4>Swipe</h4>
-                <p>An expression of "yes" or "no" on another profile. Belongs to a <code>swiping_user</code> and references a <code>target_user</code>.</p>
+                <p>An expression of "yes" or "no" on another profile. Belongs to a <code>swiping_user</code> and
+                    references a <code>target_user</code>.</p>
             </div>
             <div class="entity-card">
                 <div class="entity-icon">💕</div>
@@ -1353,14 +1472,17 @@
         </div>
 
         <p>
-            Nothing earth-shattering here, and that's fine. The goal at this stage is alignment. In an interview, list these entities, explain the relationships, and make sure you and your interviewer are speaking the same language before diving deeper.
+            Nothing earth-shattering here, and that's fine. The goal at this stage is alignment. In an interview, list
+            these entities, explain the relationships, and make sure you and your interviewer are speaking the same
+            language before diving deeper.
         </p>
 
         <!-- Section 4: API Design -->
         <h2 id="api"><span class="section-number">04</span>The API Surface</h2>
 
         <p>
-            The API is your contract with the outside world — get it right, and everything downstream flows naturally. We need exactly one endpoint for each functional requirement.
+            The API is your contract with the outside world — get it right, and everything downstream flows naturally.
+            We need exactly one endpoint for each functional requirement.
         </p>
 
         <div class="api-endpoint reveal-element">
@@ -1369,7 +1491,8 @@
                 <span class="api-url">/profile</span>
             </div>
             <p class="api-desc">
-                Create or update a user's profile preferences. Includes age range, distance, interests. The user's identity comes from the auth token in headers — never from the request body.
+                Create or update a user's profile preferences. Includes age range, distance, interests. The user's
+                identity comes from the auth token in headers — never from the request body.
             </p>
         </div>
 
@@ -1389,13 +1512,17 @@
                 <span class="api-url">/feed?lat={}&amp;long={}&amp;distance={}</span>
             </div>
             <p class="api-desc">
-                Fetch a stack of potential match profiles. We pass location client-side since it changes constantly. Other filters (age, interests) are loaded server-side from the user's saved preferences.
+                Fetch a stack of potential match profiles. We pass location client-side since it changes constantly.
+                Other filters (age, interests) are loaded server-side from the user's saved preferences.
             </p>
         </div>
 
         <div class="callout">
             <div class="callout-label">Design Decision</div>
-            <p>You might be tempted to add pagination here, but this isn't a typical paginated list — it's a <strong>recommendation engine</strong>. When the stack is exhausted, the client simply hits the endpoint again for a fresh batch. No page cursors needed.</p>
+            <p>You might be tempted to add pagination here, but this isn't a typical paginated list — it's a
+                <strong>recommendation engine</strong>. When the stack is exhausted, the client simply hits the endpoint
+                again for a fresh batch. No page cursors needed.
+            </p>
         </div>
 
         <div class="api-endpoint reveal-element">
@@ -1404,7 +1531,8 @@
                 <span class="api-url">/swipe/{userId}</span>
             </div>
             <p class="api-desc">
-                Record a swipe decision on a target user. The response immediately indicates whether this swipe resulted in a match.
+                Record a swipe decision on a target user. The response immediately indicates whether this swipe resulted
+                in a match.
             </p>
         </div>
 
@@ -1419,12 +1547,15 @@
         <h2 id="hld"><span class="section-number">05</span>High-Level Architecture</h2>
 
         <p>
-            Now we get to the fun part — putting the pieces together. We'll walk through each functional requirement and build up our system step by step, starting simple and layering on complexity only when the problem demands it.
+            Now we get to the fun part — putting the pieces together. We'll walk through each functional requirement and
+            build up our system step by step, starting simple and layering on complexity only when the problem demands
+            it.
         </p>
 
         <h3>Profile Creation Flow</h3>
         <p>
-            This is the straightforward starting point. A user opens the app, fills in their preferences, and we persist them. Classic <strong>client → gateway → service → database</strong> pattern.
+            This is the straightforward starting point. A user opens the app, fills in their preferences, and we persist
+            them. Classic <strong>client → gateway → service → database</strong> pattern.
         </p>
 
         <!-- DIAGRAM 1: High-Level Architecture (Excalidraw-style) -->
@@ -1434,183 +1565,264 @@
                 <defs>
                     <!-- Excalidraw dot grid -->
                     <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
-                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0"/>
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
                     </pattern>
                     <!-- Hand-drawn roughness filter -->
                     <filter id="roughen" x="-2%" y="-2%" width="104%" height="104%">
-                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="2" result="noise"/>
-                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="2" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
                     </filter>
                     <filter id="roughenLight" x="-1%" y="-1%" width="102%" height="102%">
-                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="5" result="noise"/>
-                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R" yChannelSelector="G"/>
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="5" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R"
+                            yChannelSelector="G" />
                     </filter>
                     <!-- Arrow markers -->
-                    <marker id="exArrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
-                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <marker id="exArrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
                     </marker>
-                    <marker id="exArrowPink" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
-                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#e8445a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <marker id="exArrowPink" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#e8445a" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
                     </marker>
-                    <marker id="exArrowBlue" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
-                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <marker id="exArrowBlue" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
                     </marker>
                 </defs>
 
                 <!-- Background -->
-                <rect width="780" height="520" fill="#fefefe" rx="12"/>
-                <rect width="780" height="520" fill="url(#dotGrid)" rx="12"/>
+                <rect width="780" height="520" fill="#fefefe" rx="12" />
+                <rect width="780" height="520" fill="url(#dotGrid)" rx="12" />
 
                 <!-- Mobile Client -->
-                <rect x="30" y="185" width="110" height="150" rx="16" fill="#eef6ff" stroke="#333" stroke-width="2" filter="url(#roughen)"/>
-                <rect x="42" y="205" width="86" height="105" rx="6" fill="#ffffff" stroke="#999" stroke-width="1" filter="url(#roughenLight)"/>
-                <text x="85" y="250" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="22" text-anchor="middle">📱</text>
-                <text x="85" y="278" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle">Mobile</text>
-                <text x="85" y="296" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle">Client</text>
+                <rect x="30" y="185" width="110" height="150" rx="16" fill="#eef6ff" stroke="#333" stroke-width="2"
+                    filter="url(#roughen)" />
+                <rect x="42" y="205" width="86" height="105" rx="6" fill="#ffffff" stroke="#999" stroke-width="1"
+                    filter="url(#roughenLight)" />
+                <text x="85" y="250" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="22"
+                    text-anchor="middle">📱</text>
+                <text x="85" y="278" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle">Mobile</text>
+                <text x="85" y="296" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle">Client</text>
 
                 <!-- Arrow: Client → Gateway -->
-                <path d="M 142 260 C 160 258, 175 262, 198 260" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)"/>
+                <path d="M 142 260 C 160 258, 175 262, 198 260" fill="none" stroke="#333" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
 
                 <!-- API Gateway -->
-                <rect x="205" y="200" width="130" height="120" rx="10" fill="#e3f2fd" stroke="#0066cc" stroke-width="2" filter="url(#roughen)"/>
-                <text x="270" y="248" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="600">API</text>
-                <text x="270" y="268" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="600">Gateway</text>
-                <text x="270" y="295" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Auth · Routing</text>
-                <text x="270" y="310" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Rate Limiting</text>
+                <rect x="205" y="200" width="130" height="120" rx="10" fill="#e3f2fd" stroke="#0066cc" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="270" y="248" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">API</text>
+                <text x="270" y="268" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">Gateway</text>
+                <text x="270" y="295" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Auth · Routing</text>
+                <text x="270" y="310" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Rate Limiting</text>
 
                 <!-- Arrow: Gateway → Profile Service -->
-                <path d="M 335 237 C 352 210, 370 155, 405 130" fill="none" stroke="#0066cc" stroke-width="2" stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#exArrowBlue)" filter="url(#roughenLight)"/>
+                <path d="M 335 237 C 352 210, 370 155, 405 130" fill="none" stroke="#0066cc" stroke-width="2"
+                    stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#exArrowBlue)"
+                    filter="url(#roughenLight)" />
 
                 <!-- Arrow: Gateway → Swipe Service -->
-                <path d="M 335 290 C 352 320, 370 365, 405 390" fill="none" stroke="#e8445a" stroke-width="2" stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#exArrowPink)" filter="url(#roughenLight)"/>
+                <path d="M 335 290 C 352 320, 370 365, 405 390" fill="none" stroke="#e8445a" stroke-width="2"
+                    stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#exArrowPink)"
+                    filter="url(#roughenLight)" />
 
                 <!-- Profile Service -->
-                <rect x="410" y="65" width="145" height="115" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2" filter="url(#roughen)"/>
-                <text x="482" y="108" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="600">Profile</text>
-                <text x="482" y="128" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="600">Service</text>
-                <text x="482" y="152" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">CRUD · Preferences</text>
-                <text x="482" y="167" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Feed Generation</text>
+                <rect x="410" y="65" width="145" height="115" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="482" y="108" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">Profile</text>
+                <text x="482" y="128" fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">Service</text>
+                <text x="482" y="152" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">CRUD · Preferences</text>
+                <text x="482" y="167" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Feed Generation</text>
 
                 <!-- Swipe Service -->
-                <rect x="410" y="340" width="145" height="115" rx="10" fill="#fce4ec" stroke="#e8445a" stroke-width="2" filter="url(#roughen)"/>
-                <text x="482" y="383" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="600">Swipe</text>
-                <text x="482" y="403" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" text-anchor="middle" font-weight="600">Service</text>
-                <text x="482" y="427" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Persist · Match Check</text>
-                <text x="482" y="442" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Notify</text>
+                <rect x="410" y="340" width="145" height="115" rx="10" fill="#fce4ec" stroke="#e8445a" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="482" y="383" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">Swipe</text>
+                <text x="482" y="403" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14"
+                    text-anchor="middle" font-weight="600">Service</text>
+                <text x="482" y="427" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Persist · Match Check</text>
+                <text x="482" y="442" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Notify</text>
 
                 <!-- Arrow: Profile Service → User DB -->
-                <path d="M 555 122 C 575 120, 600 118, 620 120" fill="none" stroke="#2e7d32" stroke-width="2" stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)"/>
+                <path d="M 555 122 C 575 120, 600 118, 620 120" fill="none" stroke="#2e7d32" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
 
                 <!-- Arrow: Swipe Service → Swipe DB -->
-                <path d="M 555 397 C 575 395, 600 393, 620 395" fill="none" stroke="#e8445a" stroke-width="2" stroke-linecap="round" marker-end="url(#exArrowPink)" filter="url(#roughenLight)"/>
+                <path d="M 555 397 C 575 395, 600 393, 620 395" fill="none" stroke="#e8445a" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrowPink)" filter="url(#roughenLight)" />
 
                 <!-- User DB (cylinder drawn by hand) -->
-                <ellipse cx="690" cy="95" rx="55" ry="18" fill="#e8f5e9" stroke="#333" stroke-width="1.8" filter="url(#roughen)"/>
-                <path d="M 635 95 L 635 140" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)"/>
-                <path d="M 745 95 L 745 140" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)"/>
-                <ellipse cx="690" cy="140" rx="55" ry="18" fill="#e8f5e9" stroke="#333" stroke-width="1.8" filter="url(#roughen)"/>
-                <rect x="635" y="95" width="110" height="45" fill="#e8f5e9" stroke="none"/>
-                <text x="690" y="125" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" text-anchor="middle" font-weight="600">User DB</text>
-                <text x="690" y="143" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">PostgreSQL</text>
+                <ellipse cx="690" cy="95" rx="55" ry="18" fill="#e8f5e9" stroke="#333" stroke-width="1.8"
+                    filter="url(#roughen)" />
+                <path d="M 635 95 L 635 140" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)" />
+                <path d="M 745 95 L 745 140" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)" />
+                <ellipse cx="690" cy="140" rx="55" ry="18" fill="#e8f5e9" stroke="#333" stroke-width="1.8"
+                    filter="url(#roughen)" />
+                <rect x="635" y="95" width="110" height="45" fill="#e8f5e9" stroke="none" />
+                <text x="690" y="125" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="600">User DB</text>
+                <text x="690" y="143" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">PostgreSQL</text>
 
                 <!-- Swipe DB (cylinder drawn by hand) -->
-                <ellipse cx="690" cy="370" rx="55" ry="18" fill="#fce4ec" stroke="#333" stroke-width="1.8" filter="url(#roughen)"/>
-                <path d="M 635 370 L 635 415" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)"/>
-                <path d="M 745 370 L 745 415" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)"/>
-                <ellipse cx="690" cy="415" rx="55" ry="18" fill="#fce4ec" stroke="#333" stroke-width="1.8" filter="url(#roughen)"/>
-                <rect x="635" y="370" width="110" height="45" fill="#fce4ec" stroke="none"/>
-                <text x="690" y="400" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" text-anchor="middle" font-weight="600">Swipe DB</text>
-                <text x="690" y="418" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Cassandra</text>
+                <ellipse cx="690" cy="370" rx="55" ry="18" fill="#fce4ec" stroke="#333" stroke-width="1.8"
+                    filter="url(#roughen)" />
+                <path d="M 635 370 L 635 415" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)" />
+                <path d="M 745 370 L 745 415" stroke="#333" stroke-width="1.8" filter="url(#roughenLight)" />
+                <ellipse cx="690" cy="415" rx="55" ry="18" fill="#fce4ec" stroke="#333" stroke-width="1.8"
+                    filter="url(#roughen)" />
+                <rect x="635" y="370" width="110" height="45" fill="#fce4ec" stroke="none" />
+                <text x="690" y="400" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="600">Swipe DB</text>
+                <text x="690" y="418" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Cassandra</text>
 
                 <!-- Push Notification -->
-                <rect x="410" y="472" width="145" height="34" rx="8" fill="#fff3e0" stroke="#e56b47" stroke-width="1.5" stroke-dasharray="5,3" filter="url(#roughen)"/>
-                <text x="482" y="494" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle">APNS / FCM</text>
+                <rect x="410" y="472" width="145" height="34" rx="8" fill="#fff3e0" stroke="#e56b47" stroke-width="1.5"
+                    stroke-dasharray="5,3" filter="url(#roughen)" />
+                <text x="482" y="494" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle">APNS / FCM</text>
 
                 <!-- Arrow: Swipe → APNS -->
-                <path d="M 482 455 C 482 462, 480 468, 482 470" fill="none" stroke="#e56b47" stroke-width="1.5" stroke-dasharray="4,3" stroke-linecap="round" marker-end="url(#exArrowPink)" filter="url(#roughenLight)"/>
+                <path d="M 482 455 C 482 462, 480 468, 482 470" fill="none" stroke="#e56b47" stroke-width="1.5"
+                    stroke-dasharray="4,3" stroke-linecap="round" marker-end="url(#exArrowPink)"
+                    filter="url(#roughenLight)" />
             </svg>
-            <p class="diagram-caption">The system splits into two independent services — Profile and Swipe — each with its own optimized data store.</p>
+            <p class="diagram-caption">The system splits into two independent services — Profile and Swipe — each with
+                its own optimized data store.</p>
         </div>
 
         <h3>Why Two Separate Services?</h3>
         <p>
-            This is a question that comes up a lot, and the reasoning matters. Profile views and creation are <em>low-frequency, read-heavy</em> operations. Swipes, on the other hand, are a <strong>firehose of writes</strong>. With 20M DAU × 100 swipes/day, we're looking at roughly <strong>200GB of new swipe data per day</strong>.
+            This is a question that comes up a lot, and the reasoning matters. Profile views and creation are
+            <em>low-frequency, read-heavy</em> operations. Swipes, on the other hand, are a <strong>firehose of
+                writes</strong>. With 20M DAU × 100 swipes/day, we're looking at roughly <strong>200GB of new swipe data
+                per day</strong>.
         </p>
         <p>
-            By separating these concerns, we get independent scaling, optimized database choices (PostgreSQL for structured profile data vs. Cassandra for massive write throughput), and the freedom to implement swipe-specific caching without touching the profile service.
+            By separating these concerns, we get independent scaling, optimized database choices (PostgreSQL for
+            structured profile data vs. Cassandra for massive write throughput), and the freedom to implement
+            swipe-specific caching without touching the profile service.
         </p>
 
         <h3>The Swipe + Match Flow</h3>
         <p>
-            Here's where things get interesting. When Person B swipes right on Person A, the system needs to instantly check whether Person A had previously swiped right on Person B. If they did — it's a match.
+            Here's where things get interesting. When Person B swipes right on Person A, the system needs to instantly
+            check whether Person A had previously swiped right on Person B. If they did — it's a match.
         </p>
         <p>
-            Person B sees the match graphic immediately (they're already in the app). Person A, who might have swiped days ago, gets notified via a push notification through APNS or FCM.
+            Person B sees the match graphic immediately (they're already in the app). Person A, who might have swiped
+            days ago, gets notified via a push notification through APNS or FCM.
         </p>
 
         <div class="callout callout-warning">
             <div class="callout-label">⚠️ Watch Out</div>
-            <p>We chose Cassandra for the swipe database because of its write-optimized storage engine. But Cassandra trades consistency for availability, which introduces a critical race condition we'll tackle in the deep dives.</p>
+            <p>We chose Cassandra for the swipe database because of its write-optimized storage engine. But Cassandra
+                trades consistency for availability, which introduces a critical race condition we'll tackle in the deep
+                dives.</p>
         </div>
 
         <!-- Section 6: Deep Dive - Consistency -->
         <h2 id="deep-dive-consistency"><span class="section-number">06</span>Deep Dive: Swipe Consistency</h2>
 
         <p>
-            Here's a nightmare scenario. Person A and Person B both swipe right on each other at <em>roughly the same time</em>. The system processes both swipes in parallel, and each one checks for the inverse — but neither swipe has landed in the database yet. Result? <strong>Both checks come back empty. No match is created. True love: lost to a race condition.</strong>
+            Here's a nightmare scenario. Person A and Person B both swipe right on each other at <em>roughly the same
+                time</em>. The system processes both swipes in parallel, and each one checks for the inverse — but
+            neither swipe has landed in the database yet. Result? <strong>Both checks come back empty. No match is
+                created. True love: lost to a race condition.</strong>
         </p>
 
         <!-- DIAGRAM 2: Race Condition Timeline (Excalidraw-style) -->
         <div class="diagram-container reveal-element">
             <div class="diagram-title">Diagram 2 — The "Lost Match" Race Condition</div>
             <svg viewBox="0 0 760 340" xmlns="http://www.w3.org/2000/svg" style="max-width:760px;">
-                <rect width="760" height="340" fill="#fefefe" rx="12"/>
-                <rect width="760" height="340" fill="url(#dotGrid)" rx="12"/>
+                <rect width="760" height="340" fill="#fefefe" rx="12" />
+                <rect width="760" height="340" fill="url(#dotGrid)" rx="12" />
 
                 <!-- Timeline Labels -->
-                <text x="30" y="70" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="700">Person A</text>
-                <text x="30" y="190" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="700">Server</text>
-                <text x="30" y="290" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="700">Person B</text>
+                <text x="30" y="70" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    font-weight="700">Person A</text>
+                <text x="30" y="190" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    font-weight="700">Server</text>
+                <text x="30" y="290" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    font-weight="700">Person B</text>
 
                 <!-- Swimlane line -->
-                <line x1="120" y1="45" x2="120" y2="320" stroke="#e0e0e0" stroke-width="1"/>
+                <line x1="120" y1="45" x2="120" y2="320" stroke="#e0e0e0" stroke-width="1" />
 
                 <!-- Time arrow -->
-                <path d="M 140 30 L 718 30" fill="none" stroke="#ccc" stroke-width="1.5" marker-end="url(#exArrow)" filter="url(#roughenLight)"/>
-                <text x="430" y="22" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle">TIME →</text>
+                <path d="M 140 30 L 718 30" fill="none" stroke="#ccc" stroke-width="1.5" marker-end="url(#exArrow)"
+                    filter="url(#roughenLight)" />
+                <text x="430" y="22" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle">TIME →</text>
 
                 <!-- Step 1: A swipes -->
-                <circle cx="180" cy="70" r="7" fill="#e8445a" filter="url(#roughenLight)"/>
-                <text x="180" y="55" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Swipe →</text>
-                <path d="M 180 78 C 195 120, 210 155, 232 175" fill="none" stroke="#e8445a" stroke-width="1.5" stroke-dasharray="5,3" filter="url(#roughenLight)"/>
+                <circle cx="180" cy="70" r="7" fill="#e8445a" filter="url(#roughenLight)" />
+                <text x="180" y="55" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Swipe →</text>
+                <path d="M 180 78 C 195 120, 210 155, 232 175" fill="none" stroke="#e8445a" stroke-width="1.5"
+                    stroke-dasharray="5,3" filter="url(#roughenLight)" />
 
                 <!-- Step 2: B swipes -->
-                <circle cx="220" cy="290" r="7" fill="#0066cc" filter="url(#roughenLight)"/>
-                <text x="220" y="310" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Swipe →</text>
-                <path d="M 220 282 C 235 250, 250 215, 272 195" fill="none" stroke="#0066cc" stroke-width="1.5" stroke-dasharray="5,3" filter="url(#roughenLight)"/>
+                <circle cx="220" cy="290" r="7" fill="#0066cc" filter="url(#roughenLight)" />
+                <text x="220" y="310" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Swipe →</text>
+                <path d="M 220 282 C 235 250, 250 215, 272 195" fill="none" stroke="#0066cc" stroke-width="1.5"
+                    stroke-dasharray="5,3" filter="url(#roughenLight)" />
 
                 <!-- Step 3: Check for A (no inverse found) -->
-                <rect x="228" y="168" width="135" height="24" rx="6" fill="#fce4ec" stroke="#e8445a" stroke-width="1.5" filter="url(#roughen)"/>
-                <text x="295" y="184" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Check B→A: ✗ None</text>
+                <rect x="228" y="168" width="135" height="24" rx="6" fill="#fce4ec" stroke="#e8445a" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <text x="295" y="184" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Check B→A: ✗ None</text>
 
                 <!-- Step 4: Check for B (no inverse found) -->
-                <rect x="268" y="195" width="135" height="24" rx="6" fill="#eef6ff" stroke="#0066cc" stroke-width="1.5" filter="url(#roughen)"/>
-                <text x="335" y="211" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Check A→B: ✗ None</text>
+                <rect x="268" y="195" width="135" height="24" rx="6" fill="#eef6ff" stroke="#0066cc" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <text x="335" y="211" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Check A→B: ✗ None</text>
 
                 <!-- Step 5: Save A's swipe -->
-                <rect x="425" y="168" width="120" height="24" rx="6" fill="#f5f5f7" stroke="#ccc" stroke-width="1" filter="url(#roughen)"/>
-                <text x="485" y="184" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Save A→B ✓</text>
+                <rect x="425" y="168" width="120" height="24" rx="6" fill="#f5f5f7" stroke="#ccc" stroke-width="1"
+                    filter="url(#roughen)" />
+                <text x="485" y="184" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Save A→B ✓</text>
 
                 <!-- Step 6: Save B's swipe -->
-                <rect x="465" y="195" width="120" height="24" rx="6" fill="#f5f5f7" stroke="#ccc" stroke-width="1" filter="url(#roughen)"/>
-                <text x="525" y="211" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Save B→A ✓</text>
+                <rect x="465" y="195" width="120" height="24" rx="6" fill="#f5f5f7" stroke="#ccc" stroke-width="1"
+                    filter="url(#roughen)" />
+                <text x="525" y="211" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Save B→A ✓</text>
 
                 <!-- Result: No match -->
-                <rect x="610" y="172" width="130" height="38" rx="10" fill="#fce4ec" stroke="#e8445a" stroke-width="2" filter="url(#roughen)"/>
-                <text x="675" y="192" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" font-weight="700">💔 No Match!</text>
-                <text x="675" y="205" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle">Both saved, match lost</text>
+                <rect x="610" y="172" width="130" height="38" rx="10" fill="#fce4ec" stroke="#e8445a" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="675" y="192" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="700">💔 No Match!</text>
+                <text x="675" y="205" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">Both saved, match lost</text>
             </svg>
-            <p class="diagram-caption">When both swipes arrive simultaneously, the inverse check finds nothing — and the match is silently lost.</p>
+            <p class="diagram-caption">When both swipes arrive simultaneously, the inverse check finds nothing — and the
+                match is silently lost.</p>
         </div>
 
         <h3>How Do We Fix This?</h3>
@@ -1626,10 +1838,16 @@
             <div class="deep-dive-content">
                 <div class="deep-dive-content-inner">
                     <p>
-                        Instead of demanding real-time accuracy, run a <strong>background reconciliation job</strong> that periodically scans for unmatched mutual swipes. When it finds a pair of "yes" swipes that were never surfaced as a match, it retroactively creates the match and sends push notifications to both users.
+                        Instead of demanding real-time accuracy, run a <strong>background reconciliation job</strong>
+                        that periodically scans for unmatched mutual swipes. When it finds a pair of "yes" swipes that
+                        were never surfaced as a match, it retroactively creates the match and sends push notifications
+                        to both users.
                     </p>
                     <p>
-                        From the user's perspective, they simply get a notification that the other person swiped on them — they'll never know it was a reconciliation process catching up. This approach prioritizes availability and is simpler to implement, but your interviewer might push you toward a stricter solution.
+                        From the user's perspective, they simply get a notification that the other person swiped on them
+                        — they'll never know it was a reconciliation process catching up. This approach prioritizes
+                        availability and is simpler to implement, but your interviewer might push you toward a stricter
+                        solution.
                     </p>
                 </div>
             </div>
@@ -1643,13 +1861,21 @@
             <div class="deep-dive-content">
                 <div class="deep-dive-content-inner">
                     <p>
-                        For real-time accuracy, we can use a <strong>distributed lock</strong> keyed on the pair of user IDs (always ordered, so <code>min(A,B):max(A,B)</code>). Before processing a swipe, the service acquires a lock for the user pair. This guarantees that concurrent swipes between the same two users are serialized.
+                        For real-time accuracy, we can use a <strong>distributed lock</strong> keyed on the pair of user
+                        IDs (always ordered, so <code>min(A,B):max(A,B)</code>). Before processing a swipe, the service
+                        acquires a lock for the user pair. This guarantees that concurrent swipes between the same two
+                        users are serialized.
                     </p>
                     <p>
-                        A Redis-based lock with a short TTL (a few seconds) works well here. The chance of two users swiping on each other within the same second is astronomically low, so lock contention will be negligible. The trade-off is added latency (~1-2ms for the lock operation) and the operational overhead of a Redis cluster.
+                        A Redis-based lock with a short TTL (a few seconds) works well here. The chance of two users
+                        swiping on each other within the same second is astronomically low, so lock contention will be
+                        negligible. The trade-off is added latency (~1-2ms for the lock operation) and the operational
+                        overhead of a Redis cluster.
                     </p>
                     <p>
-                        <strong>Alternative:</strong> Use a strongly consistent database (like CockroachDB) for the swipe data, or route all swipes for a given user pair to the same partition/server. Both approaches enforce serialization without explicit locking.
+                        <strong>Alternative:</strong> Use a strongly consistent database (like CockroachDB) for the
+                        swipe data, or route all swipes for a given user pair to the same partition/server. Both
+                        approaches enforce serialization without explicit locking.
                     </p>
                 </div>
             </div>
@@ -1672,114 +1898,162 @@
         </div>
 
         <p>
-            This query is a performance disaster at scale. Filtering by a bounding box of lat/long coordinates requires scanning an enormous number of rows, even with B-tree indexes. Geo-spatial queries need a fundamentally different approach.
+            This query is a performance disaster at scale. Filtering by a bounding box of lat/long coordinates requires
+            scanning an enormous number of rows, even with B-tree indexes. Geo-spatial queries need a fundamentally
+            different approach.
         </p>
 
         <h3>Geo-Spatial Indexing with Geohashing</h3>
         <p>
-            The solution is <strong>geohashing</strong> — a technique that converts 2D coordinates (latitude, longitude) into a single string that represents a grid cell. Nearby locations share a common prefix, which means finding users in your area becomes a <strong>prefix-based lookup</strong> instead of a range scan.
+            The solution is <strong>geohashing</strong> — a technique that converts 2D coordinates (latitude, longitude)
+            into a single string that represents a grid cell. Nearby locations share a common prefix, which means
+            finding users in your area becomes a <strong>prefix-based lookup</strong> instead of a range scan.
         </p>
         <p>
-            Services like Redis (with its built-in geospatial commands) or databases like PostGIS make this trivial. When a user updates their location, we compute their geohash and store it. To generate a feed, we look up the user's geohash cell and its neighboring cells, then filter by other criteria.
+            Services like Redis (with its built-in geospatial commands) or databases like PostGIS make this trivial.
+            When a user updates their location, we compute their geohash and store it. To generate a feed, we look up
+            the user's geohash cell and its neighboring cells, then filter by other criteria.
         </p>
 
         <h3>Pre-Computing Feeds</h3>
         <p>
-            Even with geospatial indexing, generating a feed on-demand adds latency. The better approach is to <strong>pre-compute feeds in the background</strong> and cache them. Here's the architecture:
+            Even with geospatial indexing, generating a feed on-demand adds latency. The better approach is to
+            <strong>pre-compute feeds in the background</strong> and cache them. Here's the architecture:
         </p>
 
         <!-- DIAGRAM 3: Feed Generation Pipeline (Excalidraw-style) -->
         <div class="diagram-container reveal-element">
             <div class="diagram-title">Diagram 3 — Pre-Computed Feed Generation Pipeline</div>
             <svg viewBox="0 0 760 380" xmlns="http://www.w3.org/2000/svg" style="max-width:760px;">
-                <rect width="760" height="380" fill="#fefefe" rx="12"/>
-                <rect width="760" height="380" fill="url(#dotGrid)" rx="12"/>
+                <rect width="760" height="380" fill="#fefefe" rx="12" />
+                <rect width="760" height="380" fill="url(#dotGrid)" rx="12" />
 
                 <!-- Feed Builder -->
-                <rect x="30" y="60" width="150" height="85" rx="10" fill="#e3f2fd" stroke="#0066cc" stroke-width="2" filter="url(#roughen)"/>
-                <text x="105" y="95" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" font-weight="600">Feed Builder</text>
-                <text x="105" y="115" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Background Job</text>
-                <text x="105" y="132" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">⏱ Scheduled / Triggered</text>
+                <rect x="30" y="60" width="150" height="85" rx="10" fill="#e3f2fd" stroke="#0066cc" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="105" y="95" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">Feed Builder</text>
+                <text x="105" y="115" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Background Job</text>
+                <text x="105" y="132" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">⏱ Scheduled / Triggered</text>
 
                 <!-- Arrow: Builder → Geo Index -->
-                <path d="M 180 100 C 195 98, 210 102, 233 100" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)"/>
+                <path d="M 180 100 C 195 98, 210 102, 233 100" fill="none" stroke="#333" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
 
                 <!-- Geo Spatial Index -->
-                <rect x="238" y="55" width="145" height="95" rx="10" fill="#fff3e0" stroke="#e56b47" stroke-width="2" filter="url(#roughen)"/>
-                <text x="310" y="90" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" font-weight="600">Geo Index</text>
-                <text x="310" y="110" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Geohash + Filters</text>
-                <text x="310" y="127" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">PostGIS / Redis GEO</text>
+                <rect x="238" y="55" width="145" height="95" rx="10" fill="#fff3e0" stroke="#e56b47" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="310" y="90" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">Geo Index</text>
+                <text x="310" y="110" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Geohash + Filters</text>
+                <text x="310" y="127" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">PostGIS / Redis GEO</text>
 
                 <!-- Arrow: Geo Index → Cache -->
-                <path d="M 383 100 C 400 98, 418 102, 435 100" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)"/>
+                <path d="M 383 100 C 400 98, 418 102, 435 100" fill="none" stroke="#333" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrow)" filter="url(#roughenLight)" />
 
                 <!-- Feed Cache -->
-                <rect x="440" y="55" width="145" height="95" rx="10" fill="#fce4ec" stroke="#e8445a" stroke-width="2" filter="url(#roughen)"/>
-                <text x="512" y="90" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" font-weight="600">Feed Cache</text>
-                <text x="512" y="110" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Redis / Memcached</text>
-                <text x="512" y="127" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">TTL: ~1hr</text>
+                <rect x="440" y="55" width="145" height="95" rx="10" fill="#fce4ec" stroke="#e8445a" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="512" y="90" fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">Feed Cache</text>
+                <text x="512" y="110" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Redis / Memcached</text>
+                <text x="512" y="127" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">TTL: ~1hr</text>
 
                 <!-- Arrow: Cache → Client -->
-                <path d="M 585 100 C 602 98, 618 102, 635 100" fill="none" stroke="#e8445a" stroke-width="2" stroke-linecap="round" marker-end="url(#exArrowPink)" filter="url(#roughenLight)"/>
+                <path d="M 585 100 C 602 98, 618 102, 635 100" fill="none" stroke="#e8445a" stroke-width="2"
+                    stroke-linecap="round" marker-end="url(#exArrowPink)" filter="url(#roughenLight)" />
 
                 <!-- Client -->
-                <rect x="640" y="65" width="95" height="75" rx="10" fill="#eef6ff" stroke="#333" stroke-width="2" filter="url(#roughen)"/>
-                <text x="687" y="100" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="18" text-anchor="middle">📱</text>
-                <text x="687" y="120" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">GET /feed</text>
+                <rect x="640" y="65" width="95" height="75" rx="10" fill="#eef6ff" stroke="#333" stroke-width="2"
+                    filter="url(#roughen)" />
+                <text x="687" y="100" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="18"
+                    text-anchor="middle">📱</text>
+                <text x="687" y="120" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">GET /feed</text>
 
                 <!-- Swipe DB Connection -->
-                <rect x="30" y="215" width="150" height="85" rx="10" fill="#f5f5f7" stroke="#333" stroke-width="1.5" filter="url(#roughen)"/>
-                <text x="105" y="248" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" font-weight="600">Swipe DB</text>
-                <text x="105" y="268" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Previously Swiped IDs</text>
-                <text x="105" y="285" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle">Bloom Filter</text>
+                <rect x="30" y="215" width="150" height="85" rx="10" fill="#f5f5f7" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughen)" />
+                <text x="105" y="248" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="600">Swipe DB</text>
+                <text x="105" y="268" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Previously Swiped IDs</text>
+                <text x="105" y="285" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Bloom Filter</text>
 
                 <!-- Arrow: Builder ↕ Swipe DB -->
-                <path d="M 105 145 C 107 165, 103 190, 105 213" fill="none" stroke="#e56b47" stroke-width="1.5" stroke-dasharray="5,3" stroke-linecap="round" marker-end="url(#exArrowPink)" filter="url(#roughenLight)"/>
+                <path d="M 105 145 C 107 165, 103 190, 105 213" fill="none" stroke="#e56b47" stroke-width="1.5"
+                    stroke-dasharray="5,3" stroke-linecap="round" marker-end="url(#exArrowPink)"
+                    filter="url(#roughenLight)" />
 
                 <!-- Feed Invalidation Triggers Box -->
-                <rect x="238" y="215" width="345" height="140" rx="10" fill="#fefaf6" stroke="#e0e0e0" stroke-width="1.5" stroke-dasharray="6,4" filter="url(#roughen)"/>
-                <text x="410" y="242" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" text-anchor="middle" font-weight="600">Feed Invalidation Triggers</text>
-                <text x="273" y="268" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" alignment-baseline="middle">⚡ User changes location significantly</text>
-                <text x="273" y="288" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" alignment-baseline="middle">⚡ User updates filter preferences</text>
-                <text x="273" y="308" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" alignment-baseline="middle">⚡ Cache TTL expires (~1 hour)</text>
-                <text x="273" y="328" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" alignment-baseline="middle">⚡ Suggested user changes profile</text>
+                <rect x="238" y="215" width="345" height="140" rx="10" fill="#fefaf6" stroke="#e0e0e0"
+                    stroke-width="1.5" stroke-dasharray="6,4" filter="url(#roughen)" />
+                <text x="410" y="242" fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="600">Feed Invalidation Triggers</text>
+                <text x="273" y="268" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    alignment-baseline="middle">⚡ User changes location significantly</text>
+                <text x="273" y="288" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    alignment-baseline="middle">⚡ User updates filter preferences</text>
+                <text x="273" y="308" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    alignment-baseline="middle">⚡ Cache TTL expires (~1 hour)</text>
+                <text x="273" y="328" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    alignment-baseline="middle">⚡ Suggested user changes profile</text>
             </svg>
-            <p class="diagram-caption">A background job pre-builds feeds using geospatial queries and caches them. Staleness is managed via TTL and event-driven invalidation.</p>
+            <p class="diagram-caption">A background job pre-builds feeds using geospatial queries and caches them.
+                Staleness is managed via TTL and event-driven invalidation.</p>
         </div>
 
         <h3>Handling Stale Feeds</h3>
         <p>
-            Pre-computing introduces a new problem: <strong>stale profiles</strong>. A user in your cached feed might have changed locations, updated their preferences, or deleted their account since the feed was built.
+            Pre-computing introduces a new problem: <strong>stale profiles</strong>. A user in your cached feed might
+            have changed locations, updated their preferences, or deleted their account since the feed was built.
         </p>
         <p>
             The solution is a multi-layered freshness strategy:
         </p>
         <ul>
             <li><strong>Short TTL</strong> (~ 1 hour) on cached feeds, with background recomputation</li>
-            <li><strong>Event-driven invalidation</strong> — if a user changes their location significantly or updates preferences, trigger a feed refresh</li>
-            <li><strong>Warm caches only for active users</strong> — don't waste compute pre-building feeds for dormant accounts</li>
+            <li><strong>Event-driven invalidation</strong> — if a user changes their location significantly or updates
+                preferences, trigger a feed refresh</li>
+            <li><strong>Warm caches only for active users</strong> — don't waste compute pre-building feeds for dormant
+                accounts</li>
         </ul>
 
         <div class="callout">
             <div class="callout-label">Tunable Parameters</div>
-            <p>One of the most powerful aspects of this design is its <strong>tunability</strong>. Cache TTL, number of cached profiles, criteria for "active" users, geohash precision — all of these can be adjusted without changing system logic. This gives operators fine-grained control over cost vs. freshness trade-offs.</p>
+            <p>One of the most powerful aspects of this design is its <strong>tunability</strong>. Cache TTL, number of
+                cached profiles, criteria for "active" users, geohash precision — all of these can be adjusted without
+                changing system logic. This gives operators fine-grained control over cost vs. freshness trade-offs.</p>
         </div>
 
         <!-- Section 8: Deep Dive - Dedup -->
         <h2 id="deep-dive-dedup"><span class="section-number">08</span>Deep Dive: Avoiding Duplicate Profiles</h2>
 
         <p>
-            Nothing kills the swiping vibe faster than seeing someone you already passed on show up again. Or worse — swiping right on someone and then seeing them reappear, making you wonder if your original swipe was even recorded.
+            Nothing kills the swiping vibe faster than seeing someone you already passed on show up again. Or worse —
+            swiping right on someone and then seeing them reappear, making you wonder if your original swipe was even
+            recorded.
         </p>
 
         <h3>The Straightforward Approach</h3>
         <p>
-            During feed generation, query the swipe database for all user IDs this person has previously swiped on, and filter them out. Since we're partitioning Cassandra by <code>swiping_user_id</code>, this lookup is efficient — it hits a single partition.
+            During feed generation, query the swipe database for all user IDs this person has previously swiped on, and
+            filter them out. Since we're partitioning Cassandra by <code>swiping_user_id</code>, this lookup is
+            efficient — it hits a single partition.
         </p>
 
         <h3>The Scaling Challenge</h3>
         <p>
-            For power users with tens of thousands of historical swipes, that "contains check" gets expensive. Two solutions stand out:
+            For power users with tens of thousands of historical swipes, that "contains check" gets expensive. Two
+            solutions stand out:
         </p>
 
         <div class="deep-dive" id="dd-bloom">
@@ -1790,13 +2064,20 @@
             <div class="deep-dive-content">
                 <div class="deep-dive-content-inner">
                     <p>
-                        A <strong>Bloom filter</strong> is a probabilistic data structure that can tell you definitively if an element is <em>not</em> in a set, or <em>probably</em> in a set — with a configurable false positive rate.
+                        A <strong>Bloom filter</strong> is a probabilistic data structure that can tell you definitively
+                        if an element is <em>not</em> in a set, or <em>probably</em> in a set — with a configurable
+                        false positive rate.
                     </p>
                     <p>
-                        For each user, maintain a Bloom filter of all user IDs they've swiped on. When building a feed, check each candidate against the Bloom filter. A false positive means we occasionally skip a valid candidate — a tiny, invisible cost. A false negative (showing a previously-swiped profile) never happens.
+                        For each user, maintain a Bloom filter of all user IDs they've swiped on. When building a feed,
+                        check each candidate against the Bloom filter. A false positive means we occasionally skip a
+                        valid candidate — a tiny, invisible cost. A false negative (showing a previously-swiped profile)
+                        never happens.
                     </p>
                     <p>
-                        The beauty is that the Bloom filter is constant-size regardless of swipe history, and lookups are O(1). At ~1KB per user with a 0.1% false positive rate, we can fit the entire Bloom filter set for our active users in memory.
+                        The beauty is that the Bloom filter is constant-size regardless of swipe history, and lookups
+                        are O(1). At ~1KB per user with a 0.1% false positive rate, we can fit the entire Bloom filter
+                        set for our active users in memory.
                     </p>
                 </div>
             </div>
@@ -1806,7 +2087,8 @@
         <h2 id="final"><span class="section-number">09</span>Final Architecture & Interview Bar</h2>
 
         <p>
-            Let's zoom out and look at the complete picture. Our final design incorporates all the layers we've discussed — from the API surface down to the storage and caching strategies.
+            Let's zoom out and look at the complete picture. Our final design incorporates all the layers we've
+            discussed — from the API surface down to the storage and caching strategies.
         </p>
 
         <table class="comparison-table reveal-element">
@@ -1868,26 +2150,30 @@
 
         <h3>What's Expected at Each Level?</h3>
         <p>
-            Interviewers calibrate their expectations based on your seniority. Here's a rough guide to what "good" looks like at each level for this particular problem.
+            Interviewers calibrate their expectations based on your seniority. Here's a rough guide to what "good" looks
+            like at each level for this particular problem.
         </p>
 
         <div class="level-grid reveal-element">
             <div class="level-card mid">
                 <div class="level-label">Mid-Level (E4)</div>
                 <h4>Build the Foundation</h4>
-                <p>Clearly define APIs and data model. Land on a functional HLD covering feed, swiping, and matching. Show awareness of geo-spatial filtering and profile deduplication.</p>
+                <p>Clearly define APIs and data model. Land on a functional HLD covering feed, swiping, and matching.
+                    Show awareness of geo-spatial filtering and profile deduplication.</p>
                 <span class="level-focus">80% Breadth · 20% Depth</span>
             </div>
             <div class="level-card senior">
                 <div class="level-label">Senior (E5)</div>
                 <h4>Drive the Depth</h4>
-                <p>Quickly nail the HLD, then spend time on feed generation trade-offs, geo-spatial indexing options, and swipe consistency strategies. Proactively surface stale cache issues.</p>
+                <p>Quickly nail the HLD, then spend time on feed generation trade-offs, geo-spatial indexing options,
+                    and swipe consistency strategies. Proactively surface stale cache issues.</p>
                 <span class="level-focus">60% Breadth · 40% Depth</span>
             </div>
             <div class="level-card staff">
                 <div class="level-label">Staff+ (E6)</div>
                 <h4>Own the Conversation</h4>
-                <p>Breeze through the basics, then deep-dive into trade-offs with confidence drawn from real-world experience. The interviewer follows your lead, not the other way around.</p>
+                <p>Breeze through the basics, then deep-dive into trade-offs with confidence drawn from real-world
+                    experience. The interviewer follows your lead, not the other way around.</p>
                 <span class="level-focus">40% Breadth · 60% Depth</span>
             </div>
         </div>
@@ -1895,7 +2181,10 @@
         <div class="callout callout-insight">
             <div class="callout-label">💡 Final Thought</div>
             <p>
-                The best candidates don't just design a system that works — they design a system with <strong>tunable knobs</strong>. Cache TTLs, Bloom filter sizes, geohash precision, reconciliation intervals — these parameters give operations teams control without requiring code changes. That's what separates textbook architecture from production-ready engineering.
+                The best candidates don't just design a system that works — they design a system with <strong>tunable
+                    knobs</strong>. Cache TTLs, Bloom filter sizes, geohash precision, reconciliation intervals — these
+                parameters give operations teams control without requiring code changes. That's what separates textbook
+                architecture from production-ready engineering.
             </p>
         </div>
 
@@ -1904,7 +2193,7 @@
     <!-- Author Footer -->
     <div class="article-footer">
         <div class="author-card reveal-element">
-            <img src="ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar">
+            <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar">
             <div class="author-info">
                 <h4>Ajay Kotnala</h4>
                 <div class="author-role">Senior Solution Architect · NTT</div>
@@ -1914,7 +2203,10 @@
                 </p>
             </div>
         </div>
-        <a href="index.html" class="back-link">← Back to Portfolio</a>
+        <div class="back-links-row">
+            <a href="../index.html" class="back-link">← Back to Portfolio</a>
+            <a href="./index.html" class="back-link">Back to System Design Articles →</a>
+        </div>
     </div>
 
     <!-- Global Footer -->
@@ -1985,4 +2277,5 @@
     </script>
 
 </body>
+
 </html>

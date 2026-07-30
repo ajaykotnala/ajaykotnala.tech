@@ -1114,13 +1114,14 @@
     <header class="global-nav">
         <div class="global-nav-container">
             <a href="#" class="global-nav-logo">
-                <span class="logo-icon">[A]</span> Ajay Kotnala
+                <span class="logo-icon">[AK]</span> Ajay Kotnala
             </a>
             <ul class="global-nav-links">
                 <li><a href="#about">About</a></li>
                 <li><a href="#skills">Skills</a></li>
                 <li><a href="#experience">Experience</a></li>
-                <li><a href="#projects">Projects</a></li>
+                <li><a href="#knowledge-hub">Knowledge Hub</a></li>
+                <li><a href="#projects">Key Initiatives</a></li>
                 <li><a href="#education">Education</a></li>
                 <li><a href="#contact">Contact</a></li>
             </ul>
@@ -1352,6 +1353,7 @@
         </div>
     </section>
 
+
     <!-- Experience Section -->
     <section id="experience" class="tile-parchment reveal-element">
         <div class="container">
@@ -1453,6 +1455,91 @@
         </div>
     </section>
 
+    <!-- Knowledge Hub Section -->
+    <section id="knowledge-hub" class="tile-white reveal-element">
+        <div class="container">
+            <h2 class="section-title">Knowledge Hub</h2>
+            <p style="text-align: center; font-size: 17px; color: var(--color-body-muted); max-width: 600px; margin: 0 auto var(--spacing-xl);">
+                Explore my technical deep dives, system design analyses, and design pattern implementations.
+            </p>
+            <div class="knowledge-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--spacing-lg);">
+                <!-- Design Patterns Card -->
+                <a href="DesignPatterns/index.html" class="knowledge-card store-utility-card" style="text-decoration: none; color: inherit; display: block; transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: var(--spacing-md);">
+                        <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="14" width="7" height="7"></rect>
+                                <rect x="3" y="14" width="7" height="7"></rect>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 style="font-family: var(--font-headline); font-size: 21px; font-weight: 600; color: var(--color-ink); margin: 0; letter-spacing: -0.01em;">Design Patterns</h3>
+                            <span style="font-size: 13px; color: var(--color-primary); font-family: var(--font-mono);">3 Articles</span>
+                        </div>
+                    </div>
+                    <p style="font-size: 15px; line-height: 1.5; color: var(--color-body-muted); margin-bottom: var(--spacing-md);">
+                        Comprehensive guides on Creational, Structural, and Behavioral design patterns with real-world implementations.
+                    </p>
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                        <span style="background: var(--color-canvas-parchment); color: var(--color-ink-muted-80); padding: 4px 10px; border-radius: var(--rounded-sm); font-size: 12px; font-family: var(--font-mono);">Creational</span>
+                        <span style="background: var(--color-canvas-parchment); color: var(--color-ink-muted-80); padding: 4px 10px; border-radius: var(--rounded-sm); font-size: 12px; font-family: var(--font-mono);">Structural</span>
+                        <span style="background: var(--color-canvas-parchment); color: var(--color-ink-muted-80); padding: 4px 10px; border-radius: var(--rounded-sm); font-size: 12px; font-family: var(--font-mono);">Behavioral</span>
+                    </div>
+                </a>
+
+                <!-- System Design Card -->
+                <a href="SystemDesign/index.html" class="knowledge-card store-utility-card" style="text-decoration: none; color: inherit; display: block; transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: var(--spacing-md);">
+                        <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 style="font-family: var(--font-headline); font-size: 21px; font-weight: 600; color: var(--color-ink); margin: 0; letter-spacing: -0.01em;">System Designs</h3>
+                            <span style="font-size: 13px; color: var(--color-primary); font-family: var(--font-mono);">3 Articles</span>
+                        </div>
+                    </div>
+                    <p style="font-size: 15px; line-height: 1.5; color: var(--color-body-muted); margin-bottom: var(--spacing-md);">
+                        In-depth system design analyses for real-world applications like Tinder, BookMyShow, and ride-hailing platforms.
+                    </p>
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                        <span style="background: var(--color-canvas-parchment); color: var(--color-ink-muted-80); padding: 4px 10px; border-radius: var(--rounded-sm); font-size: 12px; font-family: var(--font-mono);">Tinder</span>
+                        <span style="background: var(--color-canvas-parchment); color: var(--color-ink-muted-80); padding: 4px 10px; border-radius: var(--rounded-sm); font-size: 12px; font-family: var(--font-mono);">BookMyShow</span>
+                        <span style="background: var(--color-canvas-parchment); color: var(--color-ink-muted-80); padding: 4px 10px; border-radius: var(--rounded-sm); font-size: 12px; font-family: var(--font-mono);">Ride Hailing</span>
+                    </div>
+                </a>
+
+                <!-- Deep Dives Card -->
+                <a href="DeepDives/index.html" class="knowledge-card store-utility-card" style="text-decoration: none; color: inherit; display: block; transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: var(--spacing-md);">
+                        <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 style="font-family: var(--font-headline); font-size: 21px; font-weight: 600; color: var(--color-ink); margin: 0; letter-spacing: -0.01em;">Deep Dives</h3>
+                            <span style="font-size: 13px; color: var(--color-primary); font-family: var(--font-mono);">1 Article</span>
+                        </div>
+                    </div>
+                    <p style="font-size: 15px; line-height: 1.5; color: var(--color-body-muted); margin-bottom: var(--spacing-md);">
+                        Comprehensive technical deep dives into distributed systems, event streaming, and enterprise architecture patterns.
+                    </p>
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                        <span style="background: var(--color-canvas-parchment); color: var(--color-ink-muted-80); padding: 4px 10px; border-radius: var(--rounded-sm); font-size: 12px; font-family: var(--font-mono);">Kafka</span>
+                        <span style="background: var(--color-canvas-parchment); color: var(--color-ink-muted-80); padding: 4px 10px; border-radius: var(--rounded-sm); font-size: 12px; font-family: var(--font-mono);">Event Streaming</span>
+                        <span style="background: var(--color-canvas-parchment); color: var(--color-ink-muted-80); padding: 4px 10px; border-radius: var(--rounded-sm); font-size: 12px; font-family: var(--font-mono);">Distributed Systems</span>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </section>
+
     <!-- Projects Section -->
     <section id="projects" class="projects-section dark-theme reveal-element">
         <div class="container">
@@ -1499,7 +1586,7 @@
                 <a href="bookmyride-system-design.html" class="project-card store-utility-card dark project-card-link">
                     <div>
                         <span class="project-article-badge ride">System Design Article</span>
-                        <h3 class="project-title">BookingRideOnDemand at Scale</h3>
+                        <h3 class="project-title">BookingMyRide at Scale</h3>
                         <p class="project-description">
                             On-demand ride hailing HLD/LLD — fare quotes, Redis geospatial matching,
                             distributed driver locks, peak-demand queues, and geo-sharded scaling.

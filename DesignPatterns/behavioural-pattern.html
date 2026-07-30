@@ -1,0 +1,1813 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>Design Patterns Series 3 — Behavioural Patterns</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Lato:ital,wght@0,300;0,400;0,700;1,300;1,400&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet" />
+    <style>
+        :root {
+            --paper: #f9f5ee;
+            --paper2: #f1ead8;
+            --paper3: #e8dfc8;
+            --ink: #1e1a12;
+            --ink-soft: #3d3728;
+            --ink-muted: #8a7f68;
+            --border: #d5c9ac;
+            --red: #c0392b;
+            --red-light: #fdf0ee;
+            --teal: #1a6b6b;
+            --teal-light: #e8f4f4;
+            --amber: #b8860b;
+            --amber-light: #fdf8e8;
+            --slate: #2c4a6e;
+            --slate-light: #edf2f8;
+            --code-bg: #1e1e1e;
+            --code-text: #d4d4d4;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            font-size: 17px;
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background: var(--paper);
+            color: var(--ink);
+            font-family: 'Lato', sans-serif;
+            font-weight: 300;
+            line-height: 1.85;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── SERIES RIBBON ── */
+        .ribbon {
+            background: var(--ink);
+            color: var(--paper);
+            padding: 0.55rem 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.66rem;
+            letter-spacing: 0.14em;
+        }
+
+        .ribbon .s-chip {
+            background: var(--red);
+            padding: 0.1em 0.65em;
+            color: #fff;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+        }
+
+        .ribbon .prev {
+            margin-left: auto;
+            color: var(--ink-muted);
+        }
+
+        .ribbon .prev a {
+            color: #b5a990;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+
+        /* ── HERO ── */
+        .hero {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 5rem 2rem 2.5rem;
+            border-bottom: 2px solid var(--ink);
+        }
+
+        .hero-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .hero-copy {
+            flex: 1;
+            min-width: 280px;
+        }
+
+        .hero-eyebrow {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.64rem;
+            letter-spacing: 0.24em;
+            text-transform: uppercase;
+            color: var(--red);
+            margin-bottom: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+        }
+
+        .hero-eyebrow::before {
+            content: '—';
+            color: var(--ink-muted);
+        }
+
+        .hero h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: clamp(2.6rem, 6vw, 4.4rem);
+            font-weight: 900;
+            line-height: 1.0;
+            letter-spacing: -0.02em;
+            color: var(--ink);
+            margin-bottom: 1rem;
+        }
+
+        .hero h1 em {
+            font-style: italic;
+            color: var(--red);
+        }
+
+        .hero-lead {
+            font-size: 1.02rem;
+            color: var(--ink-soft);
+            max-width: 520px;
+            line-height: 1.8;
+            margin-bottom: 1.8rem;
+        }
+
+        .hero-byline {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.66rem;
+            color: var(--ink-muted);
+            letter-spacing: 0.08em;
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .hero-byline span {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .hero-byline span::before {
+            content: '›';
+            color: var(--red);
+        }
+
+        /* TOC card */
+        .toc {
+            border: 1.5px solid var(--ink);
+            padding: 1.4rem 1.6rem;
+            background: var(--paper2);
+            min-width: 200px;
+            flex-shrink: 0;
+            font-family: 'Fira Code', monospace;
+        }
+
+        .toc-head {
+            font-size: 0.58rem;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--ink-muted);
+            margin-bottom: 0.8rem;
+        }
+
+        .toc-item {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.28rem 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.7rem;
+            color: var(--ink-soft);
+        }
+
+        .toc-item:last-child {
+            border: none;
+        }
+
+        .toc-n {
+            color: var(--red);
+            width: 1.4rem;
+            flex-shrink: 0;
+            font-weight: 500;
+        }
+
+        /* ── INTRO SECTION ── */
+        .article-body {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 3.5rem 2rem 5rem;
+        }
+
+        p {
+            margin-bottom: 1.55rem;
+            font-size: 1rem;
+            color: var(--ink-soft);
+            line-height: 1.88;
+        }
+
+        p:first-of-type::first-letter {
+            font-family: 'Playfair Display', serif;
+            font-size: 3.8rem;
+            font-weight: 900;
+            float: left;
+            line-height: 0.75;
+            margin: 0.12em 0.1em 0 0;
+            color: var(--ink);
+        }
+
+        /* ── SERIES BACKLINK ── */
+        .series-trail {
+            display: flex;
+            gap: 0;
+            margin: 2rem 0 3rem;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.68rem;
+        }
+
+        .st-item {
+            flex: 1;
+            padding: 0.8rem 1rem;
+            border-right: 1px solid var(--border);
+            color: var(--ink-muted);
+        }
+
+        .st-item:last-child {
+            border: none;
+            background: var(--paper2);
+        }
+
+        .st-num {
+            color: var(--red);
+            display: block;
+            margin-bottom: 0.2rem;
+            font-weight: 500;
+        }
+
+        .st-title {
+            color: var(--ink);
+            font-weight: 400;
+            display: block;
+        }
+
+        .st-link {
+            color: var(--red);
+            text-decoration: underline;
+            text-underline-offset: 2px;
+            font-size: 0.6rem;
+            display: block;
+            margin-top: 0.2rem;
+        }
+
+        /* ── PATTERN BLOCKS ── */
+        .pat-block {
+            margin-top: 0;
+        }
+
+        .pat-opener {
+            display: flex;
+            align-items: flex-start;
+            gap: 0;
+            margin: 4.5rem 0 0;
+            padding-top: 3.5rem;
+            border-top: 2px solid var(--ink);
+        }
+
+        .pat-big-num {
+            font-family: 'Playfair Display', serif;
+            font-size: 6rem;
+            font-weight: 900;
+            line-height: 0.85;
+            color: var(--paper3);
+            flex-shrink: 0;
+            margin-right: 1.2rem;
+            letter-spacing: -0.04em;
+            user-select: none;
+        }
+
+        .pat-title-block {
+            flex: 1;
+        }
+
+        .pat-cat {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.62rem;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--red);
+            display: block;
+            margin-bottom: 0.4rem;
+        }
+
+        .pat-name {
+            font-family: 'Playfair Display', serif;
+            font-size: clamp(1.8rem, 4vw, 2.8rem);
+            font-weight: 900;
+            line-height: 1.05;
+            letter-spacing: -0.025em;
+            color: var(--ink);
+        }
+
+        .pat-name em {
+            font-style: italic;
+            color: var(--red);
+        }
+
+        .pat-tagline {
+            font-size: 0.9rem;
+            font-style: italic;
+            color: var(--ink-muted);
+            margin-top: 0.4rem;
+        }
+
+        h3 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.18rem;
+            font-weight: 700;
+            font-style: italic;
+            color: var(--ink);
+            margin: 2.2rem 0 0.8rem;
+        }
+
+        /* ── DIAGRAMS ── */
+        .diagram-wrap {
+            background: var(--paper2);
+            border: 1.5px solid var(--border);
+            margin: 2rem 0;
+            overflow: hidden;
+        }
+
+        .diagram-bar {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--ink-muted);
+            padding: 0.5rem 1.1rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--paper);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .diagram-bar::before {
+            content: '◆';
+            color: var(--red);
+            font-size: 0.55rem;
+        }
+
+        .diagram-wrap svg {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        /* ── CODE ── */
+        .code-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--paper3);
+            border: 1.5px solid var(--border);
+            border-bottom: none;
+            padding: 0.5rem 1.1rem;
+            margin-top: 2rem;
+        }
+
+        .code-lang {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.62rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--red);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .code-lang::before {
+            content:'{ }';
+            color: var(--ink-muted);
+        }
+
+        .code-file {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.6rem;
+            color: var(--ink-muted);
+        }
+
+        pre {
+            background: var(--code-bg);
+            color: var(--code-text);
+            font-family: 'Fira Code', monospace;
+            font-size: 0.75rem;
+            line-height: 1.72;
+            padding: 1.4rem 1.6rem;
+            margin: 0 0 2rem;
+            overflow-x: auto;
+            border: 1.5px solid #333;
+            border-top: 2.5px solid var(--red);
+        }
+
+        code {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.8em;
+            background: var(--paper3);
+            padding: 0.1em 0.35em;
+            color: var(--red);
+            border: 1px solid var(--border);
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+            border: none;
+            font-size: inherit;
+        }
+
+        /* VS Code–style highlight tokens */
+        .kw {
+            color: #569cd6;
+        }
+
+        /* keyword */
+        .cl {
+            color: #4ec9b0;
+        }
+
+        /* class/interface */
+        .fn {
+            color: #dcdcaa;
+        }
+
+        /* function */
+        .st {
+            color: #ce9178;
+        }
+
+        /* string */
+        .cm {
+            color: #6a9955;
+            font-style: italic;
+        }
+
+        /* comment */
+        .nm {
+            color: #b5cea8;
+        }
+
+        /* number */
+        .dc {
+            color: #569cd6;
+        }
+
+        /* special keyword like null/true */
+        .ty {
+            color: #4ec9b0;
+        }
+
+        /* type annotation */
+        .op {
+            color: #d4d4d4;
+        }
+
+        /* operator */
+
+        /* ── CALLOUTS ── */
+        .callout {
+            padding: 1.3rem 1.5rem;
+            margin: 2rem 0;
+            border-left: 4px solid var(--red);
+            background: var(--red-light);
+        }
+
+        .callout.teal {
+            border-left-color: var(--teal);
+            background: var(--teal-light);
+        }
+
+        .callout.amber {
+            border-left-color: var(--amber);
+            background: var(--amber-light);
+        }
+
+        .callout.slate {
+            border-left-color: var(--slate);
+            background: var(--slate-light);
+        }
+
+        .callout-tag {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            display: block;
+            margin-bottom: 0.4rem;
+            color: var(--red);
+        }
+
+        .callout.teal .callout-tag {
+            color: var(--teal);
+        }
+
+        .callout.amber .callout-tag {
+            color: var(--amber);
+        }
+
+        .callout.slate .callout-tag {
+            color: var(--slate);
+        }
+
+        .callout p {
+            color: var(--ink-soft);
+            font-size: 0.92rem;
+            margin: 0;
+            line-height: 1.72;
+        }
+
+        .callout p::first-letter {
+            all: unset;
+        }
+
+        /* ── PULL QUOTE ── */
+        .pull {
+            border-left: 4px solid var(--ink);
+            padding: 1.3rem 1.5rem;
+            margin: 2.2rem 0;
+            background: var(--paper2);
+            position: relative;
+        }
+
+        .pull::before {
+            content: '\201C';
+            font-family: 'Playfair Display', serif;
+            font-size: 5rem;
+            line-height: 0.5;
+            color: var(--ink);
+            opacity: 0.1;
+            position: absolute;
+            top: 1rem;
+            left: 0.8rem;
+            pointer-events: none;
+        }
+
+        .pull p {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.08rem;
+            font-style: italic;
+            color: var(--ink);
+            margin: 0;
+            padding-left: 0.8rem;
+        }
+
+        .pull p::first-letter {
+            all: unset;
+        }
+
+        /* ── VERDICT ── */
+        .verdict {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1px;
+            background: var(--border);
+            margin: 2rem 0;
+        }
+
+        .v-box {
+            padding: 1.1rem 1.3rem;
+        }
+
+        .v-use {
+            background: var(--teal-light);
+        }
+
+        .v-skip {
+            background: var(--red-light);
+        }
+
+        .v-title {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            font-weight: 500;
+            margin-bottom: 0.65rem;
+        }
+
+        .v-use .v-title {
+            color: var(--teal);
+        }
+
+        .v-skip .v-title {
+            color: var(--red);
+        }
+
+        .v-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .v-list li {
+            font-size: 0.84rem;
+            color: var(--ink-soft);
+            padding: 0.2rem 0 0.2rem 1.1rem;
+            position: relative;
+            line-height: 1.5;
+        }
+
+        .v-use li::before {
+            content: '✓';
+            color: var(--teal);
+            position: absolute;
+            left: 0;
+            font-weight: 700;
+        }
+
+        .v-skip li::before {
+            content: '✗';
+            color: var(--red);
+            position: absolute;
+            left: 0;
+            font-weight: 700;
+        }
+
+        /* ── ANALOGY ── */
+        .analogy {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+            background: var(--amber-light);
+            border: 1.5px solid #e8d590;
+            padding: 1.3rem 1.4rem;
+            margin: 2rem 0;
+        }
+
+        .analogy-icon {
+            font-size: 1.8rem;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+
+        .analogy-body p {
+            margin: 0;
+            font-size: 0.9rem;
+            color: var(--ink-soft);
+            line-height: 1.7;
+        }
+
+        .analogy-body p::first-letter {
+            all: unset;
+        }
+
+        .analogy-body strong {
+            color: var(--ink);
+            font-weight: 700;
+        }
+
+        /* ── COMPARISON TABLE ── */
+        .comp-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.84rem;
+            margin: 2rem 0;
+        }
+
+        .comp-table th {
+            background: var(--ink);
+            color: var(--paper);
+            padding: 0.65rem 1rem;
+            text-align: left;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.66rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            font-weight: 400;
+        }
+
+        .comp-table th.ac {
+            color: #f0c96a;
+        }
+
+        .comp-table td {
+            padding: 0.65rem 1rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--ink-soft);
+            line-height: 1.5;
+        }
+
+        .comp-table td:first-child {
+            color: var(--ink);
+            font-weight: 700;
+        }
+
+        .comp-table tr:nth-child(even) td {
+            background: var(--paper2);
+        }
+
+        /* ── GITHUB CARD ── */
+        .gh-card {
+            background: var(--ink);
+            color: var(--paper);
+            padding: 1.6rem 1.8rem;
+            margin: 2.5rem 0;
+            display: flex;
+            align-items: center;
+            gap: 1.4rem;
+            flex-wrap: wrap;
+        }
+
+        .gh-icon {
+            font-size: 2rem;
+            flex-shrink: 0;
+        }
+
+        .gh-body {
+            flex: 1;
+        }
+
+        .gh-label {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: #f0c96a;
+            display: block;
+            margin-bottom: 0.3rem;
+        }
+
+        .gh-link {
+            font-family: 'Playfair Display', serif;
+            font-size: 1rem;
+            font-style: italic;
+            color: var(--paper);
+            display: block;
+            margin-bottom: 0.2rem;
+        }
+
+        .gh-url {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.7rem;
+            color: #7eb3ff;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+
+        /* ── FOOTER ── */
+        .article-footer {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 2.5rem 2rem 5rem;
+            border-top: 2px solid var(--ink);
+        }
+
+        .next-card {
+            background: var(--ink);
+            color: var(--paper);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border-top: 3px solid var(--red);
+        }
+
+        .next-label {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--red);
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .next-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--paper);
+            margin-bottom: 0.4rem;
+        }
+
+        .next-desc {
+            font-size: 0.86rem;
+            color: #9a9080;
+            line-height: 1.65;
+        }
+
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-top: 1.5rem;
+        }
+
+        .tag {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.06em;
+            padding: 0.25em 0.7em;
+            border: 1px solid var(--border);
+            color: var(--ink-muted);
+        }
+
+        @media(max-width:620px) {
+            .verdict {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-row {
+                flex-direction: column;
+            }
+
+            pre {
+                font-size: 0.68rem;
+            }
+
+            .pat-big-num {
+                font-size: 4rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- RIBBON -->
+    <div class="ribbon">
+        <span class="s-chip">Series 3</span>
+        Design Patterns in TypeScript
+        <span class="prev">
+            S1: <a
+                href="https://medium.com/@ajay.kotnalajpr/design-patterns-the-blueprint-every-developer-should-know-c51e0256fb5f">Creational</a>
+            &nbsp;·&nbsp;
+            S2: <a
+                href="https://medium.com/@ajay.kotnalajpr/design-patterns-the-blueprint-every-developer-should-know-329060187654">Structural</a>
+        </span>
+    </div>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="hero-row">
+            <div class="hero-copy">
+                <div class="hero-eyebrow">Behavioural Design Patterns</div>
+                <h1>When Your Objects<br>Need to <em>Talk</em></h1>
+                <p class="hero-lead">
+                    The final chapter. Strategy, Observer, State, and Chain of Responsibility — four patterns that
+                    govern how objects communicate, react, and make decisions at runtime.
+                </p>
+                <div class="hero-byline">
+                    <span>Series 3 of 3</span>
+                    <span>Behavioural Patterns</span>
+                    <span>TypeScript · Gang of Four</span>
+                    <span>github.com/ajaykotnala/LowLevelDesign</span>
+                </div>
+            </div>
+            <div class="toc">
+                <div class="toc-head">Patterns in this issue</div>
+                <div class="toc-item"><span class="toc-n">01</span>Strategy</div>
+                <div class="toc-item"><span class="toc-n">02</span>Observer</div>
+                <div class="toc-item"><span class="toc-n">03</span>State</div>
+                <div class="toc-item"><span class="toc-n">04</span>Chain of Responsibility</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- BODY -->
+    <main class="article-body">
+
+        <p>Series 1 asked: <em>how should objects be born?</em> Series 2 asked: <em>how should they fit together?</em>
+            Series 3 asks the final question — <em>how should they behave?</em> Behavioural patterns are about
+            communication, decision-making, and responsibility. They answer the hardest runtime questions: who does
+            what, who gets notified when things change, who decides which algorithm to run, and who is responsible when
+            a request needs to travel through a system.</p>
+
+        <p>Four patterns. All four with real TypeScript implementations from production-style code. Let's close the
+            series.</p>
+
+        <!-- Series trail -->
+        <div class="series-trail">
+            <div class="st-item">
+                <span class="st-num">Series 1</span>
+                <span class="st-title">Creational Patterns</span>
+                <a class="st-link"
+                    href="https://medium.com/@ajay.kotnalajpr/design-patterns-the-blueprint-every-developer-should-know-c51e0256fb5f">Read
+                    on Medium ↗</a>
+            </div>
+            <div class="st-item">
+                <span class="st-num">Series 2</span>
+                <span class="st-title">Structural Patterns</span>
+                <a class="st-link"
+                    href="https://medium.com/@ajay.kotnalajpr/design-patterns-the-blueprint-every-developer-should-know-329060187654">Read
+                    on Medium ↗</a>
+            </div>
+            <div class="st-item">
+                <span class="st-num">Series 3 — You are here</span>
+                <span class="st-title">Behavioural Patterns</span>
+                <span class="st-link">This article</span>
+            </div>
+        </div>
+
+
+        <!-- ═══════════════════════════ 01 STRATEGY ═══════════════════════════ -->
+        <div class="pat-block">
+            <div class="pat-opener">
+                <span class="pat-big-num">01</span>
+                <div class="pat-title-block">
+                    <span class="pat-cat">Behavioural · Series 3</span>
+                    <div class="pat-name">Strategy</div>
+                    <div class="pat-tagline">Swap algorithms at runtime without changing the code that uses them.</div>
+                </div>
+            </div>
+        </div>
+
+        <p>Picture a GPS app. The user opens it and asks for directions. Should it take the fastest route? The shortest?
+            The most scenic? Each of those is a different algorithm. Without Strategy, you'd jam all three into a single
+            function with <code>if-else</code> branches that grows every time a new route type appears. With Strategy,
+            each algorithm lives in its own class — and you swap them in and out at runtime like batteries.</p>
+
+        <p>That's the entire pattern. A <strong>Strategy interface</strong> declares the method all algorithms must
+            implement. Each <strong>Concrete Strategy</strong> is a different algorithm. A <strong>Context</strong>
+            holds a reference to whichever strategy is currently active and delegates work to it. The Context never
+            cares what the strategy is — it just calls the interface.</p>
+
+        <!-- STRATEGY DIAGRAM -->
+        <div class="diagram-wrap">
+            <div class="diagram-bar">Strategy — context delegates to swappable algorithm objects</div>
+            <svg viewBox="0 0 680 186" xmlns="http://www.w3.org/2000/svg" font-family="'Fira Code',monospace">
+                <rect width="680" height="186" fill="#f1ead8" />
+                <defs>
+                    <marker id="s1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#c0392b" />
+                    </marker>
+                    <marker id="s2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#3d3728" />
+                    </marker>
+                </defs>
+
+                <!-- Context box -->
+                <rect x="18" y="52" width="175" height="90" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1.5" />
+                <rect x="18" y="52" width="175" height="26" rx="1" fill="#1e1a12" />
+                <rect x="18" y="66" width="175" height="12" fill="#1e1a12" />
+                <text x="105" y="66" text-anchor="middle" font-size="11" fill="#f9f5ee" font-style="italic"
+                    font-family="'Playfair Display',serif" font-weight="700">PaymentContext</text>
+                <line x1="18" y1="78" x2="193" y2="78" stroke="#d5c9ac" stroke-width="0.8" />
+                <text x="30" y="96" font-size="8.5" fill="#c0392b">- strategy: PaymentStrategy</text>
+                <text x="30" y="112" font-size="8.5" fill="#dcdcaa">setStrategy(s)</text>
+                <text x="30" y="127" font-size="8.5" fill="#dcdcaa">executePayment(amt)</text>
+
+                <!-- Arrow Context → Interface -->
+                <line x1="193" y1="97" x2="244" y2="97" stroke="#c0392b" stroke-width="1.5" marker-end="url(#s1)" />
+                <text x="212" y="90" font-size="7.5" fill="#c0392b" font-style="italic">uses</text>
+
+                <!-- Strategy interface -->
+                <rect x="244" y="36" width="168" height="72" rx="1" fill="#f9f5ee" stroke="#3d3728"
+                    stroke-width="1.5" />
+                <rect x="244" y="36" width="168" height="26" rx="1" fill="#1e1a12" />
+                <rect x="244" y="50" width="168" height="12" fill="#1e1a12" />
+                <text x="290" y="46" text-anchor="middle" font-size="8" fill="#d5c9ac"
+                    letter-spacing="0.5">«interface»</text>
+                <text x="328" y="58" text-anchor="middle" font-size="11" fill="#f9f5ee" font-style="italic"
+                    font-family="'Playfair Display',serif" font-weight="700">PaymentStrategy</text>
+                <line x1="244" y1="62" x2="412" y2="62" stroke="#d5c9ac" stroke-width="0.8" />
+                <text x="256" y="80" font-size="8.5" fill="#b5cea8">pay(amount: number)</text>
+                <text x="256" y="96" font-size="7.5" fill="#6a9955">[abstract]</text>
+
+                <!-- Three implements arrows -->
+                <line x1="328" y1="108" x2="328" y2="128" stroke="#3d3728" stroke-width="1.2" stroke-dasharray="4,2" />
+                <line x1="328" y1="128" x2="218" y2="128" stroke="#3d3728" stroke-width="1.2" stroke-dasharray="4,2" />
+                <line x1="328" y1="128" x2="328" y2="128" stroke="#3d3728" stroke-width="1.2" stroke-dasharray="4,2" />
+                <line x1="218" y1="128" x2="218" y2="148" stroke="#3d3728" stroke-width="1.2" stroke-dasharray="4,2"
+                    marker-end="url(#s2)" />
+                <line x1="328" y1="128" x2="328" y2="148" stroke="#3d3728" stroke-width="1.2" stroke-dasharray="4,2"
+                    marker-end="url(#s2)" />
+                <line x1="438" y1="108" x2="438" y2="148" stroke="#3d3728" stroke-width="1.2" stroke-dasharray="4,2"
+                    marker-end="url(#s2)" />
+
+                <!-- Concrete strategy boxes -->
+                <rect x="140" y="148" width="155" height="30" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1" />
+                <text x="217" y="160" text-anchor="middle" font-size="8.5" fill="#1e1a12" font-style="italic"
+                    font-family="'Playfair Display',serif">CreditCardPayment</text>
+                <text x="217" y="172" text-anchor="middle" font-size="7" fill="#8a7f68">pay() → credit card logic</text>
+
+                <rect x="305" y="148" width="140" height="30" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1" />
+                <text x="375" y="160" text-anchor="middle" font-size="8.5" fill="#1e1a12" font-style="italic"
+                    font-family="'Playfair Display',serif">PayPalPayment</text>
+                <text x="375" y="172" text-anchor="middle" font-size="7" fill="#8a7f68">pay() → PayPal logic</text>
+
+                <rect x="458" y="148" width="125" height="30" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1" />
+                <text x="520" y="160" text-anchor="middle" font-size="8.5" fill="#1e1a12" font-style="italic"
+                    font-family="'Playfair Display',serif">UPIPayment</text>
+                <text x="520" y="172" text-anchor="middle" font-size="7" fill="#8a7f68">pay() → UPI logic</text>
+            </svg>
+        </div>
+
+        <h3>Real-World Implementation — Payment Processing</h3>
+
+        <p>Three payment methods. One context. Swap strategies at runtime without touching a single line of payment
+            logic.</p>
+
+        <div class="code-header">
+            <span class="code-lang">TypeScript — Strategy Pattern</span>
+            <span class="code-file">strategy.ts</span>
+        </div>
+        <pre><code><span class="cm">// Strategy interface — all payment methods must honour this contract</span>
+<span class="kw">interface</span> <span class="cl">PaymentStrategy</span> {
+    <span class="fn">pay</span>(amount: <span class="ty">number</span>): <span class="dc">void</span>;
+}
+
+<span class="cm">// Concrete Strategy 1 — Credit Card</span>
+<span class="kw">class</span> <span class="cl">CreditCardPayment</span> <span class="kw">implements</span> <span class="cl">PaymentStrategy</span> {
+    <span class="kw">private</span> cardNumber: <span class="ty">string</span>;
+    <span class="kw">private</span> cardHolderName: <span class="ty">string</span>;
+    <span class="kw">private</span> cvv: <span class="ty">string</span>;
+
+    <span class="kw">constructor</span>(cardNumber: <span class="ty">string</span>, cardHolderName: <span class="ty">string</span>, cvv: <span class="ty">string</span>) {
+        <span class="kw">this</span>.cardNumber = cardNumber;
+        <span class="kw">this</span>.cardHolderName = cardHolderName;
+        <span class="kw">this</span>.cvv = cvv;
+    }
+
+    <span class="fn">pay</span>(amount: <span class="ty">number</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">`Processing credit card payment of $${amount} for ${this.cardHolderName}`</span>);
+    }
+}
+
+<span class="cm">// Concrete Strategy 2 — PayPal</span>
+<span class="kw">class</span> <span class="cl">PayPalPayment</span> <span class="kw">implements</span> <span class="cl">PaymentStrategy</span> {
+    <span class="kw">private</span> email: <span class="ty">string</span>;
+    <span class="kw">constructor</span>(email: <span class="ty">string</span>) { <span class="kw">this</span>.email = email; }
+
+    <span class="fn">pay</span>(amount: <span class="ty">number</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">`Processing PayPal payment of $${amount} for ${this.email}`</span>);
+    }
+}
+
+<span class="cm">// Concrete Strategy 3 — UPI</span>
+<span class="kw">class</span> <span class="cl">UPIPayment</span> <span class="kw">implements</span> <span class="cl">PaymentStrategy</span> {
+    <span class="kw">private</span> upiId: <span class="ty">string</span>;
+    <span class="kw">constructor</span>(upiId: <span class="ty">string</span>) { <span class="kw">this</span>.upiId = upiId; }
+
+    <span class="fn">pay</span>(amount: <span class="ty">number</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">`Processing UPI payment of $${amount} for UPI ID ${this.upiId}`</span>);
+    }
+}
+
+<span class="cm">// Context — holds the active strategy, delegates payment to it</span>
+<span class="kw">class</span> <span class="cl">PaymentContext</span> {
+    <span class="kw">private</span> strategy: <span class="cl">PaymentStrategy</span>;
+
+    <span class="kw">constructor</span>(strategy: <span class="cl">PaymentStrategy</span>) { <span class="kw">this</span>.strategy = strategy; }
+
+    <span class="fn">setStrategy</span>(strategy: <span class="cl">PaymentStrategy</span>): <span class="dc">void</span> {
+        <span class="kw">this</span>.strategy = strategy;   <span class="cm">// swap at runtime — no logic changes here</span>
+    }
+
+    <span class="fn">executePayment</span>(amount: <span class="ty">number</span>): <span class="dc">void</span> {
+        <span class="kw">this</span>.strategy.<span class="fn">pay</span>(amount);  <span class="cm">// delegates — doesn't care which strategy</span>
+    }
+}
+
+<span class="cm">// Client — swapping strategies at runtime</span>
+<span class="kw">const</span> ctx = <span class="kw">new</span> <span class="cl">PaymentContext</span>(<span class="kw">new</span> <span class="cl">CreditCardPayment</span>(<span class="st">"1234-5678"</span>, <span class="st">"Ajay"</span>, <span class="st">"123"</span>));
+ctx.<span class="fn">executePayment</span>(<span class="nm">100</span>);   <span class="cm">// → credit card logic runs</span>
+
+ctx.<span class="fn">setStrategy</span>(<span class="kw">new</span> <span class="cl">PayPalPayment</span>(<span class="st">"kotnala.ajay@gmail.com"</span>));
+ctx.<span class="fn">executePayment</span>(<span class="nm">200</span>);   <span class="cm">// → PayPal logic runs</span>
+
+ctx.<span class="fn">setStrategy</span>(<span class="kw">new</span> <span class="cl">UPIPayment</span>(<span class="st">"kotnala.ajay@upi"</span>));
+ctx.<span class="fn">executePayment</span>(<span class="nm">300</span>);   <span class="cm">// → UPI logic runs</span></code></pre>
+
+        <div class="analogy">
+            <span class="analogy-icon">🔌</span>
+            <div class="analogy-body">
+                <p><strong>Think of a phone charger adapter kit.</strong> The phone (Context) is always the same. The
+                    country-specific adapter (Strategy) is what changes. You don't rewire the phone for each country —
+                    you swap the adapter. Same interface, different implementation, zero disruption to the device
+                    itself.</p>
+            </div>
+        </div>
+
+        <div class="callout teal">
+            <span class="callout-tag">Real-world signal</span>
+            <p>Every time you find yourself writing
+                <code>if (method === 'credit') { ... } else if (method === 'upi') { ... }</code> in a processing
+                function, that's Strategy waiting to be born. The branching is the smell. Encapsulate each branch into
+                its own class and inject the right one at the call site.</p>
+        </div>
+
+        <div class="verdict">
+            <div class="v-box v-use">
+                <div class="v-title">✔ Use Strategy when…</div>
+                <ul class="v-list">
+                    <li>Multiple algorithms do the same job differently</li>
+                    <li>Behaviour must switch at runtime based on context</li>
+                    <li>You want to eliminate conditional branching on type</li>
+                    <li>Algorithms need to be tested or replaced independently</li>
+                </ul>
+            </div>
+            <div class="v-box v-skip">
+                <div class="v-title">✗ Skip Strategy when…</div>
+                <ul class="v-list">
+                    <li>You only have one or two static algorithms</li>
+                    <li>The logic difference is a single line — just use a flag</li>
+                    <li>The context never changes algorithm mid-lifecycle</li>
+                </ul>
+            </div>
+        </div>
+
+
+        <!-- ═══════════════════════════ 02 OBSERVER ═══════════════════════════ -->
+        <div class="pat-block">
+            <div class="pat-opener">
+                <span class="pat-big-num">02</span>
+                <div class="pat-title-block">
+                    <span class="pat-cat">Behavioural · Series 3</span>
+                    <div class="pat-name">Observer</div>
+                    <div class="pat-tagline">When one thing changes, everything that cares gets told — automatically.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <p>You're building a blog platform. When a new post goes live on Medium, your subscribers should get notified.
+            When a post drops on LinkedIn, a different set of followers should hear about it. The naive approach is for
+            the blog to maintain an ever-growing list of direct calls to notification services. Add Slack? Update the
+            blog class. Add email digest? Update the blog class again. The blog shouldn't own all that logic.</p>
+
+        <p>Observer decouples the subject (the blog) from the observers (the subscribers). The subject simply broadcasts
+            — <em>"something changed"</em> — and every registered observer reacts however it sees fit. The subject
+            doesn't know or care how many observers there are, what they do, or when they were added.</p>
+
+        <!-- OBSERVER DIAGRAM -->
+        <div class="diagram-wrap">
+            <div class="diagram-bar">Observer — subject broadcasts, observers react independently</div>
+            <svg viewBox="0 0 680 210" xmlns="http://www.w3.org/2000/svg" font-family="'Fira Code',monospace">
+                <rect width="680" height="210" fill="#f1ead8" />
+                <defs>
+                    <marker id="ob1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#c0392b" />
+                    </marker>
+                    <marker id="ob2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#3d3728" />
+                    </marker>
+                </defs>
+
+                <!-- Subject interface -->
+                <rect x="18" y="18" width="175" height="84" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1.5" />
+                <rect x="18" y="18" width="175" height="26" rx="1" fill="#1e1a12" />
+                <rect x="18" y="32" width="175" height="12" fill="#1e1a12" />
+                <text x="60" y="28" text-anchor="middle" font-size="7.5" fill="#d5c9ac"
+                    letter-spacing="0.5">«interface»</text>
+                <text x="105" y="40" text-anchor="middle" font-size="11" fill="#f9f5ee" font-style="italic"
+                    font-family="'Playfair Display',serif" font-weight="700">Subject</text>
+                <line x1="18" y1="44" x2="193" y2="44" stroke="#d5c9ac" stroke-width="0.8" />
+                <text x="30" y="60" font-size="8.5" fill="#b5cea8">subscribe(observer)</text>
+                <text x="30" y="75" font-size="8.5" fill="#b5cea8">unsubscribe(observer)</text>
+                <text x="30" y="90" font-size="8.5" fill="#b5cea8">notify(message)</text>
+
+                <!-- Concrete subjects -->
+                <rect x="18" y="126" width="175" height="38" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1" />
+                <text x="105" y="141" text-anchor="middle" font-size="9.5" fill="#1e1a12" font-style="italic"
+                    font-family="'Playfair Display',serif">MediumBlog</text>
+                <text x="105" y="155" text-anchor="middle" font-size="7.5" fill="#8a7f68">listOfObservers:
+                    observers[]</text>
+
+                <rect x="18" y="172" width="175" height="28" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1" />
+                <text x="105" y="188" text-anchor="middle" font-size="9.5" fill="#1e1a12" font-style="italic"
+                    font-family="'Playfair Display',serif">LinkedInBlog</text>
+
+                <!-- Implements arrows -->
+                <line x1="105" y1="102" x2="105" y2="126" stroke="#3d3728" stroke-width="1.5" />
+                <polygon points="105,102 99,114 111,114" fill="#f9f5ee" stroke="#3d3728" stroke-width="1.5" />
+
+                <!-- Observer interface -->
+                <rect x="280" y="18" width="165" height="66" rx="1" fill="#f9f5ee" stroke="#3d3728"
+                    stroke-width="1.5" />
+                <rect x="280" y="18" width="165" height="26" rx="1" fill="#1e1a12" />
+                <rect x="280" y="32" width="165" height="12" fill="#1e1a12" />
+                <text x="320" y="28" text-anchor="middle" font-size="7.5" fill="#d5c9ac"
+                    letter-spacing="0.5">«interface»</text>
+                <text x="362" y="40" text-anchor="middle" font-size="11" fill="#f9f5ee" font-style="italic"
+                    font-family="'Playfair Display',serif" font-weight="700">observers</text>
+                <line x1="280" y1="44" x2="445" y2="44" stroke="#d5c9ac" stroke-width="0.8" />
+                <text x="292" y="60" font-size="8.5" fill="#b5cea8">update(message: string)</text>
+                <text x="292" y="75" font-size="7.5" fill="#6a9955">[abstract]</text>
+
+                <!-- User boxes -->
+                <rect x="280" y="122" width="155" height="28" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1" />
+                <text x="357" y="135" text-anchor="middle" font-size="9" fill="#1e1a12" font-style="italic"
+                    font-family="'Playfair Display',serif">User (Sri)</text>
+                <text x="357" y="145" text-anchor="middle" font-size="7.5" fill="#8a7f68">update() → "Sri received:
+                    ..."</text>
+
+                <rect x="280" y="158" width="155" height="28" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1" />
+                <text x="357" y="172" text-anchor="middle" font-size="9" fill="#1e1a12" font-style="italic"
+                    font-family="'Playfair Display',serif">User (Kiran)</text>
+                <text x="357" y="183" text-anchor="middle" font-size="7.5" fill="#8a7f68">update() → "Kiran received:
+                    ..."</text>
+
+                <rect x="280" y="193" width="155" height="14" rx="1" fill="#f9f5ee" stroke="#d5c9ac" stroke-width="1" />
+                <text x="357" y="202" text-anchor="middle" font-size="7" fill="#8a7f68" font-style="italic">User
+                    (Amol)...</text>
+
+                <!-- Implements arrow User from interface -->
+                <line x1="362" y1="84" x2="362" y2="122" stroke="#3d3728" stroke-width="1.5" />
+                <polygon points="362,84 356,96 368,96" fill="#f9f5ee" stroke="#3d3728" stroke-width="1.5" />
+
+                <!-- Notify arrows from subject → observers -->
+                <line x1="193" y1="145" x2="280" y2="136" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="5,3"
+                    marker-end="url(#ob1)" />
+                <line x1="193" y1="155" x2="280" y2="172" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="5,3"
+                    marker-end="url(#ob1)" />
+                <text x="225" y="143" font-size="7.5" fill="#c0392b" font-style="italic">notify()</text>
+
+                <!-- holds list annotation -->
+                <line x1="193" y1="60" x2="280" y2="50" stroke="#8a7f68" stroke-width="1" stroke-dasharray="3,2" />
+                <text x="223" y="48" font-size="7.5" fill="#8a7f68" font-style="italic">holds list of</text>
+            </svg>
+        </div>
+
+        <h3>Real-World Implementation — Blog Notification System</h3>
+
+        <p>Medium subscribers get notified about Medium posts. LinkedIn followers get notified about LinkedIn posts.
+            Kiran subscribes to both — and unsubscribing from one doesn't affect the other. The blog classes never need
+            to change when the subscriber list evolves.</p>
+
+        <div class="code-header">
+            <span class="code-lang">TypeScript — Observer Pattern</span>
+            <span class="code-file">observer.ts</span>
+        </div>
+        <pre><code><span class="cm">// Observer interface — every subscriber must implement this</span>
+<span class="kw">interface</span> <span class="cl">observers</span> {
+    <span class="fn">update</span>(message: <span class="ty">string</span>): <span class="dc">void</span>;
+}
+
+<span class="cm">// Subject interface — what a "publishable" blog must expose</span>
+<span class="kw">interface</span> <span class="cl">Subject</span> {
+    <span class="fn">subscribe</span>(observer: <span class="cl">observers</span>): <span class="dc">void</span>;
+    <span class="fn">unsubscribe</span>(observer: <span class="cl">observers</span>): <span class="dc">void</span>;
+    <span class="fn">notify</span>(message: <span class="ty">string</span>): <span class="dc">void</span>;
+}
+
+<span class="cm">// Concrete Subject 1 — Medium blog</span>
+<span class="kw">class</span> <span class="cl">MediumBlog</span> <span class="kw">implements</span> <span class="cl">Subject</span> {
+    listOfObservers: <span class="cl">observers</span>[] = [];
+
+    <span class="fn">subscribe</span>(observer: <span class="cl">observers</span>): <span class="dc">void</span> {
+        <span class="kw">this</span>.listOfObservers.<span class="fn">push</span>(observer);
+    }
+
+    <span class="fn">unsubscribe</span>(observer: <span class="cl">observers</span>): <span class="dc">void</span> {
+        <span class="kw">if</span> (<span class="kw">this</span>.listOfObservers.<span class="fn">includes</span>(observer)) {
+            console.<span class="fn">log</span>(<span class="st">`Observer unsubscribed successfully!`</span>);
+            <span class="kw">this</span>.listOfObservers = <span class="kw">this</span>.listOfObservers.<span class="fn">filter</span>(obs => obs !== observer);
+        } <span class="kw">else</span> {
+            console.<span class="fn">log</span>(<span class="st">`Observer not found in the list!`</span>);
+        }
+    }
+
+    <span class="fn">notify</span>(message: <span class="ty">string</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">`Notifying observers: ${message}`</span>);
+        <span class="kw">for</span> (<span class="kw">const</span> observer <span class="kw">of</span> <span class="kw">this</span>.listOfObservers) {
+            observer.<span class="fn">update</span>(message);   <span class="cm">// each observer reacts in its own way</span>
+        }
+    }
+}
+
+<span class="cm">// Concrete Subject 2 — LinkedIn blog (same structure)</span>
+<span class="kw">class</span> <span class="cl">LinkedInBlog</span> <span class="kw">implements</span> <span class="cl">Subject</span> {
+    listOfObservers: <span class="cl">observers</span>[] = [];
+    <span class="fn">subscribe</span>(o: <span class="cl">observers</span>)   { <span class="kw">this</span>.listOfObservers.<span class="fn">push</span>(o); }
+    <span class="fn">unsubscribe</span>(o: <span class="cl">observers</span>) { <span class="kw">this</span>.listOfObservers = <span class="kw">this</span>.listOfObservers.<span class="fn">filter</span>(x => x !== o); }
+    <span class="fn">notify</span>(message: <span class="ty">string</span>)    {
+        console.<span class="fn">log</span>(<span class="st">`LinkedIn notifying: ${message}`</span>);
+        <span class="kw">this</span>.listOfObservers.<span class="fn">forEach</span>(o => o.<span class="fn">update</span>(message));
+    }
+}
+
+<span class="cm">// Concrete Observer — a user who subscribes to blogs</span>
+<span class="kw">class</span> <span class="cl">User</span> <span class="kw">implements</span> <span class="cl">observers</span> {
+    <span class="kw">private</span> name: <span class="ty">string</span>;
+    <span class="kw">constructor</span>(name: <span class="ty">string</span>) { <span class="kw">this</span>.name = name; }
+
+    <span class="fn">update</span>(message: <span class="ty">string</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">`${this.name} received: ${message}`</span>);
+    }
+}
+
+<span class="cm">// Client code</span>
+<span class="kw">const</span> mediumBlog   = <span class="kw">new</span> <span class="cl">MediumBlog</span>();
+<span class="kw">const</span> linkedInBlog = <span class="kw">new</span> <span class="cl">LinkedInBlog</span>();
+
+<span class="kw">const</span> sri   = <span class="kw">new</span> <span class="cl">User</span>(<span class="st">"Sri"</span>);
+<span class="kw">const</span> kiran = <span class="kw">new</span> <span class="cl">User</span>(<span class="st">"Kiran"</span>);
+<span class="kw">const</span> amol  = <span class="kw">new</span> <span class="cl">User</span>(<span class="st">"Amol"</span>);
+
+mediumBlog.<span class="fn">subscribe</span>(sri);
+mediumBlog.<span class="fn">subscribe</span>(kiran);
+linkedInBlog.<span class="fn">subscribe</span>(kiran);
+linkedInBlog.<span class="fn">subscribe</span>(amol);
+
+mediumBlog.<span class="fn">notify</span>(<span class="st">"New post on Medium about Design Patterns!"</span>);
+<span class="cm">// Sri received: ...   |  Kiran received: ...</span>
+
+linkedInBlog.<span class="fn">notify</span>(<span class="st">"New post on LinkedIn about Design Patterns!"</span>);
+<span class="cm">// Kiran received: ... |  Amol received: ...</span>
+
+mediumBlog.<span class="fn">unsubscribe</span>(kiran);
+mediumBlog.<span class="fn">notify</span>(<span class="st">"Another post on Medium about AI!"</span>);
+<span class="cm">// Only Sri received: ... (Kiran was removed)</span></code></pre>
+
+        <div class="pull">
+            <p>The subject doesn't know who's listening. The observer doesn't know what it's subscribed to. That mutual
+                ignorance is precisely what makes event-driven systems scale.</p>
+        </div>
+
+        <div class="callout amber">
+            <span class="callout-tag">In the wild</span>
+            <p>This pattern is everywhere. DOM event listeners (<code>addEventListener</code>). Redux's store
+                subscriptions. RxJS observables. Firebase real-time listeners. Every pub-sub system — Kafka, SNS,
+                EventBridge — is Observer at infrastructure scale. When you write <code>onClick</code> in React, you're
+                registering an observer on a DOM subject.</p>
+        </div>
+
+
+        <!-- ═══════════════════════════ 03 STATE ═══════════════════════════ -->
+        <div class="pat-block">
+            <div class="pat-opener">
+                <span class="pat-big-num">03</span>
+                <div class="pat-title-block">
+                    <span class="pat-cat">Behavioural · Series 3</span>
+                    <div class="pat-name">State</div>
+                    <div class="pat-tagline">Let an object's class change when its state changes.</div>
+                </div>
+            </div>
+        </div>
+
+        <p>Some objects behave completely differently depending on where they are in their lifecycle. A document in
+            <em>Draft</em> can be edited freely. The same document in <em>Moderation</em> can't be touched. Once
+            <em>Published</em>, it's sealed. Every operation — edit, submit, publish — means something different in each
+            state.</p>
+
+        <p>Without State, you write <code>if (state === 'draft') { ... } else if (state === 'moderation') { ... }</code>
+            blocks everywhere, and every new state means hunting through every method to add another branch. With State,
+            each state becomes a class. The object just delegates to its current state, and transitions are explicit
+            state-to-state swaps. The <code>if-else</code> soup evaporates.</p>
+
+        <!-- STATE DIAGRAM -->
+        <div class="diagram-wrap">
+            <div class="diagram-bar">State — document lifecycle: Draft → Moderation → Published</div>
+            <svg viewBox="0 0 660 178" xmlns="http://www.w3.org/2000/svg" font-family="'Fira Code',monospace">
+                <rect width="660" height="178" fill="#f1ead8" />
+                <defs>
+                    <marker id="st1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#c0392b" />
+                    </marker>
+                    <marker id="st2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#3d3728" />
+                    </marker>
+                </defs>
+
+                <!-- Context -->
+                <rect x="18" y="56" width="155" height="84" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1.5" />
+                <rect x="18" y="56" width="155" height="26" rx="1" fill="#1e1a12" />
+                <rect x="18" y="70" width="155" height="12" fill="#1e1a12" />
+                <text x="95" y="70" text-anchor="middle" font-size="11" fill="#f9f5ee" font-style="italic"
+                    font-family="'Playfair Display',serif" font-weight="700">DocumentContext</text>
+                <line x1="18" y1="82" x2="173" y2="82" stroke="#d5c9ac" stroke-width="0.8" />
+                <text x="30" y="98" font-size="8.5" fill="#c0392b">-state: DocumentLifecycleState</text>
+                <line x1="18" y1="104" x2="173" y2="104" stroke="#d5c9ac" stroke-width="0.5" />
+                <text x="30" y="118" font-size="8.5" fill="#dcdcaa">draft() / submitForReview()</text>
+                <text x="30" y="131" font-size="8.5" fill="#dcdcaa">publish() / setState()</text>
+
+                <!-- Arrow context → interface -->
+                <line x1="173" y1="98" x2="218" y2="98" stroke="#c0392b" stroke-width="1.5" marker-end="url(#st1)" />
+                <text x="188" y="91" font-size="7.5" fill="#c0392b" font-style="italic">delegates</text>
+
+                <!-- State interface -->
+                <rect x="218" y="38" width="172" height="84" rx="1" fill="#f9f5ee" stroke="#3d3728"
+                    stroke-width="1.5" />
+                <rect x="218" y="38" width="172" height="26" rx="1" fill="#1e1a12" />
+                <rect x="218" y="52" width="172" height="12" fill="#1e1a12" />
+                <text x="262" y="48" text-anchor="middle" font-size="7.5" fill="#d5c9ac"
+                    letter-spacing="0.5">«interface»</text>
+                <text x="304" y="60" text-anchor="middle" font-size="10.5" fill="#f9f5ee" font-style="italic"
+                    font-family="'Playfair Display',serif" font-weight="700">DocumentLifecycleState</text>
+                <line x1="218" y1="64" x2="390" y2="64" stroke="#d5c9ac" stroke-width="0.8" />
+                <text x="230" y="80" font-size="8.5" fill="#b5cea8">draft(ctx)</text>
+                <text x="230" y="94" font-size="8.5" fill="#b5cea8">submitForReview(ctx)</text>
+                <text x="230" y="108" font-size="8.5" fill="#b5cea8">publish(ctx)</text>
+
+                <!-- Three state boxes -->
+                <rect x="428" y="14" width="135" height="44" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1" />
+                <text x="495" y="30" text-anchor="middle" font-size="9.5" fill="#1e1a12" font-style="italic"
+                    font-family="'Playfair Display',serif">DraftState</text>
+                <text x="495" y="46" text-anchor="middle" font-size="7.5" fill="#8a7f68">initial state — editable</text>
+
+                <rect x="428" y="76" width="135" height="44" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1" />
+                <text x="495" y="92" text-anchor="middle" font-size="9.5" fill="#1e1a12" font-style="italic"
+                    font-family="'Playfair Display',serif">ModerationState</text>
+                <text x="495" y="108" text-anchor="middle" font-size="7.5" fill="#8a7f68">locked — review pending</text>
+
+                <rect x="428" y="138" width="135" height="30" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1" />
+                <text x="495" y="152" text-anchor="middle" font-size="9.5" fill="#1e1a12" font-style="italic"
+                    font-family="'Playfair Display',serif">PublishedState</text>
+                <text x="495" y="163" text-anchor="middle" font-size="7.5" fill="#8a7f68">sealed — no more
+                    changes</text>
+
+                <!-- Implements arrows -->
+                <line x1="390" y1="65" x2="428" y2="36" stroke="#3d3728" stroke-width="1" stroke-dasharray="4,2"
+                    marker-end="url(#st2)" />
+                <line x1="390" y1="80" x2="428" y2="98" stroke="#3d3728" stroke-width="1" stroke-dasharray="4,2"
+                    marker-end="url(#st2)" />
+                <line x1="390" y1="100" x2="428" y2="153" stroke="#3d3728" stroke-width="1" stroke-dasharray="4,2"
+                    marker-end="url(#st2)" />
+
+                <!-- Transition arrows between states -->
+                <path d="M495 58 Q540 68 495 76" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="4,2"
+                    marker-end="url(#st1)" />
+                <text x="546" y="70" font-size="7.5" fill="#c0392b" font-style="italic">submitForReview()</text>
+                <path d="M495 120 Q540 130 495 138" fill="none" stroke="#c0392b" stroke-width="1.5"
+                    stroke-dasharray="4,2" marker-end="url(#st1)" />
+                <text x="548" y="132" font-size="7.5" fill="#c0392b" font-style="italic">publish()</text>
+            </svg>
+        </div>
+
+        <h3>Real-World Implementation — Document Lifecycle</h3>
+
+        <p>Each state class knows what's legal in that state and how to respond when someone tries to do something that
+            isn't. The context just routes calls — it has no branching logic of its own.</p>
+
+        <div class="code-header">
+            <span class="code-lang">TypeScript — State Pattern</span>
+            <span class="code-file">state.ts</span>
+        </div>
+        <pre><code><span class="cm">// State interface — every state must know how to handle these three actions</span>
+<span class="kw">interface</span> <span class="cl">DocumentLifecycleState</span> {
+    <span class="fn">draft</span>(ctx: <span class="cl">DocumentContext</span>): <span class="dc">void</span>;
+    <span class="fn">submitForReview</span>(ctx: <span class="cl">DocumentContext</span>): <span class="dc">void</span>;
+    <span class="fn">publish</span>(ctx: <span class="cl">DocumentContext</span>): <span class="dc">void</span>;
+}
+
+<span class="cm">// Context — delegates every operation to its current state</span>
+<span class="kw">class</span> <span class="cl">DocumentContext</span> {
+    <span class="kw">private</span> state: <span class="cl">DocumentLifecycleState</span>;
+
+    <span class="kw">constructor</span>() { <span class="kw">this</span>.state = <span class="kw">new</span> <span class="cl">DraftState</span>(); }
+
+    <span class="fn">setState</span>(state: <span class="cl">DocumentLifecycleState</span>): <span class="dc">void</span> { <span class="kw">this</span>.state = state; }
+    <span class="fn">draft</span>(): <span class="dc">void</span>           { <span class="kw">this</span>.state.<span class="fn">draft</span>(<span class="kw">this</span>); }
+    <span class="fn">submitForReview</span>(): <span class="dc">void</span>  { <span class="kw">this</span>.state.<span class="fn">submitForReview</span>(<span class="kw">this</span>); }
+    <span class="fn">publish</span>(): <span class="dc">void</span>         { <span class="kw">this</span>.state.<span class="fn">publish</span>(<span class="kw">this</span>); }
+}
+
+<span class="cm">// State 1 — Draft: free to edit, can submit, cannot publish directly</span>
+<span class="kw">class</span> <span class="cl">DraftState</span> <span class="kw">implements</span> <span class="cl">DocumentLifecycleState</span> {
+    <span class="fn">draft</span>(ctx: <span class="cl">DocumentContext</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">"Document is already in Draft state."</span>);
+    }
+    <span class="fn">submitForReview</span>(ctx: <span class="cl">DocumentContext</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">"Submitting document for review..."</span>);
+        ctx.<span class="fn">setState</span>(<span class="kw">new</span> <span class="cl">ModerationState</span>());  <span class="cm">// → transition</span>
+    }
+    <span class="fn">publish</span>(ctx: <span class="cl">DocumentContext</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">"Cannot publish from Draft. Submit for review first."</span>);
+    }
+}
+
+<span class="cm">// State 2 — Moderation: locked for editing, can be published</span>
+<span class="kw">class</span> <span class="cl">ModerationState</span> <span class="kw">implements</span> <span class="cl">DocumentLifecycleState</span> {
+    <span class="fn">draft</span>(ctx: <span class="cl">DocumentContext</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">"Cannot edit during Moderation. Wait for review to complete."</span>);
+    }
+    <span class="fn">submitForReview</span>(ctx: <span class="cl">DocumentContext</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">"Already submitted for review."</span>);
+    }
+    <span class="fn">publish</span>(ctx: <span class="cl">DocumentContext</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">"Publishing document..."</span>);
+        ctx.<span class="fn">setState</span>(<span class="kw">new</span> <span class="cl">PublishedState</span>());   <span class="cm">// → transition</span>
+    }
+}
+
+<span class="cm">// State 3 — Published: sealed, no further changes allowed</span>
+<span class="kw">class</span> <span class="cl">PublishedState</span> <span class="kw">implements</span> <span class="cl">DocumentLifecycleState</span> {
+    <span class="fn">draft</span>(ctx: <span class="cl">DocumentContext</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">"Cannot edit Published document. Create a new one."</span>);
+    }
+    <span class="fn">submitForReview</span>(ctx: <span class="cl">DocumentContext</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">"Cannot re-submit a Published document."</span>);
+    }
+    <span class="fn">publish</span>(ctx: <span class="cl">DocumentContext</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">"Document is already published."</span>);
+    }
+}
+
+<span class="cm">// Client</span>
+<span class="kw">const</span> doc = <span class="kw">new</span> <span class="cl">DocumentContext</span>();
+doc.<span class="fn">draft</span>();           <span class="cm">// "Document is already in Draft state."</span>
+doc.<span class="fn">submitForReview</span>(); <span class="cm">// "Submitting document for review..."  → now Moderation</span>
+doc.<span class="fn">publish</span>();         <span class="cm">// "Publishing document..."             → now Published</span>
+doc.<span class="fn">draft</span>();           <span class="cm">// "Cannot edit Published document."</span>
+doc.<span class="fn">publish</span>();         <span class="cm">// "Document is already published."</span></code></pre>
+
+        <div class="analogy">
+            <span class="analogy-icon">🚦</span>
+            <div class="analogy-body">
+                <p><strong>A traffic light is the textbook example.</strong> Green doesn't know what Red does. Red
+                    doesn't know what Yellow does. Each light state is a class that manages its own behaviour and
+                    decides when to hand control to the next state. The intersection (context) doesn't contain
+                    <code>if (colour === 'green') { ... }</code> — it just calls <code>currentState.handle()</code>.</p>
+            </div>
+        </div>
+
+        <div class="callout slate">
+            <span class="callout-tag">State vs Strategy — the confusion</span>
+            <p>They look identical in code — both inject behaviour into a context. The difference is <strong>intent and
+                    lifecycle</strong>. In Strategy, the context's class doesn't "know" it changed — it just got a new
+                algorithm. In State, the states themselves trigger transitions by calling <code>ctx.setState()</code>.
+                State is about an object evolving through a lifecycle. Strategy is about picking the right tool for a
+                job. If your object has a lifecycle, reach for State. If it just needs swappable algorithms, reach for
+                Strategy.</p>
+        </div>
+
+
+        <!-- ═══════════════════════════ 04 CHAIN OF RESPONSIBILITY ═══════════════════════════ -->
+        <div class="pat-block">
+            <div class="pat-opener">
+                <span class="pat-big-num">04</span>
+                <div class="pat-title-block">
+                    <span class="pat-cat">Behavioural · Series 3</span>
+                    <div class="pat-name">Chain of<br>Responsibility</div>
+                    <div class="pat-tagline">Pass a request down a chain of handlers until one of them deals with it.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <p>Not every request belongs at the same desk. A support ticket tagged as a minor UI glitch should be handled by
+            L1 support. A security vulnerability should bypass L1 entirely and land with the engineering team. An
+            expense report under ₹1000 can be approved by a team lead; over ₹50,000 it needs a director.</p>
+
+        <p>Chain of Responsibility builds a pipeline of handlers. Each handler gets the request, decides whether it can
+            process it, and either handles it or passes it to the next handler in the chain. The sender doesn't know
+            which handler will ultimately respond. The chain is configured at runtime, so it's easy to add, remove, or
+            reorder handlers without touching the individual handler classes.</p>
+
+        <!-- COR DIAGRAM -->
+        <div class="diagram-wrap">
+            <div class="diagram-bar">Chain of Responsibility — interview pipeline: HR → Technical → Managerial</div>
+            <svg viewBox="0 0 680 172" xmlns="http://www.w3.org/2000/svg" font-family="'Fira Code',monospace">
+                <rect width="680" height="172" fill="#f1ead8" />
+                <defs>
+                    <marker id="c1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#c0392b" />
+                    </marker>
+                    <marker id="c2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#1a6b6b" />
+                    </marker>
+                </defs>
+
+                <!-- Abstract handler -->
+                <rect x="18" y="14" width="175" height="72" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1.5" />
+                <rect x="18" y="14" width="175" height="26" rx="1" fill="#1e1a12" />
+                <rect x="18" y="28" width="175" height="12" fill="#1e1a12" />
+                <text x="70" y="24" text-anchor="middle" font-size="7.5" fill="#d5c9ac"
+                    letter-spacing="0.5">«abstract»</text>
+                <text x="105" y="36" text-anchor="middle" font-size="11" fill="#f9f5ee" font-style="italic"
+                    font-family="'Playfair Display',serif" font-weight="700">InterviewProcess</text>
+                <line x1="18" y1="40" x2="193" y2="40" stroke="#d5c9ac" stroke-width="0.8" />
+                <text x="30" y="57" font-size="8.5" fill="#c0392b">-next: InterviewProcess | null</text>
+                <text x="30" y="72" font-size="8.5" fill="#dcdcaa">setNext(p) / handle(c, score)</text>
+
+                <!-- Implements arrows -->
+                <line x1="105" y1="86" x2="105" y2="106" stroke="#3d3728" stroke-width="1.2" stroke-dasharray="4,2" />
+                <line x1="105" y1="106" x2="208" y2="106" stroke="#3d3728" stroke-width="1.2" stroke-dasharray="4,2" />
+                <line x1="105" y1="106" x2="105" y2="106" />
+                <line x1="208" y1="106" x2="208" y2="122" stroke="#3d3728" stroke-width="1.2" stroke-dasharray="4,2"
+                    marker-end="url(#c1)" />
+                <line x1="380" y1="106" x2="380" y2="122" stroke="#3d3728" stroke-width="1.2" stroke-dasharray="4,2"
+                    marker-end="url(#c1)" />
+                <line x1="562" y1="106" x2="562" y2="122" stroke="#3d3728" stroke-width="1.2" stroke-dasharray="4,2"
+                    marker-end="url(#c1)" />
+                <line x1="208" y1="106" x2="562" y2="106" stroke="#3d3728" stroke-width="1.2" stroke-dasharray="4,2" />
+
+                <!-- HR box -->
+                <rect x="125" y="122" width="165" height="40" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1" />
+                <text x="208" y="138" text-anchor="middle" font-size="9.5" fill="#1e1a12" font-style="italic"
+                    font-family="'Playfair Display',serif">HRRound</text>
+                <text x="208" y="152" text-anchor="middle" font-size="7.5" fill="#8a7f68">handle if score > 70</text>
+
+                <!-- Technical box -->
+                <rect x="298" y="122" width="165" height="40" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1" />
+                <text x="380" y="138" text-anchor="middle" font-size="9.5" fill="#1e1a12" font-style="italic"
+                    font-family="'Playfair Display',serif">TechnicalRound</text>
+                <text x="380" y="152" text-anchor="middle" font-size="7.5" fill="#8a7f68">handle if score > 90</text>
+
+                <!-- Managerial box -->
+                <rect x="477" y="122" width="175" height="40" rx="1" fill="#f9f5ee" stroke="#3d3728" stroke-width="1" />
+                <text x="564" y="138" text-anchor="middle" font-size="9.5" fill="#1e1a12" font-style="italic"
+                    font-family="'Playfair Display',serif">ManagerialRound</text>
+                <text x="564" y="152" text-anchor="middle" font-size="7.5" fill="#8a7f68">handle if score > 95 →
+                    hired!</text>
+
+                <!-- Chain arrows -->
+                <line x1="290" y1="142" x2="298" y2="142" stroke="#1a6b6b" stroke-width="2" marker-end="url(#c2)" />
+                <line x1="463" y1="142" x2="477" y2="142" stroke="#1a6b6b" stroke-width="2" marker-end="url(#c2)" />
+                <text x="291" y="136" font-size="7.5" fill="#1a6b6b" font-style="italic">passes</text>
+                <text x="464" y="136" font-size="7.5" fill="#1a6b6b" font-style="italic">passes</text>
+
+                <!-- Candidate enters left -->
+                <text x="22" y="140" font-size="8.5" fill="#c0392b" font-style="italic">→ Candidate "Ajay"</text>
+                <text x="22" y="153" font-size="7.5" fill="#8a7f68">score: 96</text>
+            </svg>
+        </div>
+
+        <h3>Real-World Implementation — Interview Process</h3>
+
+        <p>Ajay enters with a score of 96. HR passes him at 70+. Technical passes him at 90+. Managerial approves the
+            hire at 95+. Each round is a handler class — none of them knows about the others, and the chain is wired
+            together in client code, not baked into the handlers themselves.</p>
+
+        <div class="code-header">
+            <span class="code-lang">TypeScript — Chain of Responsibility</span>
+            <span class="code-file">COR.ts</span>
+        </div>
+        <pre><code><span class="cm">// Abstract handler — each round extends this</span>
+<span class="kw">abstract class</span> <span class="cl">InterviewProcess</span> {
+    <span class="kw">protected</span> next: <span class="cl">InterviewProcess</span> | <span class="dc">null</span> = <span class="dc">null</span>;
+
+    <span class="fn">setNext</span>(interviewProcess: <span class="cl">InterviewProcess</span>): <span class="dc">void</span> {
+        <span class="kw">this</span>.next = interviewProcess;
+    }
+
+    <span class="kw">abstract</span> <span class="fn">handle</span>(candidate: <span class="ty">string</span>, score: <span class="ty">string</span>): <span class="dc">void</span>;
+}
+
+<span class="cm">// Handler 1 — HR clears candidates with score > 70</span>
+<span class="kw">class</span> <span class="cl">HRRound</span> <span class="kw">extends</span> <span class="cl">InterviewProcess</span> {
+    <span class="fn">handle</span>(candidate: <span class="ty">string</span>, score: <span class="ty">string</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">`HR Round: Evaluating ${candidate}`</span>);
+        <span class="kw">if</span> (<span class="fn">parseInt</span>(score) > <span class="nm">70</span>) {
+            console.<span class="fn">log</span>(<span class="st">`${candidate} passed HR. Score: ${score}`</span>);
+            <span class="kw">if</span> (<span class="kw">this</span>.next) <span class="kw">this</span>.next.<span class="fn">handle</span>(candidate, score);  <span class="cm">// pass along</span>
+        } <span class="kw">else</span> {
+            console.<span class="fn">log</span>(<span class="st">`${candidate} rejected at HR. Score: ${score}`</span>);
+        }
+    }
+}
+
+<span class="cm">// Handler 2 — Technical clears candidates with score > 90</span>
+<span class="kw">class</span> <span class="cl">TechnicalRound</span> <span class="kw">extends</span> <span class="cl">InterviewProcess</span> {
+    <span class="fn">handle</span>(candidate: <span class="ty">string</span>, score: <span class="ty">string</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">`Technical Round: Evaluating ${candidate}`</span>);
+        <span class="kw">if</span> (<span class="fn">parseInt</span>(score) > <span class="nm">90</span>) {
+            console.<span class="fn">log</span>(<span class="st">`${candidate} passed Technical. Score: ${score}`</span>);
+            <span class="kw">if</span> (<span class="kw">this</span>.next) <span class="kw">this</span>.next.<span class="fn">handle</span>(candidate, score);  <span class="cm">// pass along</span>
+        } <span class="kw">else</span> {
+            console.<span class="fn">log</span>(<span class="st">`${candidate} rejected at Technical. Score: ${score}`</span>);
+        }
+    }
+}
+
+<span class="cm">// Handler 3 — Managerial is the final gate at score > 95</span>
+<span class="kw">class</span> <span class="cl">ManagerialRound</span> <span class="kw">extends</span> <span class="cl">InterviewProcess</span> {
+    <span class="fn">handle</span>(candidate: <span class="ty">string</span>, score: <span class="ty">string</span>): <span class="dc">void</span> {
+        console.<span class="fn">log</span>(<span class="st">`Managerial Round: Evaluating ${candidate}`</span>);
+        <span class="kw">if</span> (<span class="fn">parseInt</span>(score) > <span class="nm">95</span>) {
+            console.<span class="fn">log</span>(<span class="st">`${candidate} passed Managerial. Hired! Score: ${score}`</span>);
+        } <span class="kw">else</span> {
+            console.<span class="fn">log</span>(<span class="st">`${candidate} rejected at Managerial. Score: ${score}`</span>);
+        }
+    }
+}
+
+<span class="cm">// Client — wires the chain at runtime</span>
+<span class="kw">const</span> hrRound         = <span class="kw">new</span> <span class="cl">HRRound</span>();
+<span class="kw">const</span> technicalRound  = <span class="kw">new</span> <span class="cl">TechnicalRound</span>();
+<span class="kw">const</span> managerialRound = <span class="kw">new</span> <span class="cl">ManagerialRound</span>();
+
+hrRound.<span class="fn">setNext</span>(technicalRound);
+technicalRound.<span class="fn">setNext</span>(managerialRound);
+
+hrRound.<span class="fn">handle</span>(<span class="st">"Ajay"</span>, <span class="st">"96"</span>);
+<span class="cm">// HR Round: Evaluating Ajay</span>
+<span class="cm">// Ajay passed HR. Score: 96</span>
+<span class="cm">// Technical Round: Evaluating Ajay</span>
+<span class="cm">// Ajay passed Technical. Score: 96</span>
+<span class="cm">// Managerial Round: Evaluating Ajay</span>
+<span class="cm">// Ajay passed Managerial. Hired! Score: 96</span>
+
+hrRound.<span class="fn">handle</span>(<span class="st">"Bob"</span>, <span class="st">"75"</span>);
+<span class="cm">// HR Round: Evaluating Bob</span>
+<span class="cm">// Bob passed HR. Score: 75</span>
+<span class="cm">// Technical Round: Evaluating Bob</span>
+<span class="cm">// Bob rejected at Technical. Score: 75   ← chain stops here</span></code></pre>
+
+        <div class="callout teal">
+            <span class="callout-tag">In the wild</span>
+            <p>Express.js middleware is Chain of Responsibility. Each <code>app.use()</code> call adds a handler to the
+                chain. Auth middleware, logging middleware, error handlers — they each call <code>next()</code> to pass
+                the request along or return early to stop the chain. Every time you've written <code>next()</code> in a
+                middleware function, you've used Chain of Responsibility.</p>
+        </div>
+
+        <!-- Pattern comparison table -->
+        <table class="comp-table">
+            <thead>
+                <tr>
+                    <th>Pattern</th>
+                    <th class="ac">Core Question</th>
+                    <th class="ac">Key mechanism</th>
+                    <th>Real-world example</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Strategy</td>
+                    <td>Which algorithm should run?</td>
+                    <td>Inject and swap algorithm objects</td>
+                    <td>Payment methods, sorting, routing</td>
+                </tr>
+                <tr>
+                    <td>Observer</td>
+                    <td>Who needs to know when X changes?</td>
+                    <td>Subject broadcasts to all subscribers</td>
+                    <td>Event listeners, pub-sub, Redux store</td>
+                </tr>
+                <tr>
+                    <td>State</td>
+                    <td>What is this object allowed to do right now?</td>
+                    <td>Delegate to current state class, state triggers transitions</td>
+                    <td>Document lifecycle, traffic lights, order status</td>
+                </tr>
+                <tr>
+                    <td>Chain of Responsibility</td>
+                    <td>Who in this pipeline should handle this request?</td>
+                    <td>Pass along until a handler accepts or chain ends</td>
+                    <td>Express middleware, auth guards, approval workflows</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- GitHub card -->
+        <div class="gh-card">
+            <span class="gh-icon">⚙️</span>
+            <div class="gh-body">
+                <span class="gh-label">Full source code — all three series</span>
+                <span class="gh-link">LowLevelDesign by Ajay Kotnala</span>
+                <a class="gh-url"
+                    href="https://github.com/ajaykotnala/LowLevelDesign">github.com/ajaykotnala/LowLevelDesign</a>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="article-footer">
+
+        <div class="next-card">
+            <span class="next-label">Series Complete</span>
+            <div class="next-title">You've covered all three chapters of the Gang of Four catalog.</div>
+            <div class="next-desc">
+                Series 1: Singleton, Factory Method, Abstract Factory, Prototype, Builder — how objects are born.<br>
+                Series 2: Adapter, Decorator, Proxy, Facade, Composite — how they fit together.<br>
+                Series 3: Strategy, Observer, State, Chain of Responsibility — how they behave.<br><br>
+                Twelve patterns. The core vocabulary of object-oriented design. Use them when the problem fits — and now
+                you'll recognise when it does.
+            </div>
+        </div>
+
+        <div class="tags">
+            <span class="tag">Design Patterns</span>
+            <span class="tag">Series 3</span>
+            <span class="tag">Behavioural</span>
+            <span class="tag">TypeScript</span>
+            <span class="tag">Strategy</span>
+            <span class="tag">Observer</span>
+            <span class="tag">State</span>
+            <span class="tag">Chain of Responsibility</span>
+            <span class="tag">Gang of Four</span>
+            <span class="tag">Software Architecture</span>
+            <span class="tag">OOP</span>
+            <span class="tag">LLD</span>
+        </div>
+
+    </footer>
+
+</body>
+
+</html>

@@ -1,0 +1,1835 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>Design Patterns Series 2 — Structural Patterns</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet" />
+    <style>
+        :root {
+            --bg: #0d0f14;
+            --bg2: #13161d;
+            --bg3: #1a1e28;
+            --border: #272d3d;
+            --text: #dce4f5;
+            --muted: #5c6680;
+            --soft: #9aa3bc;
+            --accent: #4f8ef7;
+            --accent2: #7eb3ff;
+            --gold: #f0b84a;
+            --green: #3ecf8e;
+            --red: #f26c6c;
+            --purple: #a78bfa;
+            --code-bg: #0a0c10;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            font-size: 17px;
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Archivo', sans-serif;
+            font-weight: 300;
+            line-height: 1.8;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── NOISE TEXTURE OVERLAY ── */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.5;
+        }
+
+        /* ── SERIES BAND ── */
+        .series-band {
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 1.2rem;
+            padding: 0.5rem 2rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            letter-spacing: 0.12em;
+            color: #fff;
+            position: relative;
+            z-index: 10;
+        }
+
+        .series-band .chip {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.1em 0.7em;
+            border-radius: 2px;
+            font-weight: 500;
+        }
+
+        .series-band .prev-link {
+            margin-left: auto;
+            opacity: 0.75;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            cursor: pointer;
+        }
+
+        /* ── HERO ── */
+        .hero {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 5.5rem 2rem 3rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 2rem;
+            flex-wrap: wrap;
+            margin-bottom: 2.5rem;
+        }
+
+        .hero-left {
+            flex: 1;
+            min-width: 280px;
+        }
+
+        .hero-kicker {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .hero-kicker::before {
+            content: '//';
+            color: var(--muted);
+        }
+
+        .hero h1 {
+            font-family: 'Archivo Black', sans-serif;
+            font-size: clamp(2.6rem, 6vw, 4.6rem);
+            line-height: 0.95;
+            letter-spacing: -0.03em;
+            color: var(--text);
+            margin-bottom: 1rem;
+        }
+
+        .hero h1 .line2 {
+            color: var(--accent);
+            display: block;
+        }
+
+        .hero-deck {
+            font-size: 1rem;
+            color: var(--soft);
+            max-width: 500px;
+            line-height: 1.75;
+            margin-bottom: 2rem;
+        }
+
+        .hero-meta {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--muted);
+            letter-spacing: 0.06em;
+        }
+
+        .hero-meta span {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .hero-meta span::before {
+            content: '›';
+            color: var(--accent);
+        }
+
+        /* Pattern index right side */
+        .hero-index {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            border: 1px solid var(--border);
+            padding: 1rem 1.4rem;
+            background: var(--bg2);
+            min-width: 200px;
+        }
+
+        .hi-label {
+            font-size: 0.6rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 0.6rem;
+        }
+
+        .hi-item {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.3rem 0;
+            border-bottom: 1px solid var(--border);
+            color: var(--soft);
+        }
+
+        .hi-item:last-child {
+            border: none;
+        }
+
+        .hi-num {
+            color: var(--accent);
+            width: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .hi-name {
+            color: var(--text);
+        }
+
+        /* ── DIVIDER ── */
+        .page-rule {
+            max-width: 900px;
+            margin: 0 auto;
+            border: none;
+            border-top: 1px solid var(--border);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ── ARTICLE BODY ── */
+        .article-body {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 3rem 2rem 5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        p {
+            margin-bottom: 1.5rem;
+            font-size: 1rem;
+            color: var(--soft);
+            line-height: 1.85;
+        }
+
+        /* ── PATTERN HEADERS ── */
+        .pat-block {
+            margin-top: 4.5rem;
+        }
+
+        .pat-number-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding-top: 3.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .pat-num {
+            font-family: 'Archivo Black', sans-serif;
+            font-size: 4rem;
+            line-height: 1;
+            color: var(--border);
+            flex-shrink: 0;
+            letter-spacing: -0.04em;
+        }
+
+        .pat-label-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .pat-category {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.62rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+
+        .pat-name {
+            font-family: 'Archivo Black', sans-serif;
+            font-size: clamp(1.6rem, 3.5vw, 2.4rem);
+            line-height: 1;
+            letter-spacing: -0.025em;
+            color: var(--text);
+        }
+
+        .pat-tagline {
+            font-size: 0.88rem;
+            font-style: italic;
+            color: var(--muted);
+            margin-bottom: 1.5rem;
+            padding-left: 5.5rem;
+        }
+
+        h3 {
+            font-family: 'Archivo Black', sans-serif;
+            font-size: 1rem;
+            letter-spacing: 0.02em;
+            color: var(--text);
+            margin: 2.2rem 0 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        h3::before {
+            content: '▸';
+            color: var(--accent);
+            font-size: 0.8rem;
+        }
+
+        /* ── DIAGRAMS ── */
+        .diagram-wrap {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            margin: 2rem 0;
+            overflow: hidden;
+        }
+
+        .diagram-bar {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--muted);
+            padding: 0.5rem 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--bg3);
+        }
+
+        .diagram-bar::before {
+            content: '◆';
+            color: var(--accent);
+            font-size: 0.55rem;
+        }
+
+        .diagram-wrap svg {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        /* ── CODE ── */
+        .code-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-bottom: none;
+            padding: 0.55rem 1rem;
+            margin-top: 2rem;
+        }
+
+        .code-lang {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.62rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .code-lang::before {
+            content:'{ }';
+            color: var(--muted);
+        }
+
+        .code-file {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            color: var(--muted);
+        }
+
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-top: 2px solid var(--accent);
+            color: #cdd6f4;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.76rem;
+            line-height: 1.72;
+            padding: 1.4rem 1.6rem;
+            margin: 0 0 2rem;
+            overflow-x: auto;
+        }
+
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8em;
+            background: var(--bg3);
+            padding: 0.1em 0.35em;
+            color: var(--accent2);
+            border: 1px solid var(--border);
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+            border: none;
+            font-size: inherit;
+        }
+
+        /* Monokai-style syntax */
+        .kw {
+            color: #ff79c6;
+        }
+
+        .cl {
+            color: #8be9fd;
+        }
+
+        .fn {
+            color: #50fa7b;
+        }
+
+        .st {
+            color: #f1fa8c;
+        }
+
+        .cm {
+            color: #6272a4;
+            font-style: italic;
+        }
+
+        .nm {
+            color: #bd93f9;
+        }
+
+        .dc {
+            color: #ffb86c;
+        }
+
+        .op {
+            color: #ff79c6;
+        }
+
+        .it {
+            color: #f8f8f2;
+            font-style: italic;
+        }
+
+        /* ── CALLOUT BOXES ── */
+        .callout {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--accent);
+            padding: 1.4rem 1.6rem;
+            margin: 2rem 0;
+        }
+
+        .callout-tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--accent);
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .callout p {
+            color: var(--soft);
+            font-size: 0.92rem;
+            margin: 0;
+        }
+
+        .callout p::first-letter {
+            all: unset;
+        }
+
+        .callout.gold {
+            border-left-color: var(--gold);
+        }
+
+        .callout.gold .callout-tag {
+            color: var(--gold);
+        }
+
+        .callout.green {
+            border-left-color: var(--green);
+        }
+
+        .callout.green .callout-tag {
+            color: var(--green);
+        }
+
+        .callout.purple {
+            border-left-color: var(--purple);
+        }
+
+        .callout.purple .callout-tag {
+            color: var(--purple);
+        }
+
+        /* ── VERDICT (use/avoid) ── */
+        .verdict {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1px;
+            background: var(--border);
+            margin: 2rem 0;
+        }
+
+        .v-box {
+            padding: 1.2rem 1.4rem;
+        }
+
+        .v-use {
+            background: rgba(62, 207, 142, 0.06);
+        }
+
+        .v-skip {
+            background: rgba(242, 108, 108, 0.06);
+        }
+
+        .v-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.62rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            font-weight: 500;
+            margin-bottom: 0.7rem;
+        }
+
+        .v-use .v-title {
+            color: var(--green);
+        }
+
+        .v-skip .v-title {
+            color: var(--red);
+        }
+
+        .v-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .v-list li {
+            font-size: 0.85rem;
+            color: var(--soft);
+            padding: 0.2rem 0 0.2rem 1.2rem;
+            position: relative;
+            line-height: 1.5;
+        }
+
+        .v-use li::before {
+            content: '✓';
+            color: var(--green);
+            position: absolute;
+            left: 0;
+            font-weight: 700;
+        }
+
+        .v-skip li::before {
+            content: '✗';
+            color: var(--red);
+            position: absolute;
+            left: 0;
+            font-weight: 700;
+        }
+
+        /* ── ANALOGY ── */
+        .analogy {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+            background: rgba(79, 142, 247, 0.06);
+            border: 1px solid rgba(79, 142, 247, 0.2);
+            padding: 1.3rem 1.4rem;
+            margin: 2rem 0;
+        }
+
+        .analogy-icon {
+            font-size: 1.8rem;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+
+        .analogy-text {
+            font-size: 0.9rem;
+            color: var(--soft);
+            line-height: 1.7;
+        }
+
+        .analogy-text p {
+            margin: 0;
+            font-size: 0.9rem;
+        }
+
+        .analogy-text p::first-letter {
+            all: unset;
+        }
+
+        .analogy-text strong {
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        /* ── COMPARISON TABLE ── */
+        .comp-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.84rem;
+            margin: 2rem 0;
+            font-family: 'Archivo', sans-serif;
+        }
+
+        .comp-table th {
+            background: var(--bg3);
+            color: var(--text);
+            padding: 0.65rem 1rem;
+            text-align: left;
+            font-size: 0.68rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            border-bottom: 2px solid var(--accent);
+            font-weight: 500;
+        }
+
+        .comp-table th.ac {
+            color: var(--accent2);
+        }
+
+        .comp-table td {
+            padding: 0.65rem 1rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--soft);
+            line-height: 1.5;
+        }
+
+        .comp-table td:first-child {
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        .comp-table tr:nth-child(even) td {
+            background: var(--bg2);
+        }
+
+        /* ── SERIES LINK ── */
+        .series-link-card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            padding: 1.5rem 1.8rem;
+            margin: 2rem 0;
+            display: flex;
+            align-items: center;
+            gap: 1.2rem;
+        }
+
+        .slc-icon {
+            font-size: 1.6rem;
+            flex-shrink: 0;
+        }
+
+        .slc-text {
+            flex: 1;
+        }
+
+        .slc-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--muted);
+            display: block;
+            margin-bottom: 0.3rem;
+        }
+
+        .slc-title {
+            font-family: 'Archivo Black', sans-serif;
+            font-size: 1rem;
+            color: var(--text);
+        }
+
+        .slc-url {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--accent);
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+
+        /* ── FOOTER ── */
+        .series-footer {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 2.5rem 2rem 5rem;
+            border-top: 1px solid var(--border);
+            position: relative;
+            z-index: 1;
+        }
+
+        .next-card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-top: 2px solid var(--accent);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .next-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--accent);
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .next-title {
+            font-family: 'Archivo Black', sans-serif;
+            font-size: 1.1rem;
+            color: var(--text);
+            margin-bottom: 0.4rem;
+        }
+
+        .next-desc {
+            font-size: 0.86rem;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            margin-top: 1.5rem;
+        }
+
+        .tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.62rem;
+            letter-spacing: 0.06em;
+            padding: 0.25em 0.7em;
+            border: 1px solid var(--border);
+            color: var(--muted);
+        }
+
+        @media(max-width:600px) {
+            .verdict {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-top {
+                flex-direction: column;
+            }
+
+            pre {
+                font-size: 0.68rem;
+            }
+
+            .pat-tagline {
+                padding-left: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- SERIES BAND -->
+    <div class="series-band">
+        <span class="chip">Series 2</span>
+        Design Patterns in TypeScript
+        <span class="prev-link">← Series 1: Creational Patterns</span>
+    </div>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="hero-top">
+            <div class="hero-left">
+                <div class="hero-kicker">Structural Design Patterns</div>
+                <h1>
+                    Building the<br>
+                    <span class="line2">Right Shape</span>
+                </h1>
+                <p class="hero-deck">
+                    Five patterns that define how classes and objects compose into larger, cleaner structures. Adapter,
+                    Decorator, Proxy, Facade, and Composite — with real TypeScript examples from production code.
+                </p>
+                <div class="hero-meta">
+                    <span>Series 2 of 3</span>
+                    <span>Structural Patterns</span>
+                    <span>TypeScript · Gang of Four</span>
+                </div>
+            </div>
+            <div class="hero-index">
+                <div class="hi-label">Patterns covered</div>
+                <div class="hi-item"><span class="hi-num">01</span><span class="hi-name">Adapter</span></div>
+                <div class="hi-item"><span class="hi-num">02</span><span class="hi-name">Decorator</span></div>
+                <div class="hi-item"><span class="hi-num">03</span><span class="hi-name">Proxy</span></div>
+                <div class="hi-item"><span class="hi-num">04</span><span class="hi-name">Facade</span></div>
+                <div class="hi-item"><span class="hi-num">05</span><span class="hi-name">Composite</span></div>
+            </div>
+        </div>
+    </section>
+
+    <hr class="page-rule" />
+
+    <!-- ARTICLE BODY -->
+    <main class="article-body">
+
+        <!-- Series link back -->
+        <div class="series-link-card">
+            <span class="slc-icon">📖</span>
+            <div class="slc-text">
+                <span class="slc-label">Previous · Series 1</span>
+                <div class="slc-title">Creational Patterns — Singleton, Factory, Abstract Factory, Prototype, Builder
+                </div>
+                <div class="slc-url">
+                    medium.com/@ajay.kotnalajpr/design-patterns-the-blueprint-every-developer-should-know-c51e0256fb5f
+                </div>
+            </div>
+        </div>
+
+        <p>In Series 1 we answered one question: <em>how should objects come into existence?</em> Creational patterns
+            gave us five precise answers. Series 2 asks the next question — <em>once objects exist, how should they fit
+                together?</em></p>
+
+        <p>Structural patterns are the blueprints for composition. They define the shape of your system: how
+            incompatible interfaces get bridged, how behaviour gets layered without inheritance, how access gets
+            controlled, how complexity gets hidden, and how trees of objects behave as one. Master these five and you
+            have the tools to manage any structural problem that comes up in production code.</p>
+
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- 01 ADAPTER                                  -->
+        <!-- ═══════════════════════════════════════════ -->
+        <div class="pat-block">
+            <div class="pat-number-row">
+                <span class="pat-num">01</span>
+                <div class="pat-label-stack">
+                    <span class="pat-category">Structural · Series 2</span>
+                    <span class="pat-name">Adapter</span>
+                </div>
+            </div>
+            <p class="pat-tagline">Convert the interface of a class into another interface that clients expect.</p>
+        </div>
+
+        <p>You have a system that expects one interface. You have a component that provides the same functionality
+            through a different interface. You can't change either. The Adapter pattern solves this by wrapping the
+            incompatible component in a class that speaks the language your system already understands.</p>
+
+        <p>Think of a universal power adapter when you travel internationally. The socket on the wall hasn't changed.
+            Your device hasn't changed. The adapter bridges the two without modifying either. That's exactly what this
+            pattern does in code.</p>
+
+        <!-- ADAPTER DIAGRAM -->
+        <div class="diagram-wrap">
+            <div class="diagram-bar">Adapter — structure and translation flow</div>
+            <svg viewBox="0 0 660 200" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono',monospace">
+                <rect width="660" height="200" fill="#13161d" />
+                <defs>
+                    <marker id="ad1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#4f8ef7" />
+                    </marker>
+                    <marker id="ad2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#3ecf8e" />
+                    </marker>
+                </defs>
+
+                <!-- Client -->
+                <rect x="18" y="68" width="118" height="64" rx="1" fill="#1a1e28" stroke="#272d3d" stroke-width="1.5" />
+                <rect x="18" y="68" width="118" height="22" rx="1" fill="#0a0c10" />
+                <rect x="18" y="76" width="118" height="14" fill="#0a0c10" />
+                <text x="77" y="82" text-anchor="middle" font-size="10" fill="#9aa3bc" font-style="italic">Client</text>
+                <line x1="18" y1="90" x2="136" y2="90" stroke="#272d3d" stroke-width="0.8" />
+                <text x="30" y="107" font-size="8.5" fill="#f1fa8c">pay(amount)</text>
+                <text x="30" y="122" font-size="8.5" fill="#6272a4">calls target interface</text>
+
+                <!-- Arrow: Client → Target -->
+                <line x1="136" y1="100" x2="185" y2="100" stroke="#4f8ef7" stroke-width="1.5" marker-end="url(#ad1)" />
+
+                <!-- Target (interface) -->
+                <rect x="185" y="52" width="150" height="96" rx="1" fill="#1a1e28" stroke="#272d3d"
+                    stroke-width="1.5" />
+                <rect x="185" y="52" width="150" height="22" rx="1" fill="#0a0c10" />
+                <rect x="185" y="62" width="150" height="12" fill="#0a0c10" />
+                <text x="238" y="60" text-anchor="middle" font-size="8" fill="#6272a4"
+                    letter-spacing="0.5">«interface»</text>
+                <text x="260" y="70" text-anchor="middle" font-size="10.5" fill="#8be9fd"
+                    font-style="italic">payment</text>
+                <line x1="185" y1="74" x2="335" y2="74" stroke="#272d3d" stroke-width="0.8" />
+                <text x="197" y="91" font-size="8.5" fill="#ffb86c">pay(amount)</text>
+                <text x="197" y="107" font-size="7.5" fill="#6272a4">[abstract]</text>
+
+                <!-- RupeeCard (concrete target) -->
+                <rect x="185" y="164" width="150" height="28" rx="1" fill="#1a1e28" stroke="#272d3d" stroke-width="1" />
+                <text x="260" y="177" text-anchor="middle" font-size="9.5" fill="#dce4f5"
+                    font-style="italic">rupeecard</text>
+                <text x="260" y="188" text-anchor="middle" font-size="7.5" fill="#3ecf8e">pay() → "rupee card"</text>
+                <line x1="260" y1="148" x2="260" y2="164" stroke="#272d3d" stroke-width="1.5" />
+                <polygon points="260,148 254,158 266,158" fill="#1a1e28" stroke="#272d3d" stroke-width="1.5" />
+
+                <!-- Arrow: Target → Adapter -->
+                <line x1="335" y1="100" x2="385" y2="100" stroke="#4f8ef7" stroke-width="1.5" marker-end="url(#ad1)" />
+                <text x="354" y="93" font-size="7.5" fill="#4f8ef7" font-style="italic">implements</text>
+
+                <!-- Adapter -->
+                <rect x="385" y="52" width="155" height="96" rx="1" fill="#1a1e28" stroke="#4f8ef7"
+                    stroke-width="1.5" />
+                <rect x="385" y="52" width="155" height="22" rx="1" fill="#0f1520" />
+                <rect x="385" y="62" width="155" height="12" fill="#0f1520" />
+                <text x="462" y="60" text-anchor="middle" font-size="8" fill="#4f8ef7"
+                    letter-spacing="0.5">«adapter»</text>
+                <text x="462" y="70" text-anchor="middle" font-size="10.5" fill="#8be9fd"
+                    font-style="italic">paymentadapter</text>
+                <line x1="385" y1="74" x2="540" y2="74" stroke="#272d3d" stroke-width="0.8" />
+                <text x="397" y="91" font-size="8.5" fill="#ff79c6">-_mastercard</text>
+                <text x="397" y="107" font-size="8.5" fill="#50fa7b">pay(amount)</text>
+                <text x="397" y="122" font-size="7.5" fill="#6272a4">→ delegates to adaptee</text>
+
+                <!-- Arrow: Adapter → Adaptee -->
+                <line x1="540" y1="100" x2="592" y2="100" stroke="#3ecf8e" stroke-width="1.5" marker-end="url(#ad2)" />
+
+                <!-- Adaptee -->
+                <rect x="592" y="68" width="52" height="64" rx="1" fill="#1a1e28" stroke="#3ecf8e" stroke-width="1.5" />
+                <text x="618" y="98" text-anchor="middle" font-size="8.5" fill="#3ecf8e" font-style="italic"
+                    transform="rotate(-90,618,100)">mastercard</text>
+                <text x="618" y="114" text-anchor="middle" font-size="7" fill="#6272a4"
+                    transform="rotate(-90,618,116)">payamount()</text>
+            </svg>
+        </div>
+
+        <h3>The Problem — Payment System Example</h3>
+
+        <p>Your system speaks <code>pay(amount)</code>. A legacy Mastercard integration speaks
+            <code>payamount(amount)</code>. You can't change the Mastercard library. The <code>paymentadapter</code>
+            wraps it, translates the call, and makes the incompatible component behave like it was built for your
+            interface all along.</p>
+
+        <div class="code-header">
+            <span class="code-lang">TypeScript — Adapter Pattern</span>
+            <span class="code-file">adapter.ts</span>
+        </div>
+        <pre><code><span class="cm">// Target interface — what the system expects</span>
+<span class="kw">interface</span> <span class="cl">payment</span> {
+    <span class="fn">pay</span>(amount: <span class="kw">any</span>): <span class="kw">void</span>
+}
+
+<span class="cm">// Concrete target — already compatible</span>
+<span class="kw">class</span> <span class="cl">rupeecard</span> <span class="kw">implements</span> <span class="cl">payment</span> {
+    <span class="fn">pay</span>(amount: <span class="kw">any</span>) {
+        console.<span class="fn">log</span>(<span class="st">`rupee card payment is done ${amount}`</span>);
+    }
+}
+
+<span class="cm">// Adaptee — incompatible legacy interface (can't change this)</span>
+<span class="kw">class</span> <span class="cl">mastercard</span> {
+    <span class="fn">payamount</span>(amount: <span class="kw">any</span>) {
+        console.<span class="fn">log</span>(<span class="st">`master card payment is done ${amount}`</span>);
+    }
+}
+
+<span class="cm">// Adapter — wraps mastercard, speaks the payment interface</span>
+<span class="kw">class</span> <span class="cl">paymentadapter</span> <span class="kw">implements</span> <span class="cl">payment</span> {
+    <span class="kw">private</span> _mastercard: <span class="cl">mastercard</span>
+
+    <span class="kw">constructor</span>(mastercard: <span class="cl">mastercard</span>) {
+        <span class="kw">this</span>._mastercard = mastercard;
+    }
+
+    <span class="fn">pay</span>(amount: <span class="kw">any</span>) {
+        <span class="kw">this</span>._mastercard.<span class="fn">payamount</span>(amount);  <span class="cm">// translation happens here</span>
+    }
+}
+
+<span class="cm">// Client code — only talks to the payment interface</span>
+<span class="kw">class</span> <span class="cl">clientcode</span> {
+    <span class="fn">main</span>() {
+        <span class="kw">const</span> rupee = <span class="kw">new</span> <span class="cl">rupeecard</span>();
+        rupee.<span class="fn">pay</span>(<span class="nm">10</span>);               <span class="cm">// direct — no adapter needed</span>
+
+        <span class="kw">const</span> adapter = <span class="kw">new</span> <span class="cl">paymentadapter</span>(<span class="kw">new</span> <span class="cl">mastercard</span>())
+        adapter.<span class="fn">pay</span>(<span class="nm">20</span>);             <span class="cm">// adapter translates → payamount(20)</span>
+    }
+}
+<span class="kw">new</span> <span class="cl">clientcode</span>().<span class="fn">main</span>();</code></pre>
+
+        <div class="callout">
+            <span class="callout-tag">Real-world signal</span>
+            <p>Every time you wrap a third-party SDK to conform to your internal interface, you're writing an Adapter.
+                It's the pattern that keeps your domain logic clean while legacy systems and external libraries stay at
+                arm's length.</p>
+        </div>
+
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- 02 DECORATOR                                -->
+        <!-- ═══════════════════════════════════════════ -->
+        <div class="pat-block">
+            <div class="pat-number-row">
+                <span class="pat-num">02</span>
+                <div class="pat-label-stack">
+                    <span class="pat-category">Structural · Series 2</span>
+                    <span class="pat-name">Decorator</span>
+                </div>
+            </div>
+            <p class="pat-tagline">Attach additional responsibilities to an object dynamically, as a flexible
+                alternative to subclassing.</p>
+        </div>
+
+        <p>Inheritance solves the problem of adding behaviour once. Decorator solves the problem of adding behaviour
+            <em>in any combination, at runtime</em>. Instead of creating a subclass for every feature combination, you
+            wrap an object with another object that adds the feature. And because decorators implement the same
+            interface as the object they wrap, they can be stacked arbitrarily deep.</p>
+
+        <!-- DECORATOR DIAGRAM -->
+        <div class="diagram-wrap">
+            <div class="diagram-bar">Decorator — wrapping chain visualised</div>
+            <svg viewBox="0 0 660 168" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono',monospace">
+                <rect width="660" height="168" fill="#13161d" />
+                <defs>
+                    <marker id="dc1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#a78bfa" />
+                    </marker>
+                </defs>
+
+                <!-- Boxes: innermost → outermost -->
+                <!-- texteditor (innermost) -->
+                <rect x="18" y="50" width="116" height="68" rx="1" fill="#1a1e28" stroke="#272d3d" stroke-width="1.5" />
+                <rect x="18" y="50" width="116" height="20" rx="1" fill="#0a0c10" />
+                <rect x="18" y="60" width="116" height="10" fill="#0a0c10" />
+                <text x="76" y="63" text-anchor="middle" font-size="9" fill="#8be9fd"
+                    font-style="italic">texteditor</text>
+                <line x1="18" y1="70" x2="134" y2="70" stroke="#272d3d" stroke-width="0.8" />
+                <text x="30" y="85" font-size="8" fill="#50fa7b">render()</text>
+                <text x="30" y="99" font-size="7.5" fill="#6272a4">base output</text>
+                <text x="76" y="128" text-anchor="middle" font-size="7" fill="#6272a4" letter-spacing="1">BASE</text>
+
+                <line x1="134" y1="84" x2="162" y2="84" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#dc1)" />
+                <text x="147" y="78" text-anchor="middle" font-size="7" fill="#a78bfa">wraps</text>
+
+                <!-- spellcheck -->
+                <rect x="162" y="36" width="122" height="96" rx="1" fill="#1a1e28" stroke="#a78bfa" stroke-width="1" />
+                <rect x="162" y="36" width="122" height="20" rx="1" fill="#14102a" />
+                <rect x="162" y="46" width="122" height="10" fill="#14102a" />
+                <text x="223" y="49" text-anchor="middle" font-size="9" fill="#a78bfa"
+                    font-style="italic">spellcheck</text>
+                <line x1="162" y1="56" x2="284" y2="56" stroke="#272d3d" stroke-width="0.8" />
+                <text x="174" y="73" font-size="7.5" fill="#ff79c6">-_editor: editor</text>
+                <text x="174" y="87" font-size="7.5" fill="#50fa7b">render()</text>
+                <text x="174" y="100" font-size="7.5" fill="#50fa7b">fspellcheck()</text>
+                <text x="223" y="122" text-anchor="middle" font-size="7" fill="#a78bfa" letter-spacing="0.5">LAYER
+                    1</text>
+
+                <line x1="284" y1="84" x2="310" y2="84" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#dc1)" />
+                <text x="296" y="78" text-anchor="middle" font-size="7" fill="#a78bfa">wraps</text>
+
+                <!-- autosave -->
+                <rect x="310" y="22" width="122" height="124" rx="1" fill="#1a1e28" stroke="#a78bfa" stroke-width="1" />
+                <rect x="310" y="22" width="122" height="20" rx="1" fill="#14102a" />
+                <rect x="310" y="32" width="122" height="10" fill="#14102a" />
+                <text x="371" y="35" text-anchor="middle" font-size="9" fill="#a78bfa"
+                    font-style="italic">autosave</text>
+                <line x1="310" y1="42" x2="432" y2="42" stroke="#272d3d" stroke-width="0.8" />
+                <text x="322" y="59" font-size="7.5" fill="#ff79c6">-_editor: editor</text>
+                <text x="322" y="73" font-size="7.5" fill="#50fa7b">render()</text>
+                <text x="322" y="86" font-size="7.5" fill="#50fa7b">fautosave()</text>
+                <text x="371" y="136" text-anchor="middle" font-size="7" fill="#a78bfa" letter-spacing="0.5">LAYER
+                    2</text>
+
+                <line x1="432" y1="84" x2="458" y2="84" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#dc1)" />
+                <text x="444" y="78" text-anchor="middle" font-size="7" fill="#a78bfa">wraps</text>
+
+                <!-- preview (outermost) -->
+                <rect x="458" y="8" width="122" height="152" rx="1" fill="#1a1e28" stroke="#f0b84a" stroke-width="2" />
+                <rect x="458" y="8" width="122" height="20" rx="1" fill="#1a1400" />
+                <rect x="458" y="18" width="122" height="10" fill="#1a1400" />
+                <text x="519" y="21" text-anchor="middle" font-size="9" fill="#f0b84a"
+                    font-style="italic">preview</text>
+                <line x1="458" y1="28" x2="580" y2="28" stroke="#272d3d" stroke-width="0.8" />
+                <text x="470" y="45" font-size="7.5" fill="#ff79c6">-_editor: editor</text>
+                <text x="470" y="59" font-size="7.5" fill="#50fa7b">render()</text>
+                <text x="470" y="72" font-size="7.5" fill="#50fa7b">fpreview()</text>
+                <text x="519" y="150" text-anchor="middle" font-size="7" fill="#f0b84a"
+                    letter-spacing="0.5">OUTERMOST</text>
+
+                <!-- call order label -->
+                <text x="330" y="160" text-anchor="middle" font-size="7.5" fill="#6272a4" font-style="italic">Call:
+                    preview.render() → autosave → spellcheck → texteditor → unwind outward</text>
+            </svg>
+        </div>
+
+        <p>Two examples below illustrate Decorator from two angles. The first — a text editor — shows how feature layers
+            (spell check, autosave, preview) stack onto a base component. The second — a coffee order — shows how the
+            pattern removes rather than adds: <code>blackcoffee</code> and <code>sugerlesscoffee</code> each strip
+            something from the base, proving decorators aren't just about addition.</p>
+
+        <h3>Example 1 — Text Editor with Feature Layers</h3>
+
+        <div class="code-header">
+            <span class="code-lang">TypeScript — Decorator Pattern</span>
+            <span class="code-file">decorator.ts</span>
+        </div>
+        <pre><code><span class="kw">interface</span> <span class="cl">editor</span> {
+    <span class="fn">render</span>(): <span class="kw">void</span>;
+}
+
+<span class="cm">// Base component</span>
+<span class="kw">class</span> <span class="cl">texteditor</span> <span class="kw">implements</span> <span class="cl">editor</span> {
+    <span class="fn">render</span>() {
+        console.<span class="fn">log</span>(<span class="st">"basic text editor render"</span>);
+    }
+}
+
+<span class="cm">// Decorator 1 — adds spell check</span>
+<span class="kw">class</span> <span class="cl">spellcheck</span> <span class="kw">implements</span> <span class="cl">editor</span> {
+    <span class="kw">private</span> _editor: <span class="cl">editor</span>;
+    <span class="kw">constructor</span>(editor: <span class="cl">editor</span>) { <span class="kw">this</span>._editor = editor; }
+
+    <span class="fn">fspellcheck</span>(): <span class="kw">void</span> { console.<span class="fn">log</span>(<span class="st">"spellcheck got decorated"</span>); }
+    <span class="fn">render</span>(): <span class="kw">void</span>  { <span class="kw">this</span>._editor.<span class="fn">render</span>(); <span class="kw">this</span>.<span class="fn">fspellcheck</span>(); }
+}
+
+<span class="cm">// Decorator 2 — adds autosave</span>
+<span class="kw">class</span> <span class="cl">autosave</span> <span class="kw">implements</span> <span class="cl">editor</span> {
+    <span class="kw">private</span> _editor: <span class="cl">editor</span>;
+    <span class="kw">constructor</span>(editor: <span class="cl">editor</span>) { <span class="kw">this</span>._editor = editor; }
+
+    <span class="fn">fautosave</span>() { console.<span class="fn">log</span>(<span class="st">"autosave got decorated"</span>); }
+    <span class="fn">render</span>(): <span class="kw">void</span> { <span class="kw">this</span>._editor.<span class="fn">render</span>(); <span class="kw">this</span>.<span class="fn">fautosave</span>(); }
+}
+
+<span class="cm">// Decorator 3 — adds preview</span>
+<span class="kw">class</span> <span class="cl">preview</span> <span class="kw">implements</span> <span class="cl">editor</span> {
+    <span class="kw">private</span> _editor: <span class="cl">editor</span>;
+    <span class="kw">constructor</span>(editor: <span class="cl">editor</span>) { <span class="kw">this</span>._editor = editor; }
+
+    <span class="fn">fpreview</span>() { console.<span class="fn">log</span>(<span class="st">"preview got decorated"</span>); }
+    <span class="fn">render</span>(): <span class="kw">void</span> { <span class="kw">this</span>._editor.<span class="fn">render</span>(); <span class="kw">this</span>.<span class="fn">fpreview</span>(); }
+}
+
+<span class="cm">// Stack decorators in any combination at runtime</span>
+<span class="kw">const</span> previewInstance: <span class="cl">editor</span> =
+    <span class="kw">new</span> <span class="cl">preview</span>(<span class="kw">new</span> <span class="cl">autosave</span>(<span class="kw">new</span> <span class="cl">spellcheck</span>(<span class="kw">new</span> <span class="cl">texteditor</span>())));
+
+previewInstance.<span class="fn">render</span>();
+<span class="cm">// basic text editor render</span>
+<span class="cm">// spellcheck got decorated</span>
+<span class="cm">// autosave got decorated</span>
+<span class="cm">// preview got decorated</span></code></pre>
+
+        <h3>Example 2 — Coffee Order (Decorator Removing Behaviour)</h3>
+
+        <div class="code-header">
+            <span class="code-lang">TypeScript — Coffee Decorator</span>
+            <span class="code-file">coffee_decorator.ts</span>
+        </div>
+        <pre><code><span class="kw">interface</span> <span class="cl">coffee</span> { <span class="fn">serve</span>(): <span class="kw">void</span>; }
+
+<span class="kw">class</span> <span class="cl">basiccoffee</span> <span class="kw">implements</span> <span class="cl">coffee</span> {
+    <span class="fn">serve</span>(): <span class="kw">void</span> { console.<span class="fn">log</span>(<span class="st">"Basic coffee serve"</span>); }
+}
+
+<span class="cm">// Decorator — removes milk</span>
+<span class="kw">class</span> <span class="cl">blackcoffee</span> <span class="kw">implements</span> <span class="cl">coffee</span> {
+    <span class="kw">private</span> _coffee: <span class="cl">coffee</span>;
+    <span class="kw">constructor</span>(coffee: <span class="cl">coffee</span>) { <span class="kw">this</span>._coffee = coffee; }
+
+    <span class="fn">fblackcoffee</span>(): <span class="kw">void</span> {
+        console.<span class="fn">log</span>(<span class="st">"decorating black coffee by removing milk"</span>);
+    }
+    <span class="fn">serve</span>(): <span class="kw">void</span> {
+        <span class="kw">this</span>.<span class="fn">fblackcoffee</span>();
+        <span class="kw">this</span>._coffee.<span class="fn">serve</span>();
+    }
+}
+
+<span class="cm">// Decorator — removes sugar</span>
+<span class="kw">class</span> <span class="cl">sugerlesscoffee</span> <span class="kw">implements</span> <span class="cl">coffee</span> {
+    <span class="kw">private</span> _coffee: <span class="cl">coffee</span>;
+    <span class="kw">constructor</span>(coffee: <span class="cl">coffee</span>) { <span class="kw">this</span>._coffee = coffee; }
+
+    <span class="fn">fsugerlesscoffee</span>() {
+        console.<span class="fn">log</span>(<span class="st">"decorating sugerless coffee by removing sugar"</span>);
+    }
+    <span class="fn">serve</span>(): <span class="kw">void</span> {
+        <span class="kw">this</span>.<span class="fn">fsugerlesscoffee</span>();
+        <span class="kw">this</span>._coffee.<span class="fn">serve</span>();
+    }
+}
+
+<span class="cm">// Chain: sugerless wraps blackcoffee wraps basiccoffee</span>
+<span class="kw">const</span> order = <span class="kw">new</span> <span class="cl">sugerlesscoffee</span>(<span class="kw">new</span> <span class="cl">blackcoffee</span>(<span class="kw">new</span> <span class="cl">basiccoffee</span>()));
+order.<span class="fn">serve</span>();
+<span class="cm">// decorating sugerless coffee by removing sugar</span>
+<span class="cm">// decorating black coffee by removing milk</span>
+<span class="cm">// Basic coffee serve</span></code></pre>
+
+        <div class="analogy">
+            <span class="analogy-icon">🪆</span>
+            <div class="analogy-text">
+                <p><strong>Think of Russian nesting dolls.</strong> Each doll wraps the one inside, and they're all the
+                    same shape. When you call <code>render()</code> on the outermost, it calls the one inside, which
+                    calls the one inside that — all the way to the base, then unwinds outward. That's exactly the call
+                    stack you saw above: preview → autosave → spellcheck → texteditor → back up.</p>
+            </div>
+        </div>
+
+        <div class="verdict">
+            <div class="v-box v-use">
+                <div class="v-title">✔ Use Decorator when…</div>
+                <ul class="v-list">
+                    <li>Behaviour combinations grow exponentially via inheritance</li>
+                    <li>Features need to be toggled at runtime</li>
+                    <li>Open/Closed Principle must hold — extend without modifying</li>
+                    <li>Middleware pipelines, logger wrappers, HTTP request chains</li>
+                </ul>
+            </div>
+            <div class="v-box v-skip">
+                <div class="v-title">✗ Avoid Decorator when…</div>
+                <ul class="v-list">
+                    <li>Order of wrapping matters and is hard to control</li>
+                    <li>You only have one or two fixed feature combinations</li>
+                    <li>Deep stacks make debugging call chains painful</li>
+                </ul>
+            </div>
+        </div>
+
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- 03 PROXY                                    -->
+        <!-- ═══════════════════════════════════════════ -->
+        <div class="pat-block">
+            <div class="pat-number-row">
+                <span class="pat-num">03</span>
+                <div class="pat-label-stack">
+                    <span class="pat-category">Structural · Series 2</span>
+                    <span class="pat-name">Proxy</span>
+                </div>
+            </div>
+            <p class="pat-tagline">Provide a surrogate or placeholder for another object to control access to it.</p>
+        </div>
+
+        <p>The Proxy pattern puts a stand-in object in front of the real one. From the client's perspective, nothing
+            changes — they call the same interface. But the proxy intercepts the call and can do things before and
+            after: check access permissions, cache results, log the operation, defer expensive initialization until the
+            moment it's actually needed.</p>
+
+        <p>There are three main flavours. A <strong>Virtual Proxy</strong> delays creation of an expensive object until
+            first use. A <strong>Protection Proxy</strong> guards access based on permissions. A <strong>Caching
+                Proxy</strong> memoises results to avoid repeated work. The example below demonstrates all three ideas
+            in a database query scenario.</p>
+
+        <!-- PROXY DIAGRAM -->
+        <div class="diagram-wrap">
+            <div class="diagram-bar">Proxy — client sees same interface, proxy intercepts</div>
+            <svg viewBox="0 0 660 172" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono',monospace">
+                <rect width="660" height="172" fill="#13161d" />
+                <defs>
+                    <marker id="px1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#4f8ef7" />
+                    </marker>
+                    <marker id="px2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#3ecf8e" />
+                    </marker>
+                    <marker id="px3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#f0b84a" />
+                    </marker>
+                </defs>
+
+                <!-- Client -->
+                <rect x="18" y="60" width="100" height="52" rx="1" fill="#1a1e28" stroke="#272d3d" stroke-width="1.5" />
+                <text x="68" y="79" text-anchor="middle" font-size="10" fill="#9aa3bc" font-style="italic">Client</text>
+                <text x="68" y="97" text-anchor="middle" font-size="8" fill="#6272a4">query(sql)</text>
+
+                <!-- arrow client → interface -->
+                <line x1="118" y1="86" x2="158" y2="86" stroke="#4f8ef7" stroke-width="1.5" marker-end="url(#px1)" />
+
+                <!-- IDatabase interface -->
+                <rect x="158" y="44" width="130" height="84" rx="1" fill="#1a1e28" stroke="#272d3d"
+                    stroke-width="1.5" />
+                <rect x="158" y="44" width="130" height="20" rx="1" fill="#0a0c10" />
+                <rect x="158" y="54" width="130" height="10" fill="#0a0c10" />
+                <text x="190" y="52" text-anchor="middle" font-size="7.5" fill="#6272a4"
+                    letter-spacing="0.5">«interface»</text>
+                <text x="223" y="62" text-anchor="middle" font-size="10" fill="#8be9fd"
+                    font-style="italic">IDatabase</text>
+                <line x1="158" y1="64" x2="288" y2="64" stroke="#272d3d" stroke-width="0.8" />
+                <text x="170" y="80" font-size="8.5" fill="#ffb86c">query(sql): any</text>
+
+                <!-- arrow interface → proxy & realdb -->
+                <line x1="288" y1="70" x2="328" y2="50" stroke="#272d3d" stroke-width="1" stroke-dasharray="4,2" />
+                <line x1="288" y1="100" x2="328" y2="130" stroke="#272d3d" stroke-width="1" stroke-dasharray="4,2" />
+
+                <!-- Proxy -->
+                <rect x="328" y="18" width="148" height="82" rx="1" fill="#1a1e28" stroke="#4f8ef7"
+                    stroke-width="1.5" />
+                <rect x="328" y="18" width="148" height="20" rx="1" fill="#0f1520" />
+                <rect x="328" y="28" width="148" height="10" fill="#0f1520" />
+                <text x="402" y="26" text-anchor="middle" font-size="8" fill="#4f8ef7"
+                    letter-spacing="0.5">«proxy»</text>
+                <text x="402" y="36" text-anchor="middle" font-size="10" fill="#8be9fd"
+                    font-style="italic">DatabaseProxy</text>
+                <line x1="328" y1="38" x2="476" y2="38" stroke="#272d3d" stroke-width="0.8" />
+                <text x="340" y="55" font-size="7.5" fill="#ff79c6">-realDb: RealDatabase</text>
+                <text x="340" y="69" font-size="7.5" fill="#ff79c6">-cache: Map</text>
+                <text x="340" y="83" font-size="7.5" fill="#f0b84a">-currentUser: string</text>
+                <text x="340" y="96" font-size="7.5" fill="#50fa7b">query(sql): any</text>
+
+                <!-- proxy intercept labels -->
+                <text x="402" y="116" text-anchor="middle" font-size="7" fill="#4f8ef7" font-style="italic">① check auth
+                    ② check cache ③ delegate</text>
+
+                <!-- Real DB -->
+                <rect x="328" y="118" width="148" height="40" rx="1" fill="#1a1e28" stroke="#3ecf8e"
+                    stroke-width="1.5" />
+                <text x="402" y="132" text-anchor="middle" font-size="10" fill="#3ecf8e"
+                    font-style="italic">RealDatabase</text>
+                <text x="402" y="148" text-anchor="middle" font-size="7.5" fill="#6272a4">query() → expensive DB
+                    call</text>
+
+                <!-- arrow proxy → real -->
+                <line x1="402" y1="100" x2="402" y2="118" stroke="#3ecf8e" stroke-width="1.5" marker-end="url(#px2)" />
+                <text x="410" y="113" font-size="7" fill="#3ecf8e" font-style="italic">only if needed</text>
+
+                <!-- Cache box -->
+                <rect x="508" y="18" width="130" height="56" rx="1" fill="#1a1e28" stroke="#f0b84a"
+                    stroke-width="1.5" />
+                <text x="573" y="34" text-anchor="middle" font-size="9" fill="#f0b84a" font-style="italic">Cache
+                    (Map)</text>
+                <text x="573" y="50" text-anchor="middle" font-size="7.5" fill="#6272a4">sql → result</text>
+                <text x="573" y="63" text-anchor="middle" font-size="7.5" fill="#6272a4">skips DB on hit</text>
+                <line x1="476" y1="46" x2="508" y2="40" stroke="#f0b84a" stroke-width="1" stroke-dasharray="4,2"
+                    marker-end="url(#px3)" />
+            </svg>
+        </div>
+
+        <div class="code-header">
+            <span class="code-lang">TypeScript — Proxy Pattern</span>
+            <span class="code-file">proxy.ts</span>
+        </div>
+        <pre><code><span class="cm">// Subject interface — proxy and real object share this</span>
+<span class="kw">interface</span> <span class="cl">IDatabase</span> {
+    <span class="fn">query</span>(sql: <span class="cl">string</span>): <span class="kw">any</span>;
+}
+
+<span class="cm">// Real subject — expensive to call</span>
+<span class="kw">class</span> <span class="cl">RealDatabase</span> <span class="kw">implements</span> <span class="cl">IDatabase</span> {
+    <span class="fn">query</span>(sql: <span class="cl">string</span>): <span class="kw">any</span> {
+        console.<span class="fn">log</span>(<span class="st">`[DB] Executing: ${sql}`</span>);
+        <span class="kw">return</span> { rows: [<span class="st">"result1"</span>, <span class="st">"result2"</span>] };
+    }
+}
+
+<span class="cm">// Proxy — access control + caching in one place</span>
+<span class="kw">class</span> <span class="cl">DatabaseProxy</span> <span class="kw">implements</span> <span class="cl">IDatabase</span> {
+    <span class="kw">private</span> realDb: <span class="cl">RealDatabase</span> | <span class="kw">null</span> = <span class="kw">null</span>;   <span class="cm">// virtual proxy — lazy init</span>
+    <span class="kw">private</span> cache = <span class="kw">new</span> <span class="cl">Map</span>&lt;<span class="cl">string</span>, <span class="kw">any</span>&gt;();
+    <span class="kw">private</span> currentUser: <span class="cl">string</span>;
+
+    <span class="kw">constructor</span>(user: <span class="cl">string</span>) {
+        <span class="kw">this</span>.currentUser = user;
+    }
+
+    <span class="fn">query</span>(sql: <span class="cl">string</span>): <span class="kw">any</span> {
+        <span class="cm">// ① Protection proxy — check role</span>
+        <span class="kw">if</span> (<span class="kw">this</span>.currentUser !== <span class="st">"admin"</span> &amp;&amp; sql.<span class="fn">includes</span>(<span class="st">"DELETE"</span>)) {
+            console.<span class="fn">log</span>(<span class="st">`[PROXY] Access denied for user: ${this.currentUser}`</span>);
+            <span class="kw">return null</span>;
+        }
+
+        <span class="cm">// ② Caching proxy — return cached result if available</span>
+        <span class="kw">if</span> (<span class="kw">this</span>.cache.<span class="fn">has</span>(sql)) {
+            console.<span class="fn">log</span>(<span class="st">`[PROXY] Cache hit for: ${sql}`</span>);
+            <span class="kw">return this</span>.cache.<span class="fn">get</span>(sql);
+        }
+
+        <span class="cm">// ③ Virtual proxy — create real object only on first actual use</span>
+        <span class="kw">if</span> (!<span class="kw">this</span>.realDb) {
+            <span class="kw">this</span>.realDb = <span class="kw">new</span> <span class="cl">RealDatabase</span>();
+            console.<span class="fn">log</span>(<span class="st">"[PROXY] RealDatabase created (lazy init)"</span>);
+        }
+
+        <span class="kw">const</span> result = <span class="kw">this</span>.realDb.<span class="fn">query</span>(sql);
+        <span class="kw">this</span>.cache.<span class="fn">set</span>(sql, result);
+        <span class="kw">return</span> result;
+    }
+}
+
+<span class="cm">// Usage — client only sees IDatabase, never RealDatabase directly</span>
+<span class="kw">const</span> db: <span class="cl">IDatabase</span> = <span class="kw">new</span> <span class="cl">DatabaseProxy</span>(<span class="st">"admin"</span>);
+db.<span class="fn">query</span>(<span class="st">"SELECT * FROM users"</span>);    <span class="cm">// [PROXY] RealDatabase created → [DB] Executing</span>
+db.<span class="fn">query</span>(<span class="st">"SELECT * FROM users"</span>);    <span class="cm">// [PROXY] Cache hit — no DB call</span>
+
+<span class="kw">const</span> guest: <span class="cl">IDatabase</span> = <span class="kw">new</span> <span class="cl">DatabaseProxy</span>(<span class="st">"guest"</span>);
+guest.<span class="fn">query</span>(<span class="st">"DELETE FROM logs"</span>);     <span class="cm">// [PROXY] Access denied</span></code></pre>
+
+        <div class="callout gold">
+            <span class="callout-tag">Proxy vs Decorator — the key distinction</span>
+            <p>Both patterns wrap an object and share its interface. The difference is intent. A <strong>Decorator adds
+                    or modifies behaviour</strong>. A <strong>Proxy controls access</strong> — it manages the lifecycle,
+                guards the door, or caches the result, without enriching the interface itself. When you're asking "what
+                should this object do?" use Decorator. When you're asking "should this object be accessed at all, or
+                how?" use Proxy.</p>
+        </div>
+
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- 04 FACADE                                   -->
+        <!-- ═══════════════════════════════════════════ -->
+        <div class="pat-block">
+            <div class="pat-number-row">
+                <span class="pat-num">04</span>
+                <div class="pat-label-stack">
+                    <span class="pat-category">Structural · Series 2</span>
+                    <span class="pat-name">Facade</span>
+                </div>
+            </div>
+            <p class="pat-tagline">Provide a simplified interface to a complex subsystem.</p>
+        </div>
+
+        <p>Subsystems grow complex. A home theatre system has an amplifier, a projector, a streaming device, lighting
+            controls, and a screen. Turning on a movie requires orchestrating all of them in the right sequence. A
+            Facade provides a single, simple method — <code>watchMovie()</code> — that handles all of that coordination
+            behind the scenes.</p>
+
+        <p>The Facade doesn't hide the subsystem. Clients who need fine-grained control can still access the components
+            directly. The Facade is a convenience layer for the 80% of use cases that just need the simple path.</p>
+
+        <!-- FACADE DIAGRAM -->
+        <div class="diagram-wrap">
+            <div class="diagram-bar">Facade — one entry point, multiple subsystems</div>
+            <svg viewBox="0 0 660 200" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono',monospace">
+                <rect width="660" height="200" fill="#13161d" />
+                <defs>
+                    <marker id="fa1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#3ecf8e" />
+                    </marker>
+                    <marker id="fa2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#4f8ef7" />
+                    </marker>
+                </defs>
+
+                <!-- Client -->
+                <rect x="18" y="80" width="100" height="44" rx="1" fill="#1a1e28" stroke="#272d3d" stroke-width="1.5" />
+                <text x="68" y="98" text-anchor="middle" font-size="10" fill="#9aa3bc" font-style="italic">Client</text>
+                <text x="68" y="114" text-anchor="middle" font-size="7.5" fill="#6272a4">watchMovie()</text>
+                <line x1="118" y1="102" x2="158" y2="102" stroke="#3ecf8e" stroke-width="1.5" marker-end="url(#fa1)" />
+
+                <!-- Facade -->
+                <rect x="158" y="40" width="165" height="124" rx="1" fill="#1a1e28" stroke="#3ecf8e" stroke-width="2" />
+                <rect x="158" y="40" width="165" height="22" rx="1" fill="#071a10" />
+                <rect x="158" y="52" width="165" height="10" fill="#071a10" />
+                <text x="240" y="50" text-anchor="middle" font-size="8" fill="#3ecf8e"
+                    letter-spacing="0.5">«facade»</text>
+                <text x="240" y="60" text-anchor="middle" font-size="11" fill="#3ecf8e"
+                    font-style="italic">HomeTheatreFacade</text>
+                <line x1="158" y1="62" x2="323" y2="62" stroke="#272d3d" stroke-width="0.8" />
+                <text x="170" y="79" font-size="8.5" fill="#ff79c6">-amplifier</text>
+                <text x="170" y="93" font-size="8.5" fill="#ff79c6">-projector</text>
+                <text x="170" y="107" font-size="8.5" fill="#ff79c6">-streamingDevice</text>
+                <text x="170" y="121" font-size="8.5" fill="#ff79c6">-lights</text>
+                <line x1="158" y1="130" x2="323" y2="130" stroke="#272d3d" stroke-width="0.8" />
+                <text x="170" y="145" font-size="8.5" fill="#50fa7b">watchMovie(title)</text>
+                <text x="170" y="158" font-size="8.5" fill="#50fa7b">endMovie()</text>
+
+                <!-- Arrows facade → subsystems -->
+                <line x1="323" y1="78" x2="365" y2="40" stroke="#4f8ef7" stroke-width="1" stroke-dasharray="4,2"
+                    marker-end="url(#fa2)" />
+                <line x1="323" y1="95" x2="365" y2="90" stroke="#4f8ef7" stroke-width="1" stroke-dasharray="4,2"
+                    marker-end="url(#fa2)" />
+                <line x1="323" y1="110" x2="365" y2="136" stroke="#4f8ef7" stroke-width="1" stroke-dasharray="4,2"
+                    marker-end="url(#fa2)" />
+                <line x1="323" y1="120" x2="365" y2="178" stroke="#4f8ef7" stroke-width="1" stroke-dasharray="4,2"
+                    marker-end="url(#fa2)" />
+
+                <!-- Subsystems -->
+                <rect x="365" y="18" width="120" height="36" rx="1" fill="#1a1e28" stroke="#272d3d" stroke-width="1" />
+                <text x="425" y="34" text-anchor="middle" font-size="9" fill="#dce4f5"
+                    font-style="italic">Amplifier</text>
+                <text x="425" y="46" text-anchor="middle" font-size="7" fill="#6272a4">setVolume(), on()</text>
+
+                <rect x="365" y="66" width="120" height="36" rx="1" fill="#1a1e28" stroke="#272d3d" stroke-width="1" />
+                <text x="425" y="82" text-anchor="middle" font-size="9" fill="#dce4f5"
+                    font-style="italic">Projector</text>
+                <text x="425" y="94" text-anchor="middle" font-size="7" fill="#6272a4">setInput(), on()</text>
+
+                <rect x="365" y="114" width="120" height="36" rx="1" fill="#1a1e28" stroke="#272d3d" stroke-width="1" />
+                <text x="425" y="130" text-anchor="middle" font-size="9" fill="#dce4f5"
+                    font-style="italic">StreamingDevice</text>
+                <text x="425" y="142" text-anchor="middle" font-size="7" fill="#6272a4">play(title)</text>
+
+                <rect x="365" y="158" width="120" height="30" rx="1" fill="#1a1e28" stroke="#272d3d" stroke-width="1" />
+                <text x="425" y="175" text-anchor="middle" font-size="9" fill="#dce4f5"
+                    font-style="italic">Lights</text>
+                <text x="425" y="185" text-anchor="middle" font-size="7" fill="#6272a4">dim()</text>
+
+                <!-- subsystems → optional direct access -->
+                <text x="530" y="44" font-size="7.5" fill="#6272a4" font-style="italic">← direct access</text>
+                <text x="530" y="56" font-size="7.5" fill="#6272a4" font-style="italic">still available</text>
+            </svg>
+        </div>
+
+        <div class="code-header">
+            <span class="code-lang">TypeScript — Facade Pattern</span>
+            <span class="code-file">facade.ts</span>
+        </div>
+        <pre><code><span class="cm">// Complex subsystems — each has its own detailed interface</span>
+<span class="kw">class</span> <span class="cl">Amplifier</span> {
+    <span class="fn">on</span>(): <span class="kw">void</span>                  { console.<span class="fn">log</span>(<span class="st">"Amplifier: on"</span>); }
+    <span class="fn">setVolume</span>(level: <span class="kw">number</span>): <span class="kw">void</span> { console.<span class="fn">log</span>(<span class="st">`Amplifier: volume → ${level}`</span>); }
+    <span class="fn">off</span>(): <span class="kw">void</span>                 { console.<span class="fn">log</span>(<span class="st">"Amplifier: off"</span>); }
+}
+
+<span class="kw">class</span> <span class="cl">Projector</span> {
+    <span class="fn">on</span>(): <span class="kw">void</span>                    { console.<span class="fn">log</span>(<span class="st">"Projector: on"</span>); }
+    <span class="fn">setInput</span>(source: <span class="cl">string</span>): <span class="kw">void</span> { console.<span class="fn">log</span>(<span class="st">`Projector: input → ${source}`</span>); }
+    <span class="fn">off</span>(): <span class="kw">void</span>                   { console.<span class="fn">log</span>(<span class="st">"Projector: off"</span>); }
+}
+
+<span class="kw">class</span> <span class="cl">StreamingDevice</span> {
+    <span class="fn">play</span>(title: <span class="cl">string</span>): <span class="kw">void</span> { console.<span class="fn">log</span>(<span class="st">`Streaming: playing "${title}"`</span>); }
+    <span class="fn">stop</span>(): <span class="kw">void</span>               { console.<span class="fn">log</span>(<span class="st">"Streaming: stopped"</span>); }
+}
+
+<span class="kw">class</span> <span class="cl">Lights</span> {
+    <span class="fn">dim</span>(level: <span class="kw">number</span>): <span class="kw">void</span>  { console.<span class="fn">log</span>(<span class="st">`Lights: dimmed to ${level}%`</span>); }
+    <span class="fn">on</span>(): <span class="kw">void</span>                 { console.<span class="fn">log</span>(<span class="st">"Lights: on"</span>); }
+}
+
+<span class="cm">// Facade — one simple interface over all four subsystems</span>
+<span class="kw">class</span> <span class="cl">HomeTheatreFacade</span> {
+    <span class="kw">private</span> amp    = <span class="kw">new</span> <span class="cl">Amplifier</span>();
+    <span class="kw">private</span> proj   = <span class="kw">new</span> <span class="cl">Projector</span>();
+    <span class="kw">private</span> stream = <span class="kw">new</span> <span class="cl">StreamingDevice</span>();
+    <span class="kw">private</span> lights = <span class="kw">new</span> <span class="cl">Lights</span>();
+
+    <span class="fn">watchMovie</span>(title: <span class="cl">string</span>): <span class="kw">void</span> {
+        console.<span class="fn">log</span>(<span class="st">"--- Starting movie night ---"</span>);
+        <span class="kw">this</span>.lights.<span class="fn">dim</span>(<span class="nm">20</span>);
+        <span class="kw">this</span>.amp.<span class="fn">on</span>(); <span class="kw">this</span>.amp.<span class="fn">setVolume</span>(<span class="nm">7</span>);
+        <span class="kw">this</span>.proj.<span class="fn">on</span>(); <span class="kw">this</span>.proj.<span class="fn">setInput</span>(<span class="st">"streaming"</span>);
+        <span class="kw">this</span>.stream.<span class="fn">play</span>(title);
+    }
+
+    <span class="fn">endMovie</span>(): <span class="kw">void</span> {
+        console.<span class="fn">log</span>(<span class="st">"--- Ending movie night ---"</span>);
+        <span class="kw">this</span>.stream.<span class="fn">stop</span>();
+        <span class="kw">this</span>.proj.<span class="fn">off</span>();
+        <span class="kw">this</span>.amp.<span class="fn">off</span>();
+        <span class="kw">this</span>.lights.<span class="fn">on</span>();
+    }
+}
+
+<span class="cm">// Client — one call, all the complexity handled internally</span>
+<span class="kw">const</span> theatre = <span class="kw">new</span> <span class="cl">HomeTheatreFacade</span>();
+theatre.<span class="fn">watchMovie</span>(<span class="st">"Inception"</span>);
+<span class="cm">// --- Starting movie night ---</span>
+<span class="cm">// Lights: dimmed to 20%</span>
+<span class="cm">// Amplifier: on  |  Amplifier: volume → 7</span>
+<span class="cm">// Projector: on  |  Projector: input → streaming</span>
+<span class="cm">// Streaming: playing "Inception"</span>
+
+theatre.<span class="fn">endMovie</span>();</code></pre>
+
+        <div class="callout green">
+            <span class="callout-tag">In the Wild</span>
+            <p>Every time you call a high-level SDK method that abstracts over several lower-level APIs, you're using a
+                Facade. Express.js's <code>app.listen()</code> is a facade over Node's HTTP server, socket binding, and
+                event loop. Spring Boot's autoconfiguration is a facade over beans, datasources, and JPA setup. The
+                simplicity on the surface is always the Facade pattern hiding a complex subsystem underneath.</p>
+        </div>
+
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- 05 COMPOSITE                                -->
+        <!-- ═══════════════════════════════════════════ -->
+        <div class="pat-block">
+            <div class="pat-number-row">
+                <span class="pat-num">05</span>
+                <div class="pat-label-stack">
+                    <span class="pat-category">Structural · Series 2</span>
+                    <span class="pat-name">Composite</span>
+                </div>
+            </div>
+            <p class="pat-tagline">Compose objects into tree structures to represent part-whole hierarchies. Let clients
+                treat individual objects and compositions uniformly.</p>
+        </div>
+
+        <p>Some structures are inherently recursive. A file system has files and directories. A directory contains files
+            and other directories. A UI component tree has leaves (buttons, labels) and composites (panels, modals) that
+            contain other components. The challenge: you want to treat a single file and an entire directory subtree
+            through the same interface. Composite makes this possible.</p>
+
+        <p>The pattern defines a shared interface for both leaves (no children) and composites (containers with
+            children). When you call <code>listcommand()</code> on a directory, it calls <code>listcommand()</code> on
+            each child — recursing through the entire subtree automatically. The client never needs to distinguish
+            between a file and a folder.</p>
+
+        <!-- COMPOSITE DIAGRAM -->
+        <div class="diagram-wrap">
+            <div class="diagram-bar">Composite — file system tree structure</div>
+            <svg viewBox="0 0 660 220" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono',monospace">
+                <rect width="660" height="220" fill="#13161d" />
+                <defs>
+                    <marker id="cm1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L8,3z" fill="#272d3d" />
+                    </marker>
+                </defs>
+
+                <!-- FileSystem interface (top center) -->
+                <rect x="230" y="10" width="200" height="60" rx="1" fill="#1a1e28" stroke="#272d3d"
+                    stroke-width="1.5" />
+                <rect x="230" y="10" width="200" height="20" rx="1" fill="#0a0c10" />
+                <rect x="230" y="20" width="200" height="10" fill="#0a0c10" />
+                <text x="300" y="18" text-anchor="middle" font-size="7.5" fill="#6272a4"
+                    letter-spacing="0.5">«interface»</text>
+                <text x="330" y="28" text-anchor="middle" font-size="11" fill="#8be9fd"
+                    font-style="italic">FileSystem</text>
+                <line x1="230" y1="30" x2="430" y2="30" stroke="#272d3d" stroke-width="0.8" />
+                <text x="242" y="46" font-size="8.5" fill="#ffb86c">size(): string</text>
+                <text x="242" y="59" font-size="8.5" fill="#ffb86c">listcommand(): void</text>
+
+                <!-- Implements arrows -->
+                <line x1="310" y1="70" x2="170" y2="108" stroke="#272d3d" stroke-width="1.5" />
+                <polygon points="310,70 305,82 316,82" fill="#1a1e28" stroke="#272d3d" stroke-width="1.5" />
+                <line x1="355" y1="70" x2="490" y2="108" stroke="#272d3d" stroke-width="1.5" />
+                <polygon points="355,70 350,82 361,82" fill="#1a1e28" stroke="#272d3d" stroke-width="1.5" />
+
+                <!-- file (leaf) -->
+                <rect x="60" y="108" width="220" height="70" rx="1" fill="#1a1e28" stroke="#272d3d"
+                    stroke-width="1.5" />
+                <rect x="60" y="108" width="220" height="22" rx="1" fill="#0a0c10" />
+                <rect x="60" y="118" width="220" height="12" fill="#0a0c10" />
+                <text x="130" y="117" text-anchor="middle" font-size="8" fill="#6272a4"
+                    letter-spacing="0.5">«leaf»</text>
+                <text x="170" y="125" text-anchor="middle" font-size="11" fill="#dce4f5" font-style="italic">file</text>
+                <line x1="60" y1="130" x2="280" y2="130" stroke="#272d3d" stroke-width="0.8" />
+                <text x="72" y="147" font-size="8.5" fill="#ff79c6">-name: string</text>
+                <text x="72" y="161" font-size="8.5" fill="#ff79c6">-space: string</text>
+                <text x="72" y="174" font-size="8.5" fill="#50fa7b">size() / listcommand()</text>
+                <text x="170" y="193" text-anchor="middle" font-size="7" fill="#6272a4" letter-spacing="0.5">no children
+                    — leaf node</text>
+
+                <!-- directory (composite) -->
+                <rect x="370" y="108" width="240" height="88" rx="1" fill="#1a1e28" stroke="#4f8ef7"
+                    stroke-width="1.5" />
+                <rect x="370" y="108" width="240" height="22" rx="1" fill="#0f1520" />
+                <rect x="370" y="118" width="240" height="12" fill="#0f1520" />
+                <text x="450" y="117" text-anchor="middle" font-size="8" fill="#4f8ef7"
+                    letter-spacing="0.5">«composite»</text>
+                <text x="490" y="125" text-anchor="middle" font-size="11" fill="#8be9fd"
+                    font-style="italic">directory</text>
+                <line x1="370" y1="130" x2="610" y2="130" stroke="#272d3d" stroke-width="0.8" />
+                <text x="382" y="147" font-size="8.5" fill="#ff79c6">-name: string</text>
+                <text x="382" y="161" font-size="8.5" fill="#ff79c6">-folderlist: FileSystem[]</text>
+                <text x="382" y="175" font-size="8.5" fill="#50fa7b">size() / listcommand()</text>
+                <text x="382" y="188" font-size="8.5" fill="#50fa7b">addfile(fs: FileSystem)</text>
+                <!-- self-reference loop -->
+                <path d="M610 170 Q645 170 645 196 Q645 215 490 215 Q370 215 370 196 Q370 183 382 180" stroke="#4f8ef7"
+                    stroke-width="1" fill="none" stroke-dasharray="4,2" />
+                <text x="490" y="213" text-anchor="middle" font-size="7" fill="#4f8ef7" font-style="italic">contains
+                    FileSystem[] (recursive)</text>
+            </svg>
+        </div>
+
+        <div class="code-header">
+            <span class="code-lang">TypeScript — Composite Pattern</span>
+            <span class="code-file">composite.ts</span>
+        </div>
+        <pre><code><span class="kw">interface</span> <span class="cl">FileSystem</span> {
+    <span class="fn">size</span>(): <span class="cl">string</span>;
+    <span class="fn">listcommand</span>(): <span class="kw">void</span>;
+}
+
+<span class="cm">// Leaf — no children, knows only its own size</span>
+<span class="kw">class</span> <span class="cl">file</span> <span class="kw">implements</span> <span class="cl">FileSystem</span> {
+    <span class="kw">private</span> name = <span class="st">""</span>;
+    <span class="kw">private</span> space = <span class="st">"0"</span>;
+
+    <span class="kw">constructor</span>(name: <span class="cl">string</span>, space: <span class="cl">string</span>) {
+        <span class="kw">this</span>.name = name;
+        <span class="kw">this</span>.space = space;
+    }
+
+    <span class="fn">size</span>(): <span class="cl">string</span> { <span class="kw">return this</span>.space; }
+
+    <span class="fn">listcommand</span>(): <span class="kw">void</span> {
+        console.<span class="fn">log</span>(<span class="st">`File Name is ${this.name} and size is ${this.space}`</span>);
+    }
+}
+
+<span class="cm">// Composite — contains children, aggregates their sizes</span>
+<span class="kw">class</span> <span class="cl">directory</span> <span class="kw">implements</span> <span class="cl">FileSystem</span> {
+    <span class="kw">private</span> name = <span class="st">""</span>;
+    <span class="kw">private</span> space = <span class="st">"0"</span>;
+    folderlist: <span class="cl">FileSystem</span>[] = [];
+
+    <span class="kw">constructor</span>(name: <span class="cl">string</span>, space: <span class="cl">string</span>) {
+        <span class="kw">this</span>.name = name;
+        <span class="kw">this</span>.space = space;
+    }
+
+    <span class="fn">size</span>(): <span class="cl">string</span> {
+        <span class="kw">let</span> total = <span class="nm">0</span>;
+        <span class="kw">for</span> (<span class="kw">let</span> i = <span class="nm">0</span>; i &lt; <span class="kw">this</span>.folderlist.length; i++) {
+            total += <span class="fn">parseInt</span>(<span class="kw">this</span>.folderlist[i].<span class="fn">size</span>());  <span class="cm">// recurses into subdirs</span>
+        }
+        <span class="kw">this</span>.space = total.<span class="fn">toString</span>();
+        <span class="kw">return this</span>.space;
+    }
+
+    <span class="fn">listcommand</span>(): <span class="kw">void</span> {
+        console.<span class="fn">log</span>(<span class="st">`Directory Name is ${this.name} and size is ${this.space}`</span>);
+        <span class="kw">for</span> (<span class="kw">let</span> i = <span class="nm">0</span>; i &lt; <span class="kw">this</span>.folderlist.length; i++) {
+            <span class="kw">this</span>.folderlist[i].<span class="fn">listcommand</span>();                <span class="cm">// recurses into children</span>
+        }
+    }
+
+    <span class="fn">addfile</span>(fs: <span class="cl">FileSystem</span>) { <span class="kw">this</span>.folderlist.<span class="fn">push</span>(fs); }
+}
+
+<span class="cm">// Build a tree: directories contain files (and could contain other directories)</span>
+<span class="kw">const</span> dsa = <span class="kw">new</span> <span class="cl">directory</span>(<span class="st">"DSA"</span>, <span class="st">"0"</span>);
+dsa.<span class="fn">addfile</span>(<span class="kw">new</span> <span class="cl">file</span>(<span class="st">"slidingalgo.java"</span>, <span class="st">"2"</span>));
+dsa.<span class="fn">addfile</span>(<span class="kw">new</span> <span class="cl">file</span>(<span class="st">"linklist.ts"</span>, <span class="st">"3"</span>));
+dsa.<span class="fn">size</span>();
+dsa.<span class="fn">listcommand</span>();
+<span class="cm">// Directory Name is DSA and size is 5</span>
+<span class="cm">// File Name is slidingalgo.java and size is 2</span>
+<span class="cm">// File Name is linklist.ts and size is 3</span>
+
+<span class="kw">const</span> lld = <span class="kw">new</span> <span class="cl">directory</span>(<span class="st">"lld"</span>, <span class="st">"0"</span>);
+lld.<span class="fn">addfile</span>(<span class="kw">new</span> <span class="cl">file</span>(<span class="st">"factorypattern.java"</span>, <span class="st">"25"</span>));
+lld.<span class="fn">addfile</span>(<span class="kw">new</span> <span class="cl">file</span>(<span class="st">"compositepattern.ts"</span>, <span class="st">"31"</span>));
+lld.<span class="fn">size</span>();
+lld.<span class="fn">listcommand</span>();</code></pre>
+
+        <div class="callout purple">
+            <span class="callout-tag">The recursive insight</span>
+            <p>The power of Composite is that <code>directory.folderlist</code> holds <code>FileSystem[]</code> — not
+                <code>file[]</code>. That means a directory can contain other directories, which can contain other
+                directories, recursively. The tree can be arbitrarily deep, and <code>listcommand()</code> on the root
+                node traverses the entire structure with zero extra client code. This same pattern powers React's
+                component tree, DOM manipulation, and org chart rendering.</p>
+        </div>
+
+        <!-- Pattern comparison table -->
+        <table class="comp-table">
+            <thead>
+                <tr>
+                    <th>Pattern</th>
+                    <th class="ac">Core Idea</th>
+                    <th class="ac">Client sees</th>
+                    <th>Real-world example</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Adapter</td>
+                    <td>Translate incompatible interfaces</td>
+                    <td>Target interface only</td>
+                    <td>Legacy SDK wrapper, USB-C adaptor</td>
+                </tr>
+                <tr>
+                    <td>Decorator</td>
+                    <td>Add behaviour by wrapping</td>
+                    <td>Same interface, richer behaviour</td>
+                    <td>Express middleware, Java I/O streams</td>
+                </tr>
+                <tr>
+                    <td>Proxy</td>
+                    <td>Control access to an object</td>
+                    <td>Same interface, intercepted calls</td>
+                    <td>Auth guard, cache layer, lazy loader</td>
+                </tr>
+                <tr>
+                    <td>Facade</td>
+                    <td>Simplify a complex subsystem</td>
+                    <td>Simplified API, subsystems hidden</td>
+                    <td>SDK entry point, Spring Boot autoconfigure</td>
+                </tr>
+                <tr>
+                    <td>Composite</td>
+                    <td>Treat trees of objects uniformly</td>
+                    <td>Single interface for leaf and branch</td>
+                    <td>File system, React component tree, DOM</td>
+                </tr>
+            </tbody>
+        </table>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="series-footer">
+
+        <div class="next-card">
+            <span class="next-label">Coming Next · Series 3</span>
+            <div class="next-title">Behavioural Patterns — How Objects Communicate</div>
+            <div class="next-desc">Observer, Strategy, Command, Iterator, Chain of Responsibility, State, Template
+                Method — seven patterns that govern the flow of messages and decisions between objects. Series 3
+                incoming.</div>
+        </div>
+
+        <p style="color:var(--muted);font-size:0.86rem;margin-bottom:1.2rem;line-height:1.7;">
+            Five patterns. Five different answers to the same structural question: <em>how should these pieces fit
+                together?</em> Adapter bridges incompatibility. Decorator layers behaviour. Proxy controls access.
+            Facade hides complexity. Composite unifies trees. Together they give you the structural vocabulary to keep
+            any codebase composable, readable, and extensible as it grows.
+        </p>
+
+        <div class="tags">
+            <span class="tag">Design Patterns</span>
+            <span class="tag">Series 2</span>
+            <span class="tag">Structural</span>
+            <span class="tag">TypeScript</span>
+            <span class="tag">Adapter</span>
+            <span class="tag">Decorator</span>
+            <span class="tag">Proxy</span>
+            <span class="tag">Facade</span>
+            <span class="tag">Composite</span>
+            <span class="tag">Gang of Four</span>
+            <span class="tag">Software Architecture</span>
+            <span class="tag">OOP</span>
+        </div>
+
+    </footer>
+
+</body>
+
+</html>
