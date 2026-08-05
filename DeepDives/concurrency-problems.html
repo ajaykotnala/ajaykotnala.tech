@@ -1,0 +1,2890 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Concurrency Problems Deep Dive: Correctness, Coordination & Scarcity | Ajay Kotnala</title>
+    <meta name="description"
+        content="A system design deep dive into the three categories of concurrency bugs every developer hits — race conditions, producer-consumer coordination, and resource scarcity — mapped to locks, atomics, blocking queues, semaphores, and thread pools. Written by Ajay Kotnala, Senior Solution Architect." />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+        rel="stylesheet" />
+    <style>
+        /* ===== Apple Design Tokens (matching index.html) ===== */
+        :root {
+            /* Color System */
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-pearl: #fafafc;
+            --color-on-primary: #ffffff;
+
+            /* Concurrency brand accents (kept for article identity) */
+            --concur-indigo: #4f46e5;
+            --concur-violet: #9333ea;
+            --concur-gradient: linear-gradient(135deg, #4f46e5, #9333ea);
+
+            /* Typography */
+            --font-headline:
+                system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+                sans-serif;
+            --font-body: "Lora", Georgia, "Times New Roman", serif;
+            --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+
+            /* Border Radii */
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            /* Shadows */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06);
+
+            /* Article */
+            --article-width: 680px;
+        }
+
+        /* ===== Reset ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* ===== 1. Global Navigation Bar (Apple Thin Black Bar) ===== */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            font-family: var(--font-ui);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .global-nav-logo .logo-icon {
+            font-size: 16px;
+            color: var(--color-primary-on-dark);
+        }
+
+        .global-nav-links {
+            display: flex;
+            list-style: none;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .global-nav-links a {
+            color: #cccccc;
+            text-decoration: none;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            letter-spacing: -0.12px;
+            transition: color 0.2s ease;
+        }
+
+        .global-nav-links a:hover {
+            color: #ffffff;
+        }
+
+        .global-nav-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .global-nav-actions a {
+            color: #cccccc;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .global-nav-actions a:hover {
+            color: #ffffff;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ===== 2. Sub Navigation Bar (Frosted Sticky) ===== */
+        .sub-nav-frosted {
+            position: sticky;
+            top: 44px;
+            left: 0;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 999;
+            border-bottom: 1px solid var(--color-divider-soft);
+        }
+
+        .sub-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .sub-nav-title {
+            font-family: var(--font-headline);
+            font-size: 21px;
+            font-weight: 600;
+            color: var(--color-ink);
+            text-decoration: none;
+            letter-spacing: 0.231px;
+        }
+
+        .sub-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sub-nav-link {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink);
+            text-decoration: none;
+            opacity: 0.8;
+            transition:
+                color 0.2s ease,
+                opacity 0.2s ease;
+        }
+
+        .sub-nav-link:hover {
+            color: var(--color-primary);
+            opacity: 1;
+        }
+
+        .sub-nav-button {
+            background: var(--color-primary);
+            color: var(--color-on-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            border-radius: var(--rounded-pill);
+            text-decoration: none;
+            transition:
+                background 0.2s ease,
+                transform 0.1s ease;
+        }
+
+        .sub-nav-button:hover {
+            background: var(--color-primary-focus);
+        }
+
+        .sub-nav-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== Scroll Progress Bar ===== */
+        .progress-bar {
+            position: fixed;
+            top: 44px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--concur-gradient);
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        /* ===== Article Hero ===== */
+        .article-hero {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(96px + 4rem) 2rem 4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .article-hero-inner {
+            max-width: var(--article-width);
+            width: 100%;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .article-category {
+            display: inline-block;
+            padding: 4px 14px;
+            background: var(--concur-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .article-date {
+            color: var(--color-body-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .article-read-time {
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 13px;
+        }
+
+        .article-read-time::before {
+            content: "·";
+            margin-right: 0.5rem;
+            color: var(--color-body-muted);
+        }
+
+        .article-hero h1 {
+            font-family: var(--font-headline);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+        }
+
+        .article-hero h1 .gradient-text {
+            background: var(--concur-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .article-hero-desc {
+            font-family: var(--font-body);
+            font-size: 20px;
+            color: var(--color-body-muted);
+            line-height: 1.7;
+            max-width: 600px;
+        }
+
+        .article-hero-desc em {
+            font-style: italic;
+            color: var(--color-ink-muted-80);
+        }
+
+        /* ===== Author Bar (Medium-style) ===== */
+        .author-bar {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--color-divider-soft);
+            margin-bottom: 2.5rem;
+        }
+
+        .author-bar-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-bar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .author-bar-name {
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-ink);
+        }
+
+        .author-bar-meta {
+            font-family: var(--font-ui);
+            font-size: 13px;
+            color: var(--color-body-muted);
+        }
+
+        /* ===== Table of Contents ===== */
+        .toc-wrapper {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .toc {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem 2.5rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--concur-gradient);
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toc h3 {
+            font-size: 12px;
+            margin-bottom: 1.2rem;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            padding: 0.35rem 0;
+        }
+
+        .toc li a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 15px;
+            transition:
+                color 0.2s ease,
+                padding-left 0.2s ease;
+            display: inline-block;
+        }
+
+        .toc li a::before {
+            content: counter(toc-counter, decimal-leading-zero) ".";
+            color: var(--concur-indigo);
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-right: 0.8rem;
+            font-size: 13px;
+        }
+
+        .toc li a:hover {
+            color: var(--color-primary);
+            padding-left: 4px;
+        }
+
+        /* ===== Article Body (Medium-friendly) ===== */
+        .article-body {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .article-body h2 {
+            font-family: var(--font-headline);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-top: 3.5rem;
+            margin-bottom: 1.2rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .article-body h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .article-body h2 .section-number {
+            color: var(--concur-indigo);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .article-body h3 {
+            font-family: var(--font-headline);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-top: 2.5rem;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .article-body p {
+            font-family: var(--font-body);
+            font-size: 19px;
+            line-height: 1.85;
+            color: var(--color-ink-muted-80);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.003em;
+        }
+
+        .article-body ul,
+        .article-body ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .article-body li {
+            font-family: var(--font-body);
+            color: var(--color-ink-muted-80);
+            margin-bottom: 0.6rem;
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .article-body strong {
+            color: var(--color-ink);
+            font-weight: 600;
+        }
+
+        .article-body em {
+            color: var(--color-ink-muted-80);
+            font-style: italic;
+        }
+
+        .article-body code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--color-canvas-parchment);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--concur-indigo);
+        }
+
+        /* ===== Callout Boxes ===== */
+        .callout {
+            background: var(--color-canvas-parchment);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 0 var(--rounded-sm) var(--rounded-sm) 0;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .callout.callout-warning {
+            border-left-color: var(--concur-violet);
+            background: #f0f8f6;
+        }
+
+        .callout.callout-insight {
+            border-left-color: var(--concur-indigo);
+            background: #f0faf8;
+        }
+
+        .callout .callout-label {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.6rem;
+            color: var(--color-primary);
+        }
+
+        .callout.callout-warning .callout-label {
+            color: var(--concur-violet);
+        }
+
+        .callout.callout-insight .callout-label {
+            color: var(--concur-indigo);
+        }
+
+        .callout p {
+            margin-bottom: 0;
+            font-size: 16px !important;
+            line-height: 1.7 !important;
+        }
+
+        /* ===== Code Blocks (GitHub Light Theme) ===== */
+        .code-block {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-hairline);
+            border-radius: var(--rounded-sm);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0 2rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--color-hairline);
+            color: var(--color-body-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 0 var(--rounded-sm) 0 var(--rounded-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--color-ink);
+            line-height: 1.7;
+            white-space: pre;
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .code-block .keyword {
+            color: #cf222e;
+        }
+
+        .code-block .string {
+            color: #0a3069;
+        }
+
+        .code-block .comment {
+            color: #6e7781;
+            font-style: italic;
+        }
+
+        .code-block .type {
+            color: #953800;
+        }
+
+        .code-block .number {
+            color: #0550ae;
+        }
+
+        /* ===== Entity Cards ===== */
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .entity-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 1.8rem;
+            text-align: center;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .entity-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .entity-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .entity-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .entity-card p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ===== API Endpoint Cards ===== */
+        .api-endpoint {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0;
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .api-endpoint:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .api-method-url {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .api-method {
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .api-method.post {
+            background: #f0faf8;
+            color: var(--concur-indigo);
+        }
+
+        .api-method.get {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .api-url {
+            font-family: var(--font-mono);
+            color: var(--color-ink);
+            font-size: 15px;
+        }
+
+        .api-desc {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 15px !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        /* ===== Excalidraw-Style SVG Architecture Diagrams ===== */
+        .diagram-container {
+            margin: 3rem -2rem;
+            padding: 2rem;
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            overflow-x: auto;
+        }
+
+        .diagram-title {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-body-muted);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .diagram-caption {
+            text-align: center;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            margin-top: 1rem;
+            font-style: italic;
+        }
+
+        .diagram-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== Comparison Table ===== */
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 2rem 0;
+            border-radius: var(--rounded-md);
+            overflow: hidden;
+            border: 1px solid var(--color-divider-soft);
+            font-family: var(--font-ui);
+        }
+
+        .comparison-table th {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            background: var(--color-canvas);
+            color: var(--color-ink-muted-80);
+            font-size: 15px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--color-divider-soft);
+            line-height: 1.5;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--color-canvas-parchment);
+        }
+
+        .check-icon {
+            color: var(--color-primary);
+            font-weight: 700;
+        }
+
+        .cross-icon {
+            color: var(--color-body-muted);
+            font-weight: 700;
+        }
+
+        /* ===== Scale Numbers ===== */
+        .scale-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .scale-stat {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 1.2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition:
+                box-shadow 0.3s ease,
+                transform 0.3s ease;
+        }
+
+        .scale-stat:hover {
+            box-shadow: var(--shadow-card);
+            transform: translateY(-2px);
+        }
+
+        .scale-stat::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--concur-gradient);
+        }
+
+        .scale-stat .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            background: var(--concur-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-headline);
+        }
+
+        .scale-stat .stat-desc {
+            color: var(--color-body-muted);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ===== Deep Dive Accordion ===== */
+        .deep-dive {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            margin: 1.5rem 0;
+            overflow: hidden;
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .deep-dive:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .deep-dive-header {
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+
+        .deep-dive-header:hover {
+            background: var(--color-canvas-parchment);
+        }
+
+        .deep-dive-header h4 {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--color-ink);
+        }
+
+        .deep-dive-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-canvas-parchment);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            transition:
+                transform 0.3s ease,
+                background 0.3s ease;
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        .deep-dive.open .deep-dive-toggle {
+            transform: rotate(45deg);
+            background: #f0faf8;
+            color: var(--concur-indigo);
+        }
+
+        .deep-dive-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .deep-dive.open .deep-dive-content {
+            max-height: 3000px;
+        }
+
+        .deep-dive-content-inner {
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .deep-dive-content-inner p,
+        .deep-dive-content-inner li {
+            font-size: 16px !important;
+        }
+
+        /* ===== Level Expectation Cards ===== */
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .level-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .level-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .level-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .level-card.mid::before {
+            background: var(--color-primary);
+        }
+
+        .level-card.senior::before {
+            background: var(--concur-violet);
+        }
+
+        .level-card.staff::before {
+            background: var(--concur-indigo);
+        }
+
+        .level-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .level-card.mid .level-label {
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-label {
+            color: var(--concur-violet);
+        }
+
+        .level-card.staff .level-label {
+            color: var(--concur-indigo);
+        }
+
+        .level-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .level-card p {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .level-focus {
+            display: inline-block;
+            margin-top: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .level-card.mid .level-focus {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-focus {
+            background: #e8f5f3;
+            color: var(--concur-violet);
+        }
+
+        .level-card.staff .level-focus {
+            background: #f0faf8;
+            color: var(--concur-indigo);
+        }
+
+        /* ===== Author Footer Card ===== */
+        .article-footer {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+        }
+
+        .author-card {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-canvas);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            flex-shrink: 0;
+        }
+
+        .author-info h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: var(--color-ink);
+        }
+
+        .author-info .author-role {
+            color: var(--color-primary);
+            font-size: 14px;
+            font-family: var(--font-ui);
+            margin-bottom: 0.6rem;
+        }
+
+        .author-info p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+        }
+
+        .back-links-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-weight: 500;
+            font-size: 15px;
+            transition: gap 0.2s ease;
+        }
+
+        .back-link:hover {
+            gap: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* ===== Global Footer ===== */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .footer-container {
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .social-links a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        .fine-print {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink-muted-48);
+            letter-spacing: -0.12px;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 833px) {
+            .global-nav-links {
+                display: none;
+            }
+
+            .sub-nav-container {
+                padding: 0 16px;
+            }
+
+            .article-hero {
+                padding: calc(96px + 2rem) 1.5rem 3rem;
+            }
+
+            .article-body {
+                padding: 0 1.5rem 4rem;
+            }
+
+            .toc-wrapper {
+                padding: 0 1.5rem;
+            }
+
+            .entity-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .scale-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .level-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .author-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .diagram-container {
+                margin: 2rem -1rem;
+                padding: 1.5rem 1rem;
+            }
+
+            .comparison-table {
+                font-size: 14px;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 8px 10px;
+            }
+
+            .author-bar {
+                padding: 0 1.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .scale-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        /* ===== Animations ===== */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(24px);
+            transition:
+                opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1),
+                transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .reveal-element.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- 1. Global Navigation Bar -->
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="index.html" class="global-nav-logo">
+                <span class="logo-icon">[AK]</span>
+                Ajay Kotnala
+            </a>
+            <div class="global-nav-actions">
+                <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
+                    </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" aria-label="LinkedIn">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. Sticky Sub Navigation Bar -->
+    <nav class="sub-nav-frosted">
+        <div class="sub-nav-container">
+            <a href="#" class="sub-nav-title">System Design</a>
+            <div class="sub-nav-right">
+                <a href="./index.html" class="sub-nav-link">Deep Dives Articles</a>
+                <a href="../index.html" class="sub-nav-link">Portfolio</a>
+                <a href="../index.html#contact" class="sub-nav-button">Get in Touch</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Article Hero -->
+    <section class="article-hero">
+        <div class="article-hero-inner reveal-element active">
+            <div class="article-meta">
+                <span class="article-category">Concurrency</span>
+                <span class="article-date">June 2026</span>
+                <span class="article-read-time">18 min read</span>
+            </div>
+            <h1>
+                Concurrency Problems
+                <span class="gradient-text">Decoded</span>
+                :
+                <br />
+                Correctness, Coordination &amp; Scarcity
+            </h1>
+            <p class="article-hero-desc">
+                Two users click "Book" on the same airline seat at the same instant. Both get a confirmation email.
+                Now you have a very unhappy airplane. Almost every concurrency bug you'll ever debug — or get asked
+                about in an interview —
+                <em>collapses into one of exactly three categories</em>
+                . Here's the map, the tools, and the failure modes nobody warns you about.
+            </p>
+        </div>
+    </section>
+
+    <!-- Author Bar (Medium-style) -->
+    <div class="author-bar reveal-element active">
+        <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar" />
+        <div class="author-bar-info">
+            <div class="author-bar-name">Ajay Kotnala</div>
+            <div class="author-bar-meta">Senior Solution Architect · June 2026 · 18 min read</div>
+        </div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc-wrapper">
+        <div class="toc reveal-element">
+            <h3>In This Article</h3>
+            <ol>
+                <li><a href="#introduction">Introduction — Why These Bugs Feel Random</a></li>
+                <li><a href="#motivating">Motivating Example — The Airline Seat Race</a></li>
+                <li><a href="#three-categories">The Three-Category Map</a></li>
+                <li><a href="#correctness">Category 1 — Correctness: Locks vs. Atomics</a></li>
+                <li><a href="#coordination">Category 2 — Coordination: Producer/Consumer</a></li>
+                <li><a href="#scarcity">Category 3 — Scarcity: Semaphores &amp; Thread Pools</a></li>
+                <li><a href="#putting-together">Putting It All Together</a></li>
+                <li><a href="#failure-modes">Failure Modes: Deadlock, Livelock, Starvation</a></li>
+                <li><a href="#beyond-java">Beyond Java: Other Languages, Same Problems</a></li>
+                <li><a href="#mental-model">The Mental Model — Quick Decision Reference</a></li>
+                <li><a href="#interview-essentials">Interview Essentials &amp; Level Expectations</a></li>
+                <li><a href="#summary">Summary</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Article Body -->
+    <article class="article-body">
+        <!-- Section 1: Introduction -->
+        <h2 id="introduction">
+            <span class="section-number">01</span>
+            Introduction — Why These Bugs Feel Random
+        </h2>
+
+        <p>
+            Concurrency bugs have a specific flavor of misery: the code review looks fine, the unit tests pass, and
+            then production falls over at 2 AM because two things happened
+            <strong>at the same instant</strong>
+            instead of one after another. There's no stack trace pointing at the real cause, because the real cause
+            isn't a line of code — it's a
+            <em>timing window</em>
+            that only opens under load.
+        </p>
+        <p>
+            The good news, and the thing most explanations skip, is that almost every concurrency bug you'll hit —
+            or get asked about in a system design interview — reduces to one of
+            <strong>three categories</strong>
+            . Once you can name which bucket a symptom belongs to, the fix stops being a mystery and becomes a
+            lookup: this category, that tool.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>
+                When an interviewer describes a bug — "counts are wrong," "the service hangs," "the downstream API
+                is rate-limiting us" — your first move should be classification, out loud: "that sounds like a
+                correctness problem" or "that's resource scarcity, not a race condition." Naming the category before
+                naming the fix is what separates someone who memorized <code>synchronized</code> from someone who
+                understands why it exists.
+            </p>
+        </div>
+
+        <!-- Section 2: Motivating Example -->
+        <h2 id="motivating">
+            <span class="section-number">02</span>
+            Motivating Example — The Airline Seat Race
+        </h2>
+
+        <p>
+            Picture a booking service for a single flight with one seat left. Two users load the seat map within
+            milliseconds of each other. Both requests read <code>seatAvailable = true</code>. Both proceed to book.
+            Both get a confirmation email. The airline now has one seat and two paying passengers standing in the
+            gate area.
+        </p>
+        <p>
+            Nothing in this scenario is exotic. There's no network partition, no crashed server, no malformed
+            input. Two threads simply read a shared value before either had a chance to write back the update — a
+            <strong>check-then-act race</strong>
+            . It's one of the oldest bugs in software, and it's the cleanest entry point into the first category:
+            correctness.
+        </p>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">3</div>
+                <div class="stat-desc">Concurrency Bug Categories</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">3</div>
+                <div class="stat-desc">Steps Hidden in "counter++"</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">1</div>
+                <div class="stat-desc">Seat, Two Confirmed Bookings</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">0</div>
+                <div class="stat-desc">Stack Traces Pointing at the Cause</div>
+            </div>
+        </div>
+
+        <!-- Section 3: The Three-Category Map -->
+        <h2 id="three-categories">
+            <span class="section-number">03</span>
+            The Three-Category Map
+        </h2>
+
+        <p>
+            Before going tool-by-tool, it helps to see the whole map at once. Each category answers a different
+            question, and — this is the part worth remembering — each one has exactly the wrong tool for the other
+            two. A semaphore won't fix a race condition. A lock won't fix backpressure. Matching the tool to the
+            category is the entire skill.
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">🔒</div>
+                <h4>Correctness</h4>
+                <p>Two threads, one variable, zero protection. Fixed with locks or atomics.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🔄</div>
+                <h4>Coordination</h4>
+                <p>How does one thread hand work to another? Fixed with blocking queues.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🚦</div>
+                <h4>Scarcity</h4>
+                <p>An external limit, not a thread limit. Fixed with semaphores and pools.</p>
+            </div>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 1 — The Three-Category Map</div>
+            <svg viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridC1" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenC1" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="2" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <filter id="roughenLightC1" x="-1%" y="-1%" width="102%" height="102%">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="5" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="340" fill="#fefefe" rx="12" />
+                <rect width="780" height="340" fill="url(#dotGridC1)" rx="12" />
+
+                <text x="390" y="32" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle">
+                    "What kind of concurrency bug is this?"
+                </text>
+
+                <!-- Correctness panel -->
+                <rect x="40" y="55" width="220" height="255" rx="10" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"
+                    filter="url(#roughenC1)" />
+                <text x="150" y="85" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="15"
+                    text-anchor="middle" font-weight="700">
+                    🔒 Correctness
+                </text>
+                <text x="150" y="108" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    "Two threads, one variable,
+                </text>
+                <text x="150" y="122" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    zero protection"
+                </text>
+                <rect x="60" y="145" width="180" height="34" rx="7" fill="#ffffff" stroke="#4f46e5" stroke-width="1.2"
+                    filter="url(#roughenC1)" />
+                <text x="150" y="166" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    synchronized (lock)
+                </text>
+                <rect x="60" y="188" width="180" height="34" rx="7" fill="#ffffff" stroke="#4f46e5" stroke-width="1.2"
+                    filter="url(#roughenC1)" />
+                <text x="150" y="209" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    AtomicInteger (CAS)
+                </text>
+                <text x="150" y="250" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Symptom: lost updates,
+                </text>
+                <text x="150" y="264" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    double-booked seats
+                </text>
+                <text x="150" y="292" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-style="italic">
+                    Internal — protect shared state
+                </text>
+
+                <!-- Coordination panel -->
+                <rect x="280" y="55" width="220" height="255" rx="10" fill="#f5f3ff" stroke="#9333ea" stroke-width="1.5"
+                    filter="url(#roughenC1)" />
+                <text x="390" y="85" fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="15"
+                    text-anchor="middle" font-weight="700">
+                    🔄 Coordination
+                </text>
+                <text x="390" y="108" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    "How do threads talk
+                </text>
+                <text x="390" y="122" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    to each other?"
+                </text>
+                <rect x="300" y="145" width="180" height="34" rx="7" fill="#ffffff" stroke="#9333ea" stroke-width="1.2"
+                    filter="url(#roughenC1)" />
+                <text x="390" y="166" fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    BlockingQueue
+                </text>
+                <rect x="300" y="188" width="180" height="34" rx="7" fill="#ffffff" stroke="#9333ea" stroke-width="1.2"
+                    filter="url(#roughenC1)" />
+                <text x="390" y="209" fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Bounded capacity
+                </text>
+                <text x="390" y="250" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Symptom: busy-waiting,
+                </text>
+                <text x="390" y="264" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    unbounded memory growth
+                </text>
+                <text x="390" y="292" fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-style="italic">
+                    Internal — hand off work
+                </text>
+
+                <!-- Scarcity panel -->
+                <rect x="520" y="55" width="220" height="255" rx="10" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"
+                    filter="url(#roughenC1)" />
+                <text x="630" y="85" fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="15"
+                    text-anchor="middle" font-weight="700">
+                    🚦 Scarcity
+                </text>
+                <text x="630" y="108" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    "You can't just keep
+                </text>
+                <text x="630" y="122" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    adding threads"
+                </text>
+                <rect x="540" y="145" width="180" height="34" rx="7" fill="#ffffff" stroke="#c2410c" stroke-width="1.2"
+                    filter="url(#roughenC1)" />
+                <text x="630" y="166" fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Semaphore(N permits)
+                </text>
+                <rect x="540" y="188" width="180" height="34" rx="7" fill="#ffffff" stroke="#c2410c" stroke-width="1.2"
+                    filter="url(#roughenC1)" />
+                <text x="630" y="209" fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    ThreadPoolExecutor
+                </text>
+                <text x="630" y="250" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Symptom: 429s, timeouts,
+                </text>
+                <text x="630" y="264" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    thread-per-request explosion
+                </text>
+                <text x="630" y="292" fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-style="italic">
+                    External — respect a limit
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Three questions, three tools. Correctness and coordination protect internal thread state; scarcity
+                respects a limit imposed from outside your process.
+            </p>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Watch Out</div>
+            <p>
+                Correctness and coordination are about threads inside your process cooperating safely. Scarcity is
+                different in kind — it's an external constraint (a payment gateway's rate limit, a database's
+                connection cap) that exists whether or not your threads misbehave. A semaphore only throttles a
+                single instance; run 10 instances of your service and the gateway still sees 10 × your permit count
+                unless the limit is enforced somewhere shared, like a distributed rate limiter.
+            </p>
+        </div>
+
+        <!-- Section 4: Correctness -->
+        <h2 id="correctness">
+            <span class="section-number">04</span>
+            Category 1 — Correctness: Locks vs. Atomics
+        </h2>
+
+        <p>
+            This is the classic. Two threads read the same variable, both modify it, both write back — and one of
+            the writes silently disappears. Nothing crashes. Nothing logs an error. The number is just wrong.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java</span>
+            <pre><code><span class="comment">// This looks like a single, indivisible operation. It isn't.</span>
+counter++;
+
+<span class="comment">// The JVM actually does this in three separate steps:</span>
+<span class="type">int</span> tmp = counter;   <span class="comment">// 1. READ</span>
+tmp = tmp + <span class="number">1</span>;       <span class="comment">// 2. ADD</span>
+counter = tmp;         <span class="comment">// 3. WRITE</span></code></pre>
+        </div>
+
+        <p>
+            If a second thread reads <code>counter</code> between steps 1 and 3 of the first thread, it reads the
+            <em>old</em> value. Both threads compute the same "new" value from the same stale starting point, and
+            one increment vanishes. This is a
+            <strong>race condition</strong>
+            , and it's the root of most thread-safety bugs.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 2 — Race Condition Timeline: The Lost Update</div>
+            <svg viewBox="0 0 780 300" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridC2" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenC2" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="3" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowC2" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="300" fill="#fefefe" rx="12" />
+                <rect width="780" height="300" fill="url(#dotGridC2)" rx="12" />
+
+                <text x="30" y="35" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    font-weight="700">
+                    Thread A
+                </text>
+                <text x="30" y="120" fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    font-weight="700">
+                    Thread B
+                </text>
+                <text x="30" y="205" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    font-weight="700">
+                    counter
+                </text>
+
+                <!-- timeline base line -->
+                <path d="M 130 210 L 740 210" fill="none" stroke="#ccc" stroke-width="1.5" stroke-dasharray="4,4" />
+
+                <!-- Thread A steps -->
+                <rect x="130" y="45" width="90" height="34" rx="6" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"
+                    filter="url(#roughenC2)" />
+                <text x="175" y="66" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    read: 0
+                </text>
+                <rect x="400" y="45" width="90" height="34" rx="6" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"
+                    filter="url(#roughenC2)" />
+                <text x="445" y="66" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    write: 1
+                </text>
+                <path d="M 220 62 L 396 62" fill="none" stroke="#4f46e5" stroke-width="1.5" stroke-dasharray="3,3"
+                    marker-end="url(#exArrowC2)" />
+
+                <!-- Thread B steps -->
+                <rect x="240" y="130" width="90" height="34" rx="6" fill="#f5f3ff" stroke="#9333ea" stroke-width="1.5"
+                    filter="url(#roughenC2)" />
+                <text x="285" y="151" fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    read: 0
+                </text>
+                <rect x="560" y="130" width="90" height="34" rx="6" fill="#f5f3ff" stroke="#9333ea" stroke-width="1.5"
+                    filter="url(#roughenC2)" />
+                <text x="605" y="151" fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    write: 1
+                </text>
+                <path d="M 330 147 L 556 147" fill="none" stroke="#9333ea" stroke-width="1.5" stroke-dasharray="3,3"
+                    marker-end="url(#exArrowC2)" />
+
+                <!-- Result marker -->
+                <circle cx="605" cy="210" r="5" fill="#c2410c" filter="url(#roughenC2)" />
+                <text x="500" y="255" fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">
+                    Final value: 1 — should be 2. One increment lost.
+                </text>
+                <text x="500" y="275" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Both threads read the stale value 0 before either write landed.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Thread B reads <code>counter</code> before Thread A's write is visible. Two increments, one
+                survives.
+            </p>
+        </div>
+
+        <h3>The Fix: Lock It, or Go Atomic</h3>
+
+        <p>
+            <strong>Option A — <code>synchronized</code> (lock the critical section).</strong>
+            A lock forces threads to take turns. Only one thread can be inside the protected block at a time, so
+            the check-then-act sequence can't be split by another thread.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java</span>
+            <pre><code><span class="keyword">synchronized</span> (<span class="keyword">this</span>) {
+    <span class="keyword">if</span> (seatAvailable) {
+        bookSeat();   <span class="comment">// only one thread enters at a time</span>
+        seatAvailable = <span class="keyword">false</span>;
+    }
+}</code></pre>
+        </div>
+
+        <p>
+            <strong>Option B — <code>AtomicInteger</code> (hardware-level atomicity).</strong>
+            For a simple counter, you don't need a lock at all. <code>AtomicInteger</code> uses a CPU-level
+            compare-and-swap instruction that makes the read-modify-write happen as one indivisible step — no
+            thread ever observes it half-finished.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java</span>
+            <pre><code>AtomicInteger bookedSeats = <span class="keyword">new</span> AtomicInteger(<span class="number">0</span>);
+bookedSeats.incrementAndGet();   <span class="comment">// thread-safe, no lock required</span></code></pre>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Rule of Thumb</div>
+            <p>
+                Use <code>synchronized</code> (or <code>ReentrantLock</code>) when you're protecting a
+                <strong>multi-step</strong>
+                operation — check-then-act, read-modify-write across more than one field. Reach for
+                <code>AtomicInteger</code>
+                / <code>AtomicLong</code> / <code>AtomicReference</code> only when the entire operation is a single
+                variable update. Wrapping a whole method in <code>synchronized</code> "just in case" is how you turn
+                a 10,000 req/s service into a 400 req/s service.
+            </p>
+        </div>
+
+        <div class="deep-dive">
+            <div class="deep-dive-header" onclick="toggleDeepDive('cas-deep-dive')">
+                <h4>Deep Dive: What Does AtomicInteger Actually Do Under the Hood?</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content" id="cas-deep-dive">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        <code>AtomicInteger</code> doesn't use a lock at all — it uses a CPU instruction called
+                        <strong>Compare-And-Swap (CAS)</strong>. The logic is: "read the current value, compute the
+                        new value, then write it back
+                        <em>only if</em>
+                        nobody else changed it in the meantime." If another thread got there first, the CAS fails
+                        and the thread retries the whole read-compute-write cycle — a tight loop, not a blocked
+                        wait.
+                    </p>
+                    <p>
+                        This is why atomics are faster than locks under light-to-moderate contention: there's no
+                        context switch, no OS-level blocking, just a spin-and-retry that usually succeeds on the
+                        first or second attempt. Under very high contention (hundreds of threads hammering the same
+                        counter), CAS retries can actually burn more CPU than a lock would have — this is the
+                        rationale behind classes like <code>LongAdder</code>, which stripe the counter across
+                        multiple cache lines to reduce contention.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 5: Coordination -->
+        <h2 id="coordination">
+            <span class="section-number">05</span>
+            Category 2 — Coordination: Producer/Consumer
+        </h2>
+
+        <p>
+            Race conditions are about protecting data. Coordination is a different problem entirely: threads that
+            need to work
+            <em>alongside</em>
+            each other, in order, without one blocking the other unnecessarily.
+        </p>
+        <p>
+            Take a login flow: a user submits credentials, your system validates them, and — separately — a welcome
+            email goes out. The email service shouldn't block the login response, but it does need to know when
+            work has arrived. This is the
+            <strong>producer-consumer problem</strong>
+            , and it shows up everywhere in backend systems: job queues, webhook fan-out, log shipping, event
+            pipelines.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Flow</span>
+            <pre><code>User logs in ──→ [ Work Queue ] ──→ Email Worker
+   (Producer)                      (Consumer)</code></pre>
+        </div>
+
+        <h3>Sub-Problem A: How Does the Consumer Know Work Arrived?</h3>
+        <p>
+            If the consumer loops endlessly checking an empty queue, it burns CPU doing nothing —
+            <strong>busy-waiting</strong>
+            . The fix is a <code>BlockingQueue</code>: the consumer sleeps when the queue is empty and wakes
+            automatically the instant the producer adds something. No polling loop, no wasted cycles.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java</span>
+            <pre><code>BlockingQueue&lt;Task&gt; queue = <span class="keyword">new</span> LinkedBlockingQueue&lt;&gt;();
+
+<span class="comment">// Producer thread</span>
+queue.put(newTask);          <span class="comment">// adds work, wakes any sleeping consumer</span>
+
+<span class="comment">// Consumer thread</span>
+Task task = queue.take();    <span class="comment">// blocks (sleeps) until work arrives</span>
+process(task);</code></pre>
+        </div>
+
+        <h3>Sub-Problem B: What If Work Arrives Faster Than It Can Be Processed?</h3>
+        <p>
+            An unbounded queue is an unbounded memory leak with good manners — it fails silently until it doesn't.
+            Cap it, and the queue itself becomes the signal that tells the producer to slow down.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java</span>
+            <pre><code>BlockingQueue&lt;Task&gt; queue = <span class="keyword">new</span> LinkedBlockingQueue&lt;&gt;(<span class="number">100</span>); <span class="comment">// max 100 items</span>
+
+queue.put(task);  <span class="comment">// blocks when full — producer is automatically throttled</span></code></pre>
+        </div>
+
+        <p>
+            This is
+            <strong>backpressure</strong>
+            : a full queue applying resistance back toward the producer instead of accepting work it can't keep up
+            with. It's one of the most underrated patterns in distributed systems design — it's the same principle
+            behind consumer lag in a message broker, TCP flow control, and reactive streams' <code>request(n)</code>
+            protocol.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 3 — Producer/Consumer with Backpressure</div>
+            <svg viewBox="0 0 780 300" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridC3" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenC3" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="4" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowC3" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#9333ea" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="300" fill="#fefefe" rx="12" />
+                <rect width="780" height="300" fill="url(#dotGridC3)" rx="12" />
+
+                <!-- Producer -->
+                <rect x="40" y="110" width="130" height="60" rx="9" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"
+                    filter="url(#roughenC3)" />
+                <text x="105" y="135" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Producer
+                </text>
+                <text x="105" y="152" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    User login event
+                </text>
+
+                <!-- Queue -->
+                <rect x="260" y="70" width="260" height="140" rx="9" fill="#f5f3ff" stroke="#9333ea" stroke-width="1.5"
+                    filter="url(#roughenC3)" />
+                <text x="390" y="95" fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    BlockingQueue (capacity 100)
+                </text>
+                <rect x="280" y="110" width="26" height="26" rx="4" fill="#c4b5fd" filter="url(#roughenC3)" />
+                <rect x="312" y="110" width="26" height="26" rx="4" fill="#c4b5fd" filter="url(#roughenC3)" />
+                <rect x="344" y="110" width="26" height="26" rx="4" fill="#c4b5fd" filter="url(#roughenC3)" />
+                <rect x="376" y="110" width="26" height="26" rx="4" fill="#c4b5fd" filter="url(#roughenC3)" />
+                <rect x="408" y="110" width="26" height="26" rx="4" fill="#e9e3fc" stroke="#9333ea"
+                    stroke-dasharray="2,2" filter="url(#roughenC3)" />
+                <text x="390" y="160" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Full queue = producer blocks on put()
+                </text>
+                <text x="390" y="178" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    = automatic backpressure
+                </text>
+
+                <!-- Consumer -->
+                <rect x="610" y="110" width="130" height="60" rx="9" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"
+                    filter="url(#roughenC3)" />
+                <text x="675" y="135" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Consumer
+                </text>
+                <text x="675" y="152" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Email worker
+                </text>
+
+                <path d="M 172 140 L 256 140" fill="none" stroke="#4f46e5" stroke-width="2" marker-end="url(#exArrowC3)"
+                    filter="url(#roughenLightC1)" />
+                <text x="214" y="130" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    put()
+                </text>
+                <path d="M 524 140 L 606 140" fill="none" stroke="#4f46e5" stroke-width="2" marker-end="url(#exArrowC3)"
+                    filter="url(#roughenLightC1)" />
+                <text x="565" y="130" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    take()
+                </text>
+
+                <text x="390" y="250" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Consumer sleeps when empty, wakes on put() — zero busy-waiting either direction.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                A bounded <code>BlockingQueue</code> decouples producer and consumer speed while capping memory —
+                the same mechanism that makes Kafka consumer lag a meaningful signal instead of a crash.
+            </p>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Cross-Reference</div>
+            <p>
+                If you've read the
+                <a href="kafka-system-design.html" style="color: var(--concur-indigo); font-weight: 600;">Kafka deep
+                    dive</a>,
+                this is the same idea scaled up: a Kafka partition is a durable, distributed
+                <code>BlockingQueue</code>
+                , and consumer lag is what backpressure looks like when the "queue" is a replicated log instead of
+                an in-memory structure. Interviewers love it when you draw that line explicitly.
+            </p>
+        </div>
+
+        <!-- Section 6: Scarcity -->
+        <h2 id="scarcity">
+            <span class="section-number">06</span>
+            Category 3 — Scarcity: Semaphores &amp; Thread Pools
+        </h2>
+
+        <p>
+            The first two categories deal with threads interacting with each other. Scarcity is a different beast —
+            it's about
+            <em>external</em>
+            limits that exist whether your threads behave or not.
+        </p>
+        <p>
+            Say you integrate with a payment gateway capped at 25 concurrent requests. What happens when 200
+            requests hit your service at once? Without protection, you fire 200 threads at the API, it rate-limits
+            you, requests fail, and your on-call phone goes off.
+        </p>
+
+        <h3>Fix A: Semaphore — the Permit System</h3>
+        <p>
+            A semaphore is a counter that caps how many threads can enter a section simultaneously. Set it to 25,
+            and only 25 threads can hold a permit at any one time — the 26th blocks until one is released.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java</span>
+            <pre><code>Semaphore permit = <span class="keyword">new</span> Semaphore(<span class="number">25</span>);
+
+permit.acquire();          <span class="comment">// blocks if 25 threads already inside</span>
+<span class="keyword">try</span> {
+    callPaymentAPI();
+} <span class="keyword">finally</span> {
+    permit.release();      <span class="comment">// ALWAYS release — even on exception</span>
+}</code></pre>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Watch Out</div>
+            <p>
+                That <code>finally</code> block is not optional. If the API call throws and you don't release the
+                permit, the semaphore slowly drains toward zero and your entire service freezes — every thread
+                waiting on a permit that will never come back. This is the single most common way semaphore-based
+                throttling fails in production, and it's silent right up until the pool is exhausted.
+            </p>
+        </div>
+
+        <h3>Fix B: Thread Pool — the Managed Workforce</h3>
+        <p>
+            For handling N concurrent requests in general, a thread pool is the default tool. Instead of spawning a
+            new OS thread per request — expensive and unbounded — you maintain a fixed workforce and queue the
+            overflow.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java</span>
+            <pre><code>ThreadPoolExecutor pool = <span class="keyword">new</span> ThreadPoolExecutor(
+    <span class="number">2</span>,                              <span class="comment">// core: minimum live threads</span>
+    <span class="number">10</span>,                             <span class="comment">// max: ceiling under load</span>
+    <span class="number">60</span>, TimeUnit.SECONDS,           <span class="comment">// idle threads above core die after 60s</span>
+    <span class="keyword">new</span> LinkedBlockingQueue&lt;&gt;(<span class="number">100</span>)  <span class="comment">// task queue — holds 100 pending tasks</span>
+);
+
+pool.submit(() -&gt; handleRequest(req));  <span class="comment">// submit work, never create threads manually</span></code></pre>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 4 — Semaphore Permit Gate</div>
+            <svg viewBox="0 0 780 300" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridC4" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenC4" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="6" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowC4" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#c2410c" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="300" fill="#fefefe" rx="12" />
+                <rect width="780" height="300" fill="url(#dotGridC4)" rx="12" />
+
+                <text x="130" y="35" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    200 incoming requests
+                </text>
+                <circle cx="70" cy="70" r="10" fill="#fee2e2" stroke="#c2410c" filter="url(#roughenC4)" />
+                <circle cx="100" cy="70" r="10" fill="#fee2e2" stroke="#c2410c" filter="url(#roughenC4)" />
+                <circle cx="130" cy="70" r="10" fill="#fee2e2" stroke="#c2410c" filter="url(#roughenC4)" />
+                <circle cx="160" cy="70" r="10" fill="#fee2e2" stroke="#c2410c" filter="url(#roughenC4)" />
+                <circle cx="190" cy="70" r="10" fill="#fee2e2" stroke="#c2410c" filter="url(#roughenC4)" />
+                <text x="220" y="75" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10">
+                    ...
+                </text>
+
+                <!-- Semaphore gate -->
+                <rect x="260" y="110" width="260" height="130" rx="10" fill="#fff7ed" stroke="#c2410c"
+                    stroke-width="1.5" filter="url(#roughenC4)" />
+                <text x="390" y="135" fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">
+                    Semaphore(25)
+                </text>
+                <text x="390" y="152" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    25 permits in circulation
+                </text>
+                <rect x="285" y="165" width="16" height="16" rx="8" fill="#fdba74" filter="url(#roughenC4)" />
+                <rect x="310" y="165" width="16" height="16" rx="8" fill="#fdba74" filter="url(#roughenC4)" />
+                <rect x="335" y="165" width="16" height="16" rx="8" fill="#fdba74" filter="url(#roughenC4)" />
+                <rect x="360" y="165" width="16" height="16" rx="8" fill="#fdba74" filter="url(#roughenC4)" />
+                <rect x="385" y="165" width="16" height="16" rx="8" fill="#fdba74" filter="url(#roughenC4)" />
+                <rect x="410" y="165" width="16" height="16" rx="8" fill="#fdba74" filter="url(#roughenC4)" />
+                <rect x="435" y="165" width="16" height="16" rx="8" fill="#fdba74" filter="url(#roughenC4)" />
+                <text x="460" y="178" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    ...
+                </text>
+                <text x="390" y="205" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    175 requests wait here
+                </text>
+                <text x="390" y="222" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    for a permit to free up
+                </text>
+
+                <!-- Payment API -->
+                <rect x="600" y="140" width="140" height="60" rx="9" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"
+                    filter="url(#roughenC4)" />
+                <text x="670" y="165" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Payment API
+                </text>
+                <text x="670" y="182" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    hard cap: 25 concurrent
+                </text>
+
+                <path d="M 220 90 L 260 150" fill="none" stroke="#c2410c" stroke-width="1.5" stroke-dasharray="3,3"
+                    marker-end="url(#exArrowC4)" />
+                <path d="M 520 170 L 596 170" fill="none" stroke="#4f46e5" stroke-width="2"
+                    marker-end="url(#exArrowC4)" />
+                <text x="558" y="160" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    ≤25 in flight
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Exactly 25 requests hold a permit and call the API at any moment; the rest wait in an orderly queue
+                instead of getting rejected upstream.
+            </p>
+        </div>
+
+        <div class="deep-dive">
+            <div class="deep-dive-header" onclick="toggleDeepDive('sem-vs-mutex')">
+                <h4>Deep Dive: Semaphore vs. Mutex — What's Actually Different?</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content" id="sem-vs-mutex">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        A mutex (what <code>synchronized</code> gives you) allows exactly
+                        <strong>one</strong>
+                        thread in at a time, and — critically — only the thread that acquired it can release it.
+                        A semaphore generalizes this to
+                        <strong>N</strong>
+                        permits, and any thread can release a permit, not just the one that acquired it. That
+                        second property is what makes semaphores useful for producer/consumer signaling patterns
+                        too, not just throttling — though for pure throttling, N permits is the whole story.
+                    </p>
+                    <p>
+                        A common interview follow-up: "what's a binary semaphore, and how is it different from a
+                        mutex?" A semaphore initialized with 1 permit behaves similarly to a mutex for mutual
+                        exclusion, but still lacks ownership — thread A can acquire it and thread B can release it.
+                        That's a feature for signaling, and a footgun if you meant to use it as a lock.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 7: Putting It All Together -->
+        <h2 id="putting-together">
+            <span class="section-number">07</span>
+            Putting It All Together
+        </h2>
+
+        <p>
+            In a real system, you use all three at once, each doing exactly one job. Here's the airline booking
+            service with correctness, coordination, and scarcity layered in — nothing overlaps, nothing is
+            redundant.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java</span>
+            <pre><code><span class="keyword">class</span> BookingService {
+
+    <span class="comment">// Scarcity: only 25 concurrent calls to the payment gateway</span>
+    Semaphore apiPermit = <span class="keyword">new</span> Semaphore(<span class="number">25</span>);
+
+    <span class="comment">// Scarcity: bounded workforce, never spawn threads manually</span>
+    ExecutorService pool = Executors.newFixedThreadPool(<span class="number">10</span>);
+
+    <span class="comment">// Correctness: thread-safe seat counter</span>
+    AtomicInteger bookedSeats = <span class="keyword">new</span> AtomicInteger(<span class="number">0</span>);
+
+    <span class="comment">// Coordination: confirmations waiting to be emailed out</span>
+    BlockingQueue&lt;Order&gt; confirmationQueue = <span class="keyword">new</span> LinkedBlockingQueue&lt;&gt;(<span class="number">100</span>);
+
+    <span class="keyword">void</span> bookSeat(Order order) {
+        pool.submit(() -&gt; {
+            bookedSeats.incrementAndGet();   <span class="comment">// correctness</span>
+
+            apiPermit.acquire();
+            <span class="keyword">try</span> {
+                callThirdPartyAPI(order);    <span class="comment">// scarcity</span>
+            } <span class="keyword">finally</span> {
+                apiPermit.release();
+            }
+
+            confirmationQueue.put(order);    <span class="comment">// coordination</span>
+        });
+    }
+}</code></pre>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 5 — Booking Service: All Three Categories at Once</div>
+            <svg viewBox="0 0 780 320" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridC5" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenC5" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="7" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowC5" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="320" fill="#fefefe" rx="12" />
+                <rect width="780" height="320" fill="url(#dotGridC5)" rx="12" />
+
+                <rect x="30" y="120" width="120" height="50" rx="8" fill="#f5f5f7" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughenC5)" />
+                <text x="90" y="150" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Order request
+                </text>
+
+                <rect x="185" y="105" width="150" height="80" rx="8" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"
+                    filter="url(#roughenC5)" />
+                <text x="260" y="128" fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    ThreadPool(10)
+                </text>
+                <text x="260" y="145" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    scarcity: bounded
+                </text>
+                <text x="260" y="160" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    workforce
+                </text>
+
+                <rect x="370" y="30" width="170" height="60" rx="8" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"
+                    filter="url(#roughenC5)" />
+                <text x="455" y="55" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    AtomicInteger
+                </text>
+                <text x="455" y="72" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    correctness: seat counter
+                </text>
+
+                <rect x="370" y="130" width="170" height="60" rx="8" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"
+                    filter="url(#roughenC5)" />
+                <text x="455" y="155" fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    Semaphore(25)
+                </text>
+                <text x="455" y="172" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    scarcity: gate the API call
+                </text>
+
+                <rect x="370" y="230" width="170" height="60" rx="8" fill="#f5f3ff" stroke="#9333ea" stroke-width="1.5"
+                    filter="url(#roughenC5)" />
+                <text x="455" y="255" fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    BlockingQueue(100)
+                </text>
+                <text x="455" y="272" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    coordination: confirmations
+                </text>
+
+                <rect x="610" y="130" width="140" height="60" rx="8" fill="#f5f5f7" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughenC5)" />
+                <text x="680" y="155" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    Payment API
+                </text>
+                <text x="680" y="172" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    external limit: 25
+                </text>
+
+                <path d="M 152 145 L 181 145" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowC5)" />
+                <path d="M 335 145 L 366 90" fill="none" stroke="#333" stroke-width="1.2" stroke-dasharray="3,3"
+                    marker-end="url(#exArrowC5)" />
+                <path d="M 335 155 L 366 160" fill="none" stroke="#333" stroke-width="1.2" stroke-dasharray="3,3"
+                    marker-end="url(#exArrowC5)" />
+                <path d="M 335 170 L 366 250" fill="none" stroke="#333" stroke-width="1.2" stroke-dasharray="3,3"
+                    marker-end="url(#exArrowC5)" />
+                <path d="M 540 160 L 606 160" fill="none" stroke="#c2410c" stroke-width="1.5"
+                    marker-end="url(#exArrowC5)" />
+            </svg>
+            <p class="diagram-caption">
+                One request, three independent mechanisms. Remove any one and a different failure mode appears —
+                double-booked seats, dropped confirmations, or a rate-limited payment gateway.
+            </p>
+        </div>
+
+        <!-- Section 8: Failure Modes -->
+        <h2 id="failure-modes">
+            <span class="section-number">08</span>
+            Failure Modes: Deadlock, Livelock, Starvation
+        </h2>
+
+        <p>
+            Every tool above can fail in its own specific way once you add a second lock, a second permit, or
+            enough contention. These three failure modes are the ones interviewers probe for once you've named the
+            right primitive — because picking <code>synchronized</code> is easy; using two of them safely is where
+            seniority shows.
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">🔗</div>
+                <h4>Deadlock</h4>
+                <p>Two threads each hold a lock the other needs. Both wait forever.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🔁</div>
+                <h4>Livelock</h4>
+                <p>Threads keep responding to each other and stay busy — but no one makes progress.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🐌</div>
+                <h4>Starvation</h4>
+                <p>A thread is perpetually skipped in favor of higher-priority or luckier threads.</p>
+            </div>
+        </div>
+
+        <h3>Deadlock: The Circular Wait</h3>
+        <p>
+            Deadlock needs four conditions at once — mutual exclusion, hold-and-wait, no preemption, and circular
+            wait — but in practice it almost always comes down to
+            <strong>two locks acquired in different orders by different threads</strong>.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Deadlock-Prone</span>
+            <pre><code><span class="comment">// Thread A does this:</span>
+<span class="keyword">synchronized</span> (lockAccount1) {
+    <span class="keyword">synchronized</span> (lockAccount2) { transfer(); }
+}
+
+<span class="comment">// Thread B does this, concurrently:</span>
+<span class="keyword">synchronized</span> (lockAccount2) {
+    <span class="keyword">synchronized</span> (lockAccount1) { transfer(); } <span class="comment">// deadlock if A holds lockAccount1</span>
+}</code></pre>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 6 — Deadlock: The Circular Wait</div>
+            <svg viewBox="0 0 780 280" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridC6" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenC6" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="8" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowC6" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#c2410c" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="280" fill="#fefefe" rx="12" />
+                <rect width="780" height="280" fill="url(#dotGridC6)" rx="12" />
+
+                <rect x="120" y="60" width="160" height="60" rx="9" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"
+                    filter="url(#roughenC6)" />
+                <text x="200" y="85" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Thread A
+                </text>
+                <text x="200" y="103" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    holds lockAccount1
+                </text>
+
+                <rect x="500" y="60" width="160" height="60" rx="9" fill="#f5f3ff" stroke="#9333ea" stroke-width="1.5"
+                    filter="url(#roughenC6)" />
+                <text x="580" y="85" fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Thread B
+                </text>
+                <text x="580" y="103" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    holds lockAccount2
+                </text>
+
+                <rect x="120" y="180" width="160" height="50" rx="9" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"
+                    filter="url(#roughenC6)" />
+                <text x="200" y="210" fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    wants lockAccount2
+                </text>
+
+                <rect x="500" y="180" width="160" height="50" rx="9" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"
+                    filter="url(#roughenC6)" />
+                <text x="580" y="210" fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    wants lockAccount1
+                </text>
+
+                <path d="M 200 120 L 200 176" fill="none" stroke="#c2410c" stroke-width="2"
+                    marker-end="url(#exArrowC6)" />
+                <path d="M 580 120 L 580 176" fill="none" stroke="#c2410c" stroke-width="2"
+                    marker-end="url(#exArrowC6)" />
+                <path d="M 280 205 C 380 250, 420 250, 496 205" fill="none" stroke="#c2410c" stroke-width="2"
+                    stroke-dasharray="5,3" marker-end="url(#exArrowC6)" />
+                <path d="M 500 195 C 400 155, 380 155, 284 195" fill="none" stroke="#c2410c" stroke-width="2"
+                    stroke-dasharray="5,3" marker-end="url(#exArrowC6)" />
+                <text x="390" y="40" fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">
+                    Neither thread can proceed. Neither will ever release.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                A locks 1, wants 2. B locks 2, wants 1. Each is waiting on the other to let go — permanently.
+            </p>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The Fix</div>
+            <p>
+                Deadlock from lock ordering has a mechanical fix: acquire locks in a
+                <strong>globally consistent order</strong>
+                — e.g., always lock the account with the lower ID first, regardless of which thread is calling.
+                If ordering isn't possible, use <code>tryLock(timeout)</code> instead of a blocking acquire, and
+                back off and retry on failure rather than waiting indefinitely.
+            </p>
+        </div>
+
+        <p>
+            <strong>Livelock</strong>
+            is deadlock's more polite cousin: two threads detect a potential collision and both back off
+            "politely," retry, collide again, and repeat — busy the whole time, producing nothing. It's the
+            concurrency equivalent of two people stepping side to side in a hallway, each trying to let the other
+            pass.
+            <strong>Starvation</strong>
+            is subtler still: a thread is technically able to run, but a scheduler or unfair lock keeps handing the
+            resource to other threads first — common with <code>synchronized</code>'s unspecified fairness, which
+            is why <code>ReentrantLock(true)</code> (fair mode) exists for cases where starvation is unacceptable.
+        </p>
+
+        <!-- Section 9: Beyond Java -->
+        <h2 id="beyond-java">
+            <span class="section-number">09</span>
+            Beyond Java: Other Languages, Same Problems
+        </h2>
+
+        <p>
+            The three categories are language-agnostic — every runtime that lets you do more than one thing at
+            once has to solve correctness, coordination, and scarcity somehow. The primitives just wear different
+            clothes.
+        </p>
+
+        <h3>Python — the GIL Changes Which Problems You Actually Hit</h3>
+        <p>
+            CPython's Global Interpreter Lock means only one thread executes Python bytecode at a time, so pure
+            <code>counter += 1</code>
+            races are rarer than in Java for CPU-bound code — though I/O-bound races (two coroutines both checking
+            and updating a shared dict) are just as real. Coordination and scarcity look almost identical to Java,
+            just under <code>asyncio</code>.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Python — asyncio</span>
+            <pre><code><span class="comment"># Scarcity: cap concurrent calls to an external API</span>
+sem = asyncio.Semaphore(<span class="number">25</span>)
+
+<span class="keyword">async def</span> call_payment_api(order):
+    <span class="keyword">async with</span> sem:            <span class="comment"># acquire/release handled for you</span>
+        <span class="keyword">await</span> gateway.charge(order)
+
+<span class="comment"># Coordination: producer/consumer via an async queue</span>
+queue = asyncio.Queue(maxsize=<span class="number">100</span>)
+<span class="keyword">await</span> queue.put(task)          <span class="comment"># blocks (suspends) when full</span>
+task = <span class="keyword">await</span> queue.get()        <span class="comment"># suspends until work arrives</span></code></pre>
+        </div>
+
+        <h3>Go — Coordination Is the Language, Not a Library</h3>
+        <p>
+            Go inverts the usual advice: "don't communicate by sharing memory; share memory by communicating."
+            Channels are the coordination primitive, and they fold naturally into the same producer-consumer shape
+            — a buffered channel <em>is</em> a bounded blocking queue.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Go</span>
+            <pre><code><span class="comment">// Coordination: buffered channel = bounded queue with built-in backpressure</span>
+tasks := make(<span class="keyword">chan</span> Task, <span class="number">100</span>)
+<span class="keyword">go func</span>() { tasks &lt;- newTask }()      <span class="comment">// blocks when full</span>
+task := &lt;-tasks                          <span class="comment">// blocks when empty</span>
+
+<span class="comment">// Scarcity: a buffered channel of empty structs doubles as a semaphore</span>
+sem := make(<span class="keyword">chan struct</span>{}, <span class="number">25</span>)
+sem &lt;- <span class="keyword">struct</span>{}{}                        <span class="comment">// acquire</span>
+<span class="keyword">defer func</span>() { &lt;-sem }()             <span class="comment">// release, guaranteed on return</span>
+
+<span class="comment">// Correctness: atomic counter, same idea as Java's AtomicInteger</span>
+<span class="keyword">var</span> booked int64
+atomic.AddInt64(&amp;booked, <span class="number">1</span>)</code></pre>
+        </div>
+
+        <h3>JavaScript — Single-Threaded, But Not Race-Free</h3>
+        <p>
+            Node's event loop means classic read-modify-write races on plain variables can't happen — there's only
+            one thread executing your JS. But
+            <code>await</code>
+            points are yield points, and two <code>async</code> functions can still interleave around a shared
+            resource (a file, a database row) in a way that reproduces the exact same check-then-act bug,
+            just without the word "thread" anywhere in sight.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">JavaScript</span>
+            <pre><code><span class="comment">// Looks safe — it isn't, if seatAvailable is read from a shared store</span>
+<span class="keyword">async function</span> bookSeat() {
+  <span class="keyword">const</span> available = <span class="keyword">await</span> db.get(<span class="string">'seatAvailable'</span>); <span class="comment">// yield point</span>
+  <span class="keyword">if</span> (available) {
+    <span class="keyword">await</span> db.set(<span class="string">'seatAvailable'</span>, <span class="keyword">false</span>);  <span class="comment">// another call may have run in between</span>
+  }
+}
+<span class="comment">// Fix: an atomic compare-and-set at the database layer, or a mutex library like async-mutex</span></code></pre>
+        </div>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Java</th>
+                    <th>Python (asyncio)</th>
+                    <th>Go</th>
+                    <th>JavaScript</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Correctness</td>
+                    <td><code>synchronized</code> / <code>AtomicInteger</code></td>
+                    <td>Rare for CPU work (GIL); still needed for shared I/O state</td>
+                    <td><code>sync.Mutex</code> / <code>atomic</code> package</td>
+                    <td>Rare for CPU work; async yield points still race</td>
+                </tr>
+                <tr>
+                    <td>Coordination</td>
+                    <td><code>BlockingQueue</code></td>
+                    <td><code>asyncio.Queue</code></td>
+                    <td>Buffered <code>chan</code></td>
+                    <td>Promise queues / async iterators</td>
+                </tr>
+                <tr>
+                    <td>Scarcity</td>
+                    <td><code>Semaphore</code> / <code>ThreadPoolExecutor</code></td>
+                    <td><code>asyncio.Semaphore</code></td>
+                    <td>Buffered <code>chan struct{}</code> as permit</td>
+                    <td><code>p-limit</code> or a manual counter</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Section 10: Mental Model -->
+        <h2 id="mental-model">
+            <span class="section-number">10</span>
+            The Mental Model — Quick Decision Reference
+        </h2>
+
+        <p>
+            Concurrency bugs feel mysterious until you categorize them. Once you see which bucket a problem falls
+            into, the fix is usually a lookup, not a debugging session.
+        </p>
+
+        <ul>
+            <li>
+                <strong>Something looks wrong with a shared variable?</strong>
+                → Correctness → Lock (<code>synchronized</code> / <code>ReentrantLock</code>) or Atomic
+            </li>
+            <li>
+                <strong>One thread needs to hand work to another?</strong>
+                → Coordination → <code>BlockingQueue</code>, sized to apply backpressure
+            </li>
+            <li>
+                <strong>Too many threads hitting a limited external resource?</strong>
+                → Scarcity → Semaphore for a hard cap, Thread Pool for general workload management
+            </li>
+            <li>
+                <strong>Two threads waiting on each other and nothing's moving?</strong>
+                → Deadlock → check lock acquisition order first
+            </li>
+        </ul>
+
+        <div class="deep-dive">
+            <div class="deep-dive-header" onclick="toggleDeepDive('virtual-threads')">
+                <h4>Deep Dive: Do Virtual Threads Make Thread Pools Obsolete?</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content" id="virtual-threads">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Java's virtual threads (stable since JDK 21) make blocking I/O cheap — you can spin up
+                        millions of virtual threads instead of pooling a few hundred OS threads, because the JVM
+                        parks a virtual thread off its carrier OS thread the moment it blocks. That removes the
+                        <em>thread creation cost</em>
+                        argument for pooling.
+                    </p>
+                    <p>
+                        It does <strong>not</strong> remove the need for correctness or scarcity controls. You
+                        still need a lock or atomic around shared mutable state, and you still need a
+                        <code>Semaphore</code>
+                        if a downstream dependency has a hard concurrency cap — virtual threads make it
+                        <em>easier</em>
+                        to accidentally fire 10,000 concurrent calls at a service that can handle 25, precisely
+                        because spawning them is now nearly free. If anything, scarcity discipline matters more in
+                        a virtual-thread world, not less.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 11: Interview Essentials & Levels -->
+        <h2 id="interview-essentials">
+            <span class="section-number">11</span>
+            Interview Essentials &amp; Level Expectations
+        </h2>
+
+        <p>
+            Concurrency questions scale from "what's a race condition?" to "design the throttling layer for a
+            payments platform handling 50 downstream partners with different rate limits." Here's what's typically
+            expected at each level.
+        </p>
+
+        <div class="level-grid reveal-element">
+            <div class="level-card mid">
+                <div class="level-label">Mid-Level (E4)</div>
+                <h4>Know the Vocabulary</h4>
+                <p>
+                    Explain what a race condition is and why <code>counter++</code> isn't atomic. Know the
+                    difference between a lock and an atomic. Describe producer-consumer at a high level. Recognize
+                    a deadlock when shown one.
+                </p>
+                <span class="level-focus">80% Concepts · 20% Ops</span>
+            </div>
+            <div class="level-card senior">
+                <div class="level-label">Senior (E5)</div>
+                <h4>Own the Trade-offs</h4>
+                <p>
+                    Choose between <code>synchronized</code>, <code>ReentrantLock</code>, and atomics with
+                    justification. Size a thread pool and a bounded queue. Explain backpressure and why unbounded
+                    queues are a production incident waiting to happen. Diagnose deadlock from a thread dump.
+                </p>
+                <span class="level-focus">50% Design · 50% Depth</span>
+            </div>
+            <div class="level-card staff">
+                <div class="level-label">Staff+ (E6)</div>
+                <h4>Operate at Scale</h4>
+                <p>
+                    Design multi-tenant throttling across distributed instances (a local <code>Semaphore</code>
+                    isn't enough — needs a shared limiter). Reason about virtual threads vs. platform threads at
+                    scale. Set fairness policy for starvation-prone resources. Own the org-wide pattern for
+                    "how do we call rate-limited third parties safely."
+                </p>
+                <span class="level-focus">30% Design · 70% Depth</span>
+            </div>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Senior Signal</div>
+            <p>
+                Volunteer the distributed caveat unprompted: a <code>Semaphore(25)</code> only protects a single
+                process. The moment you run more than one instance, the real limit needs to live somewhere shared —
+                a Redis-backed token bucket, an API gateway with rate limiting, or the third party's own client-side
+                throttling SDK. Interviewers who ask about scarcity are often listening for exactly this
+                distinction between local and distributed enforcement.
+            </p>
+        </div>
+
+        <!-- Section 12: Summary -->
+        <h2 id="summary">
+            <span class="section-number">12</span>
+            Summary
+        </h2>
+
+        <p>
+            Nearly every concurrency bug collapses into
+            <strong>correctness, coordination, or scarcity</strong>
+            — protecting shared state, handing off work between threads, or respecting a limit imposed from
+            outside your process. Name the category first; the tool follows almost automatically.
+        </p>
+        <p>
+            For interviews, anchor on a concrete scenario — a double-booked seat, a stalled email queue, a
+            rate-limited API — walk through which category it belongs to, name the fix, and proactively mention the
+            failure mode of that fix (a forgotten <code>finally</code>, a lock ordering bug, an unbounded queue).
+            That's the difference between reciting definitions and demonstrating you've actually been paged for one
+            of these at 2 AM.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Concept</th>
+                    <th>One-Line Recall</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Race Condition</td>
+                    <td>Two threads interleave a multi-step read-modify-write; one update is lost</td>
+                </tr>
+                <tr>
+                    <td>Lock (<code>synchronized</code>)</td>
+                    <td>Forces mutual exclusion for multi-step critical sections</td>
+                </tr>
+                <tr>
+                    <td>Atomic (<code>AtomicInteger</code>)</td>
+                    <td>Hardware CAS makes a single read-modify-write indivisible, lock-free</td>
+                </tr>
+                <tr>
+                    <td>BlockingQueue</td>
+                    <td>Consumer sleeps when empty, wakes on producer's put — no busy-waiting</td>
+                </tr>
+                <tr>
+                    <td>Backpressure</td>
+                    <td>Bounded queue signals the producer to slow down instead of growing forever</td>
+                </tr>
+                <tr>
+                    <td>Semaphore</td>
+                    <td>N permits cap concurrent access to a scarce external resource</td>
+                </tr>
+                <tr>
+                    <td>Thread Pool</td>
+                    <td>Fixed, reusable workforce; avoids per-request thread creation cost</td>
+                </tr>
+                <tr>
+                    <td>Deadlock</td>
+                    <td>Circular wait on locks acquired in inconsistent order — fix via consistent ordering</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Final Thought</div>
+            <p>
+                The best concurrency answers sound like a triage checklist, not a glossary. Ask "is this
+                correctness, coordination, or scarcity?" before reaching for a tool — and name the failure mode of
+                whatever you pick. That instinct only comes from having watched each of these three patterns break
+                production at least once, which, if this article did its job, you now get for free.
+            </p>
+        </div>
+
+        <div class="callout" style="margin-top: 2rem;">
+            <div class="callout-label">Source</div>
+            <p>
+                This is an expanded, diagram-illustrated edition of a shorter piece originally published on
+                <a href="https://medium.com/@ajay.kotnalajpr/every-developer-hits-these-3-concurrency-problems-heres-how-to-solve-them-b91815629e1c"
+                    target="_blank" style="color: var(--concur-indigo); font-weight: 600;">Medium</a>
+                — this version adds failure modes, cross-language coverage, and the level-expectation breakdown.
+            </p>
+        </div>
+    </article>
+
+    <!-- Author Footer -->
+    <div class="article-footer">
+        <div class="author-card reveal-element">
+            <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar" />
+            <div class="author-info">
+                <h4>Ajay Kotnala</h4>
+                <div class="author-role">Senior Solution Architect</div>
+                <p>
+                    15+ years designing cloud-native, event-driven architectures at enterprise scale. Passionate
+                    about system design, API-first thinking, and making complex systems feel simple.
+                </p>
+            </div>
+        </div>
+        <div class="back-links-row">
+            <a href="../index.html" class="back-link">← Back to Portfolio</a>
+            <a href="./index.html" class="back-link">Back to Deep Dive Articles →</a>
+        </div>
+    </div>
+
+    <!-- Global Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-bottom">
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank">LinkedIn</a>
+                    <a href="https://github.com/ajaykotnala" target="_blank">GitHub</a>
+                    <a href="https://medium.com/@ajay.kotnalajpr" target="_blank">Medium</a>
+                </div>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll Progress Bar
+        window.addEventListener("scroll", () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrollTop / docHeight) * 100;
+            document.getElementById("progressBar").style.width = progress + "%";
+        });
+
+        // Intersection Observer for scroll-reveal animations
+        document.addEventListener("DOMContentLoaded", () => {
+            const observerOptions = {
+                threshold: 0.12,
+                rootMargin: "0px 0px -40px 0px",
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("active");
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll(".reveal-element").forEach((el) => {
+                observer.observe(el);
+            });
+        });
+
+        // Deep Dive Accordion
+        function toggleDeepDive(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle("open");
+        }
+
+        // Smooth scroll for TOC and anchor links
+        document.querySelectorAll('.toc a, a[href^="#"]').forEach((anchor) => {
+            anchor.addEventListener("click", function (e) {
+                const targetId = this.getAttribute("href");
+                if (targetId.startsWith("#")) {
+                    e.preventDefault();
+                    const target = document.querySelector(targetId);
+                    if (target) {
+                        const offset = 110;
+                        const targetPosition = target.getBoundingClientRect().top + window.scrollY - offset;
+                        window.scrollTo({ top: targetPosition, behavior: "smooth" });
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
