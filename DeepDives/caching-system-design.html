@@ -1,0 +1,2770 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Hidden Complexity of Caching — System Design Deep Dive | Ajay Kotnala</title>
+    <meta name="description"
+        content="A system design deep dive into caching — where caches live, the four read/write patterns, eviction policies, and the failure modes that only show up under load: thundering herd, hot keys, and cache penetration. Written by Ajay Kotnala, Senior Solution Architect." />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+        rel="stylesheet" />
+    <style>
+        /* ===== Apple Design Tokens (matching index.html) ===== */
+        :root {
+            /* Color System */
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-pearl: #fafafc;
+            --color-on-primary: #ffffff;
+
+            /* Caching brand accents (kept for article identity) */
+            --cache-amber: #d97706;
+            --cache-rose: #e11d48;
+            --cache-gradient: linear-gradient(135deg, #d97706, #e11d48);
+
+            /* Typography */
+            --font-headline:
+                system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+                sans-serif;
+            --font-body: "Lora", Georgia, "Times New Roman", serif;
+            --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+
+            /* Border Radii */
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            /* Shadows */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06);
+
+            /* Article */
+            --article-width: 680px;
+        }
+
+        /* ===== Reset ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* ===== 1. Global Navigation Bar (Apple Thin Black Bar) ===== */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            font-family: var(--font-ui);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .global-nav-logo .logo-icon {
+            font-size: 16px;
+            color: var(--color-primary-on-dark);
+        }
+
+        .global-nav-links {
+            display: flex;
+            list-style: none;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .global-nav-links a {
+            color: #cccccc;
+            text-decoration: none;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            letter-spacing: -0.12px;
+            transition: color 0.2s ease;
+        }
+
+        .global-nav-links a:hover {
+            color: #ffffff;
+        }
+
+        .global-nav-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .global-nav-actions a {
+            color: #cccccc;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .global-nav-actions a:hover {
+            color: #ffffff;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ===== 2. Sub Navigation Bar (Frosted Sticky) ===== */
+        .sub-nav-frosted {
+            position: sticky;
+            top: 44px;
+            left: 0;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 999;
+            border-bottom: 1px solid var(--color-divider-soft);
+        }
+
+        .sub-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .sub-nav-title {
+            font-family: var(--font-headline);
+            font-size: 21px;
+            font-weight: 600;
+            color: var(--color-ink);
+            text-decoration: none;
+            letter-spacing: 0.231px;
+        }
+
+        .sub-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sub-nav-link {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink);
+            text-decoration: none;
+            opacity: 0.8;
+            transition:
+                color 0.2s ease,
+                opacity 0.2s ease;
+        }
+
+        .sub-nav-link:hover {
+            color: var(--color-primary);
+            opacity: 1;
+        }
+
+        .sub-nav-button {
+            background: var(--color-primary);
+            color: var(--color-on-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            border-radius: var(--rounded-pill);
+            text-decoration: none;
+            transition:
+                background 0.2s ease,
+                transform 0.1s ease;
+        }
+
+        .sub-nav-button:hover {
+            background: var(--color-primary-focus);
+        }
+
+        .sub-nav-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== Scroll Progress Bar ===== */
+        .progress-bar {
+            position: fixed;
+            top: 44px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--cache-gradient);
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        /* ===== Article Hero ===== */
+        .article-hero {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(96px + 4rem) 2rem 4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .article-hero-inner {
+            max-width: var(--article-width);
+            width: 100%;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .article-category {
+            display: inline-block;
+            padding: 4px 14px;
+            background: var(--cache-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .article-date {
+            color: var(--color-body-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .article-read-time {
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 13px;
+        }
+
+        .article-read-time::before {
+            content: "·";
+            margin-right: 0.5rem;
+            color: var(--color-body-muted);
+        }
+
+        .article-hero h1 {
+            font-family: var(--font-headline);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+        }
+
+        .article-hero h1 .gradient-text {
+            background: var(--cache-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .article-hero-desc {
+            font-family: var(--font-body);
+            font-size: 20px;
+            color: var(--color-body-muted);
+            line-height: 1.7;
+            max-width: 600px;
+        }
+
+        .article-hero-desc em {
+            font-style: italic;
+            color: var(--color-ink-muted-80);
+        }
+
+        /* ===== Author Bar (Medium-style) ===== */
+        .author-bar {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--color-divider-soft);
+            margin-bottom: 2.5rem;
+        }
+
+        .author-bar-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-bar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .author-bar-name {
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-ink);
+        }
+
+        .author-bar-meta {
+            font-family: var(--font-ui);
+            font-size: 13px;
+            color: var(--color-body-muted);
+        }
+
+        /* ===== Table of Contents ===== */
+        .toc-wrapper {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .toc {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem 2.5rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--cache-gradient);
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toc h3 {
+            font-size: 12px;
+            margin-bottom: 1.2rem;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            padding: 0.35rem 0;
+        }
+
+        .toc li a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 15px;
+            transition:
+                color 0.2s ease,
+                padding-left 0.2s ease;
+            display: inline-block;
+        }
+
+        .toc li a::before {
+            content: counter(toc-counter, decimal-leading-zero) ".";
+            color: var(--cache-amber);
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-right: 0.8rem;
+            font-size: 13px;
+        }
+
+        .toc li a:hover {
+            color: var(--color-primary);
+            padding-left: 4px;
+        }
+
+        /* ===== Article Body (Medium-friendly) ===== */
+        .article-body {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .article-body h2 {
+            font-family: var(--font-headline);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-top: 3.5rem;
+            margin-bottom: 1.2rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .article-body h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .article-body h2 .section-number {
+            color: var(--cache-amber);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .article-body h3 {
+            font-family: var(--font-headline);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-top: 2.5rem;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .article-body p {
+            font-family: var(--font-body);
+            font-size: 19px;
+            line-height: 1.85;
+            color: var(--color-ink-muted-80);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.003em;
+        }
+
+        .article-body ul,
+        .article-body ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .article-body li {
+            font-family: var(--font-body);
+            color: var(--color-ink-muted-80);
+            margin-bottom: 0.6rem;
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .article-body strong {
+            color: var(--color-ink);
+            font-weight: 600;
+        }
+
+        .article-body em {
+            color: var(--color-ink-muted-80);
+            font-style: italic;
+        }
+
+        .article-body code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--color-canvas-parchment);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--cache-amber);
+        }
+
+        /* ===== Callout Boxes ===== */
+        .callout {
+            background: var(--color-canvas-parchment);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 0 var(--rounded-sm) var(--rounded-sm) 0;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .callout.callout-warning {
+            border-left-color: var(--cache-rose);
+            background: #f0f8f6;
+        }
+
+        .callout.callout-insight {
+            border-left-color: var(--cache-amber);
+            background: #f0faf8;
+        }
+
+        .callout .callout-label {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.6rem;
+            color: var(--color-primary);
+        }
+
+        .callout.callout-warning .callout-label {
+            color: var(--cache-rose);
+        }
+
+        .callout.callout-insight .callout-label {
+            color: var(--cache-amber);
+        }
+
+        .callout p {
+            margin-bottom: 0;
+            font-size: 16px !important;
+            line-height: 1.7 !important;
+        }
+
+        /* ===== Code Blocks (GitHub Light Theme) ===== */
+        .code-block {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-hairline);
+            border-radius: var(--rounded-sm);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0 2rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--color-hairline);
+            color: var(--color-body-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 0 var(--rounded-sm) 0 var(--rounded-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--color-ink);
+            line-height: 1.7;
+            white-space: pre;
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .code-block .keyword {
+            color: #cf222e;
+        }
+
+        .code-block .string {
+            color: #0a3069;
+        }
+
+        .code-block .comment {
+            color: #6e7781;
+            font-style: italic;
+        }
+
+        .code-block .type {
+            color: #953800;
+        }
+
+        .code-block .number {
+            color: #0550ae;
+        }
+
+        /* ===== Entity Cards ===== */
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .entity-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 1.8rem;
+            text-align: center;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .entity-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .entity-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .entity-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .entity-card p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ===== API Endpoint Cards ===== */
+        .api-endpoint {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0;
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .api-endpoint:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .api-method-url {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .api-method {
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .api-method.post {
+            background: #f0faf8;
+            color: var(--cache-amber);
+        }
+
+        .api-method.get {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .api-url {
+            font-family: var(--font-mono);
+            color: var(--color-ink);
+            font-size: 15px;
+        }
+
+        .api-desc {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 15px !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        /* ===== Excalidraw-Style SVG Architecture Diagrams ===== */
+        .diagram-container {
+            margin: 3rem -2rem;
+            padding: 2rem;
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            overflow-x: auto;
+        }
+
+        .diagram-title {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-body-muted);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .diagram-caption {
+            text-align: center;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            margin-top: 1rem;
+            font-style: italic;
+        }
+
+        .diagram-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== Comparison Table ===== */
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 2rem 0;
+            border-radius: var(--rounded-md);
+            overflow: hidden;
+            border: 1px solid var(--color-divider-soft);
+            font-family: var(--font-ui);
+        }
+
+        .comparison-table th {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            background: var(--color-canvas);
+            color: var(--color-ink-muted-80);
+            font-size: 15px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--color-divider-soft);
+            line-height: 1.5;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--color-canvas-parchment);
+        }
+
+        .check-icon {
+            color: var(--color-primary);
+            font-weight: 700;
+        }
+
+        .cross-icon {
+            color: var(--color-body-muted);
+            font-weight: 700;
+        }
+
+        /* ===== Scale Numbers ===== */
+        .scale-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .scale-stat {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 1.2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition:
+                box-shadow 0.3s ease,
+                transform 0.3s ease;
+        }
+
+        .scale-stat:hover {
+            box-shadow: var(--shadow-card);
+            transform: translateY(-2px);
+        }
+
+        .scale-stat::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--cache-gradient);
+        }
+
+        .scale-stat .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            background: var(--cache-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-headline);
+        }
+
+        .scale-stat .stat-desc {
+            color: var(--color-body-muted);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ===== Deep Dive Accordion ===== */
+        .deep-dive {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            margin: 1.5rem 0;
+            overflow: hidden;
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .deep-dive:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .deep-dive-header {
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+
+        .deep-dive-header:hover {
+            background: var(--color-canvas-parchment);
+        }
+
+        .deep-dive-header h4 {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--color-ink);
+        }
+
+        .deep-dive-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-canvas-parchment);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            transition:
+                transform 0.3s ease,
+                background 0.3s ease;
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        .deep-dive.open .deep-dive-toggle {
+            transform: rotate(45deg);
+            background: #f0faf8;
+            color: var(--cache-amber);
+        }
+
+        .deep-dive-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .deep-dive.open .deep-dive-content {
+            max-height: 3000px;
+        }
+
+        .deep-dive-content-inner {
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .deep-dive-content-inner p,
+        .deep-dive-content-inner li {
+            font-size: 16px !important;
+        }
+
+        /* ===== Level Expectation Cards ===== */
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .level-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .level-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .level-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .level-card.mid::before {
+            background: var(--color-primary);
+        }
+
+        .level-card.senior::before {
+            background: var(--cache-rose);
+        }
+
+        .level-card.staff::before {
+            background: var(--cache-amber);
+        }
+
+        .level-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .level-card.mid .level-label {
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-label {
+            color: var(--cache-rose);
+        }
+
+        .level-card.staff .level-label {
+            color: var(--cache-amber);
+        }
+
+        .level-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .level-card p {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .level-focus {
+            display: inline-block;
+            margin-top: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .level-card.mid .level-focus {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-focus {
+            background: #e8f5f3;
+            color: var(--cache-rose);
+        }
+
+        .level-card.staff .level-focus {
+            background: #f0faf8;
+            color: var(--cache-amber);
+        }
+
+        /* ===== Author Footer Card ===== */
+        .article-footer {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+        }
+
+        .author-card {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-canvas);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            flex-shrink: 0;
+        }
+
+        .author-info h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: var(--color-ink);
+        }
+
+        .author-info .author-role {
+            color: var(--color-primary);
+            font-size: 14px;
+            font-family: var(--font-ui);
+            margin-bottom: 0.6rem;
+        }
+
+        .author-info p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+        }
+
+        .back-links-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-weight: 500;
+            font-size: 15px;
+            transition: gap 0.2s ease;
+        }
+
+        .back-link:hover {
+            gap: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* ===== Global Footer ===== */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .footer-container {
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .social-links a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        .fine-print {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink-muted-48);
+            letter-spacing: -0.12px;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 833px) {
+            .global-nav-links {
+                display: none;
+            }
+
+            .sub-nav-container {
+                padding: 0 16px;
+            }
+
+            .article-hero {
+                padding: calc(96px + 2rem) 1.5rem 3rem;
+            }
+
+            .article-body {
+                padding: 0 1.5rem 4rem;
+            }
+
+            .toc-wrapper {
+                padding: 0 1.5rem;
+            }
+
+            .entity-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .scale-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .level-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .author-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .diagram-container {
+                margin: 2rem -1rem;
+                padding: 1.5rem 1rem;
+            }
+
+            .comparison-table {
+                font-size: 14px;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 8px 10px;
+            }
+
+            .author-bar {
+                padding: 0 1.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .scale-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        /* ===== Animations ===== */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(24px);
+            transition:
+                opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1),
+                transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .reveal-element.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- 1. Global Navigation Bar -->
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="index.html" class="global-nav-logo">
+                <span class="logo-icon">[AK]</span>
+                Ajay Kotnala
+            </a>
+            <div class="global-nav-actions">
+                <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
+                    </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" aria-label="LinkedIn">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. Sticky Sub Navigation Bar -->
+    <nav class="sub-nav-frosted">
+        <div class="sub-nav-container">
+            <a href="#" class="sub-nav-title">Caching</a>
+            <div class="sub-nav-right">
+                <a href="./index.html" class="sub-nav-link">Deep Dives Articles</a>
+                <a href="../index.html" class="sub-nav-link">Portfolio</a>
+                <a href="../index.html#contact" class="sub-nav-button">Get in Touch</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Article Hero -->
+    <section class="article-hero">
+        <div class="article-hero-inner reveal-element active">
+            <div class="article-meta">
+                <span class="article-category">Caching &amp; Systems</span>
+                <span class="article-date">May 2026</span>
+                <span class="article-read-time">20 min read</span>
+            </div>
+            <h1>
+                The Hidden Complexity
+                <span class="gradient-text">of Caching</span>
+            </h1>
+            <p class="article-hero-desc">
+                Storing something closer to where you need it is ancient common sense. The gap between
+                <em>adding a cache</em>
+                and
+                <em>thinking carefully about a cache</em>
+                is where production incidents live — thundering herds, hot keys, and stale bank balances. Here's
+                the full map: where caches live, how reads and writes flow through them, and exactly how they fail.
+            </p>
+        </div>
+    </section>
+
+    <!-- Author Bar (Medium-style) -->
+    <div class="author-bar reveal-element active">
+        <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar" />
+        <div class="author-bar-info">
+            <div class="author-bar-name">Ajay Kotnala</div>
+            <div class="author-bar-meta">Senior Solution Architect · May 2026 · 20 min read</div>
+        </div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc-wrapper">
+        <div class="toc reveal-element">
+            <h3>In This Article</h3>
+            <ol>
+                <li><a href="#introduction">Introduction — Why 10,000× Matters</a></li>
+                <li><a href="#where-lives">Where Caching Actually Lives</a></li>
+                <li><a href="#flow-patterns">How Reads &amp; Writes Flow Through a Cache</a></li>
+                <li><a href="#eviction">Eviction — The Art of Forgetting</a></li>
+                <li><a href="#thundering-herd">Failure Mode 1 — The Thundering Herd</a></li>
+                <li><a href="#consistency">Failure Mode 2 — Consistency &amp; Staleness</a></li>
+                <li><a href="#hot-keys">Failure Mode 3 — Hot Keys</a></li>
+                <li><a href="#penetration">Failure Mode 4 — Cache Penetration</a></li>
+                <li><a href="#back-of-envelope">Back-of-Envelope: Sizing a Cache</a></li>
+                <li><a href="#real-decision">The Real Decision — Speed vs. Consistency vs. Complexity</a></li>
+                <li><a href="#interview-essentials">Interview Essentials &amp; Level Expectations</a></li>
+                <li><a href="#summary">Summary</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Article Body -->
+    <article class="article-body">
+        <!-- Section 1: Introduction -->
+        <h2 id="introduction">
+            <span class="section-number">01</span>
+            Introduction — Why 10,000× Matters
+        </h2>
+
+        <p>
+            The motivation for caching comes down to one uncomfortable number. Accessing data from a disk-backed
+            database — even a fast SSD, even over a fast network — takes roughly 1 millisecond end to end.
+            Accessing the same data from RAM takes about 100 nanoseconds. That's approximately
+            <strong>10,000 times faster</strong>
+            .
+        </p>
+        <p>
+            That gap sounds academic until you think about it at scale. At 10,000 requests per second, a system
+            that saves 1ms per request saves 10 seconds of aggregate wait time
+            <em>every second</em>
+            . The math compounds quickly, and so do the freed-up database connections, the reduced query load, the
+            I/O contention that never happens.
+        </p>
+        <p>
+            A cache keeps copies of frequently accessed data in a faster layer — usually memory — so your system
+            doesn't reach all the way back to the source on every request. The first request pays full price.
+            Everyone after gets the discount.
+        </p>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">~100ns</div>
+                <div class="stat-desc">Typical RAM Access</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">~1ms</div>
+                <div class="stat-desc">Typical DB Round-Trip</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">10,000×</div>
+                <div class="stat-desc">Approximate Speedup</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">10s</div>
+                <div class="stat-desc">Saved Per Second at 10K req/s</div>
+            </div>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>
+                The 10,000× figure compares a full database round-trip — network hop, query planning,
+                serialization — against raw memory access latency. It's not a perfectly clean physics comparison,
+                but the direction and order of magnitude are right, and that's all the number needs to do: justify
+                why a cache is worth the added complexity in the first place.
+            </p>
+        </div>
+
+        <!-- Section 2: Where Caching Lives -->
+        <h2 id="where-lives">
+            <span class="section-number">02</span>
+            Where Caching Actually Lives
+        </h2>
+
+        <p>
+            Caching isn't a single thing you attach to a system — it exists at several distinct layers, each
+            solving a different problem, each with its own tradeoff.
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">🗄️</div>
+                <h4>External</h4>
+                <p>Redis or Memcached, shared across your whole fleet. One fetch benefits every server.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">⚡</div>
+                <h4>In-Process</h4>
+                <p>Lives inside the app's own memory. No network hop, but private to that one instance.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🌍</div>
+                <h4>CDN</h4>
+                <p>Caching for geography, not speed of storage. Solves the speed-of-light problem.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">📱</div>
+                <h4>Client-Side</h4>
+                <p>On the user's device. Nothing is faster than data that never leaves it.</p>
+            </div>
+        </div>
+
+        <p>
+            <strong>External caching</strong>
+            is the most common form. A dedicated service like Redis runs separately from your application and
+            database. Your app checks it first on every read — hit, return immediately; miss, query the database,
+            store the result, return it. What makes it powerful at scale is the shared view: fifty application
+            servers talking to the same Redis cluster means once
+            <em>any</em>
+            server fetches a piece of data, every other server benefits immediately.
+        </p>
+        <p>
+            <strong>In-process caching</strong>
+            is overlooked more than it deserves. Nothing stops you from using a slice of your application's own
+            memory to cache data directly — no network hop, no serialization. The obvious tradeoff: each server has
+            its own private copy. If server A caches a value, servers B through Z don't see it, which creates
+            fleet-wide inconsistency. It shines for data every request needs, that rarely changes, and needs the
+            absolute lowest latency — config tables, feature flags, small lookup sets.
+        </p>
+        <p>
+            <strong>CDNs</strong>
+            solve a different problem entirely: not memory-vs-disk, but the speed of light. A user in Sydney
+            requesting a file stored in Virginia waits 300–350ms on round-trip alone, before any work happens. A
+            CDN places edge servers close to users, so that same request might hit a server 20ms away instead of
+            16,000km away. Modern CDNs cache more than static media — API responses, HTML, even edge logic — but
+            the core win is always distance.
+        </p>
+        <p>
+            <strong>Client-side caching</strong>
+            stores data directly on the user's device — browser HTTP cache, local storage, on-device mobile
+            storage. Nothing beats data that never leaves the device. The cost is control: once data is on
+            someone's phone, freshness and invalidation become genuinely hard. This layer matters most for
+            offline-first systems — a fitness app recording a workout locally and syncing later.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 1 — Where Caching Lives, Request by Request</div>
+            <svg viewBox="0 0 780 300" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridK1" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenK1" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="11" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowK1" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="300" fill="#fefefe" rx="12" />
+                <rect width="780" height="300" fill="url(#dotGridK1)" rx="12" />
+
+                <text x="390" y="30" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    One request, four possible stops before it ever reaches the database
+                </text>
+
+                <!-- Client -->
+                <rect x="20" y="110" width="110" height="70" rx="9" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"
+                    filter="url(#roughenK1)" />
+                <text x="75" y="135" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    Client Device
+                </text>
+                <text x="75" y="152" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    localStorage,
+                </text>
+                <text x="75" y="164" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    HTTP cache
+                </text>
+
+                <!-- CDN -->
+                <rect x="170" y="110" width="110" height="70" rx="9" fill="#fff7ed" stroke="#d97706" stroke-width="1.5"
+                    filter="url(#roughenK1)" />
+                <text x="225" y="135" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    CDN Edge
+                </text>
+                <text x="225" y="152" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    ~20ms away,
+                </text>
+                <text x="225" y="164" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    geography-optimized
+                </text>
+
+                <!-- App + in-process -->
+                <rect x="320" y="90" width="150" height="110" rx="9" fill="#eef6ff" stroke="#0066cc" stroke-width="1.5"
+                    filter="url(#roughenK1)" />
+                <text x="395" y="112" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    App Server
+                </text>
+                <rect x="335" y="125" width="120" height="55" rx="6" fill="#ffffff" stroke="#0066cc"
+                    stroke-dasharray="3,3" filter="url(#roughenK1)" />
+                <text x="395" y="145" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    in-process cache
+                </text>
+                <text x="395" y="160" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7"
+                    text-anchor="middle">
+                    private to this instance
+                </text>
+
+                <!-- External cache -->
+                <rect x="510" y="110" width="130" height="70" rx="9" fill="#fff7ed" stroke="#d97706" stroke-width="1.5"
+                    filter="url(#roughenK1)" />
+                <text x="575" y="135" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    Redis Cluster
+                </text>
+                <text x="575" y="152" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    shared across
+                </text>
+                <text x="575" y="164" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    the whole fleet
+                </text>
+
+                <!-- DB -->
+                <rect x="670" y="110" width="90" height="70" rx="9" fill="#f5f5f7" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughenK1)" />
+                <text x="715" y="140" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    Database
+                </text>
+                <text x="715" y="157" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    source of truth
+                </text>
+
+                <path d="M 130 145 L 166 145" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowK1)" />
+                <path d="M 280 145 L 316 145" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowK1)" />
+                <path d="M 470 145 L 506 145" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowK1)" />
+                <path d="M 640 145 L 666 145" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowK1)" />
+
+                <text x="390" y="230" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Each layer is a chance to answer the request without going one step further right.
+                </text>
+                <text x="390" y="250" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Only requests that miss everywhere reach the database.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                A request checks client storage, then a CDN edge, then the app's in-process cache, then a shared
+                Redis cluster — and only touches the database if all four miss.
+            </p>
+        </div>
+
+        <!-- Section 3: Flow Patterns -->
+        <h2 id="flow-patterns">
+            <span class="section-number">03</span>
+            How Reads &amp; Writes Flow Through a Cache
+        </h2>
+
+        <p>
+            Four architectures define how reads and writes touch the cache. They're usually presented as four
+            alternatives — in practice, treat them as two independent choices: one pattern for reads, one for
+            writes. Most production systems mix them.
+        </p>
+
+        <h3>Cache-Aside (the default for reads)</h3>
+        <p>
+            The application checks the cache first. Hit — return immediately. Miss — query the database, write the
+            result into the cache, return to the caller. Lazy and effective: only data that's actually been
+            requested ever ends up cached, so there's no risk of filling memory with data nobody asked for.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Cache-Aside</span>
+            <pre><code>String getUser(String id) {
+    String cached = redis.get(<span class="string">"user:"</span> + id);
+    <span class="keyword">if</span> (cached != <span class="keyword">null</span>) {
+        <span class="keyword">return</span> cached;              <span class="comment">// hit — one round trip</span>
+    }
+    String fromDb = db.query(<span class="string">"SELECT ... WHERE id = ?"</span>, id);
+    redis.set(<span class="string">"user:"</span> + id, fromDb, <span class="type">Duration</span>.ofMinutes(<span class="number">10</span>));
+    <span class="keyword">return</span> fromDb;                  <span class="comment">// miss — two round trips</span>
+}</code></pre>
+        </div>
+
+        <h3>Write-Through (strong consistency on writes)</h3>
+        <p>
+            On every write, the app writes to the cache first, and the cache synchronously persists to the
+            database before the write is considered complete. Reads always see fresh data — no window where cache
+            and database disagree — but writes are slower, and the cache fills with everything written, not just
+            what's read.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Write-Through</span>
+            <pre><code><span class="keyword">void</span> updateUser(String id, User user) {
+    redis.set(<span class="string">"user:"</span> + id, user);
+    db.save(user);   <span class="comment">// must succeed too — write isn't "done" until both land</span>
+    <span class="comment">// dual-write problem: if this line throws, cache and DB now disagree</span>
+}</code></pre>
+        </div>
+
+        <h3>Write-Behind (fast writes, deferred persistence)</h3>
+        <p>
+            Similar to write-through, but the database write is deferred. The app writes to the cache; the cache
+            flushes to the database asynchronously, usually batched. Writes are fast because nothing waits on the
+            database — but if the cache crashes before flushing, in-memory-only writes are gone. Fits analytics
+            pipelines and activity logs, where some loss is tolerable.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Write-Behind (conceptual)</span>
+            <pre><code><span class="keyword">void</span> recordEvent(Event e) {
+    redis.rpush(<span class="string">"pending-writes"</span>, e);   <span class="comment">// returns immediately</span>
+}
+<span class="comment">// separate background job, running every few seconds:</span>
+<span class="keyword">void</span> flushBatch() {
+    <span class="type">List</span>&lt;Event&gt; batch = redis.lrange(<span class="string">"pending-writes"</span>, <span class="number">0</span>, <span class="number">999</span>);
+    db.batchInsert(batch);
+    redis.ltrim(<span class="string">"pending-writes"</span>, batch.size(), -<span class="number">1</span>);
+}</code></pre>
+        </div>
+
+        <h3>Read-Through (the cache owns the miss)</h3>
+        <p>
+            The cache handles the database lookup itself instead of delegating back to the application. On a
+            miss, the cache fetches, stores, and returns the data directly — the app just asks and trusts the
+            cache to figure out the rest. This is the model CDNs follow. For application-level caching it needs a
+            library sophisticated enough to know how to speak to your database, rather than vanilla Redis.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 2 — Reads vs. Writes: Two Independent Choices</div>
+            <svg viewBox="0 0 780 320" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridK2" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenK2" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="12" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowK2" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="320" fill="#fefefe" rx="12" />
+                <rect width="780" height="320" fill="url(#dotGridK2)" rx="12" />
+
+                <text x="195" y="30" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="700">
+                    READ PATTERN
+                </text>
+                <text x="585" y="30" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="700">
+                    WRITE PATTERNS
+                </text>
+                <path d="M 390 15 L 390 305" fill="none" stroke="#ccc" stroke-width="1" stroke-dasharray="4,4" />
+
+                <!-- Cache-aside box -->
+                <rect x="40" y="55" width="310" height="90" rx="9" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"
+                    filter="url(#roughenK2)" />
+                <text x="195" y="80" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Cache-Aside
+                </text>
+                <text x="195" y="100" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    App checks cache → miss → app queries DB
+                </text>
+                <text x="195" y="116" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    → app writes result back to cache
+                </text>
+                <text x="195" y="134" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    Almost always the default read pattern
+                </text>
+
+                <!-- Read-through box -->
+                <rect x="40" y="165" width="310" height="90" rx="9" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"
+                    stroke-dasharray="4,3" filter="url(#roughenK2)" />
+                <text x="195" y="190" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Read-Through
+                </text>
+                <text x="195" y="210" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    App only ever asks the cache — the cache
+                </text>
+                <text x="195" y="226" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    itself queries the DB on a miss
+                </text>
+                <text x="195" y="244" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    Needs a smarter caching library — this is how CDNs work
+                </text>
+
+                <!-- Write-through box -->
+                <rect x="430" y="55" width="310" height="90" rx="9" fill="#fff7ed" stroke="#d97706" stroke-width="1.5"
+                    filter="url(#roughenK2)" />
+                <text x="585" y="80" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Write-Through
+                </text>
+                <text x="585" y="100" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Cache write + DB write, synchronous —
+                </text>
+                <text x="585" y="116" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    both must succeed
+                </text>
+                <text x="585" y="134" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    Slower writes, always-fresh reads</text>
+
+                <!-- Write-behind box -->
+                <rect x="430" y="165" width="310" height="90" rx="9" fill="#fff7ed" stroke="#d97706" stroke-width="1.5"
+                    filter="url(#roughenK2)" />
+                <text x="585" y="190" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Write-Behind
+                </text>
+                <text x="585" y="210" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Cache write returns immediately;
+                </text>
+                <text x="585" y="226" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    DB write happens later, batched
+                </text>
+                <text x="585" y="244" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    Fast, but a crash before flush loses data</text>
+
+                <text x="390" y="290" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Pick one read pattern + one write pattern — they combine, they don't compete.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Cache-aside reads paired with write-through writes is one of the most common production
+                combinations — lazy population on the read side, strong consistency on the write side.
+            </p>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Watch Out</div>
+            <p>
+                Write-through's dual-write problem is real: if the cache write succeeds and the database write
+                fails (or vice versa), the two stores now disagree, and you need retry logic sophisticated enough
+                to recover — or you accept the small inconsistency window and rely on a short TTL to bound it.
+                There's no version of write-through that makes this problem disappear; it only manages it.
+            </p>
+        </div>
+
+        <!-- Section 4: Eviction -->
+        <h2 id="eviction">
+            <span class="section-number">04</span>
+            Eviction — The Art of Forgetting
+        </h2>
+
+        <p>
+            Memory is finite. When the cache fills up, something has to go. The eviction policy decides what.
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">🕐</div>
+                <h4>LRU</h4>
+                <p>Evicts what hasn't been touched in the longest time. The sensible default.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">📊</div>
+                <h4>LFU</h4>
+                <p>Evicts by access count, not recency. Wins on skewed access patterns.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">📥</div>
+                <h4>FIFO</h4>
+                <p>Evicts whatever arrived first. Simple, and almost never the right choice.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">⏳</div>
+                <h4>TTL</h4>
+                <p>Not eviction by size — a freshness guarantee. Pairs with LRU, doesn't replace it.</p>
+            </div>
+        </div>
+
+        <p>
+            <strong>Least Recently Used (LRU)</strong>
+            evicts the item that hasn't been accessed in the longest time. The intuition holds: if you haven't
+            needed something recently, you probably need it less than what you've been actively reading. It's the
+            most widely deployed policy and the right default for most workloads.
+        </p>
+        <p>
+            <strong>Least Frequently Used (LFU)</strong>
+            evicts by access count rather than recency — an item accessed once three seconds ago is more
+            eviction-worthy than one accessed a thousand times but not in the last minute. LFU tends to beat LRU
+            when a small fraction of keys account for the overwhelming majority of reads.
+        </p>
+        <p>
+            <strong>First In, First Out (FIFO)</strong>
+            removes whatever's been in the cache longest, regardless of recency or frequency. Simple to implement,
+            and almost never the right choice — age alone says very little about usefulness.
+        </p>
+        <p>
+            <strong>Time to Live (TTL)</strong>
+            isn't really an eviction policy — it's a freshness guarantee. Each item expires after a set duration,
+            regardless of how recently it was accessed. TTL typically runs alongside LRU: LRU manages capacity, TTL
+            manages staleness. For anything time-sensitive — session tokens, personalized feeds — TTL is essential.
+        </p>
+
+        <p>
+            An LRU cache needs O(1) <code>get</code> and <code>put</code>, which means a hash map for lookup paired
+            with a doubly linked list for ordering — the map gives instant access to a node, the list keeps track
+            of what's most and least recent without any scanning.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — O(1) LRU Cache</span>
+            <pre><code><span class="keyword">public class</span> LRUCache {
+
+    <span class="comment">// Doubly linked list node. HEAD side = most recent, TAIL side = least recent.</span>
+    <span class="keyword">private static class</span> Node {
+        <span class="type">int</span> key, value;
+        Node prev, next;
+        Node(<span class="type">int</span> key, <span class="type">int</span> value) { <span class="keyword">this</span>.key = key; <span class="keyword">this</span>.value = value; }
+    }
+
+    <span class="keyword">private final int</span> capacity;
+    <span class="keyword">private final</span> Node head = <span class="keyword">new</span> Node(<span class="number">0</span>, <span class="number">0</span>);   <span class="comment">// dummy, never holds real data</span>
+    <span class="keyword">private final</span> Node tail = <span class="keyword">new</span> Node(<span class="number">0</span>, <span class="number">0</span>);   <span class="comment">// dummy, never holds real data</span>
+    <span class="keyword">private final</span> HashMap&lt;Integer, Node&gt; map = <span class="keyword">new</span> HashMap&lt;&gt;();
+
+    <span class="keyword">public</span> LRUCache(<span class="type">int</span> capacity) {
+        <span class="keyword">this</span>.capacity = capacity;
+        head.next = tail;
+        tail.prev = head;
+    }
+
+    <span class="keyword">public int</span> get(<span class="type">int</span> key) {
+        Node node = map.get(key);
+        <span class="keyword">if</span> (node == <span class="keyword">null</span>) <span class="keyword">return</span> -<span class="number">1</span>;
+        moveToFront(node);          <span class="comment">// touching a key marks it most-recent</span>
+        <span class="keyword">return</span> node.value;
+    }
+
+    <span class="keyword">public void</span> put(<span class="type">int</span> key, <span class="type">int</span> value) {
+        Node existing = map.get(key);
+        <span class="keyword">if</span> (existing != <span class="keyword">null</span>) {
+            existing.value = value;
+            moveToFront(existing);
+            <span class="keyword">return</span>;
+        }
+        Node fresh = <span class="keyword">new</span> Node(key, value);
+        map.put(key, fresh);
+        addToFront(fresh);
+        <span class="keyword">if</span> (map.size() &gt; capacity) {
+            Node lru = tail.prev;        <span class="comment">// node just before TAIL is always least-recent</span>
+            remove(lru);
+            map.remove(lru.key);
+        }
+    }
+
+    <span class="keyword">private void</span> addToFront(Node n) {
+        n.prev = head; n.next = head.next;
+        head.next.prev = n; head.next = n;
+    }
+
+    <span class="keyword">private void</span> remove(Node n) {
+        n.prev.next = n.next; n.next.prev = n.prev;
+    }
+
+    <span class="keyword">private void</span> moveToFront(Node n) { remove(n); addToFront(n); }
+}</code></pre>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ A Note on the Source Material</div>
+            <p>
+                The original walkthrough of this exact structure declared two top-level classes named
+                <code>LRUCache</code>
+                in the same file — a demo class with a <code>main</code> method reusing the real class's name,
+                which doesn't compile. The version above nests <code>Node</code> as a private static inner class
+                and keeps everything under a single public class, which is both correct Java and closer to how
+                you'd actually ship this.
+            </p>
+        </div>
+
+        <!-- Section 5: Thundering Herd -->
+        <h2 id="thundering-herd">
+            <span class="section-number">05</span>
+            Failure Mode 1 — The Thundering Herd
+        </h2>
+
+        <p>
+            There's a famous line: "There are only two hard problems in computer science: cache invalidation and
+            naming things." The second one is a joke. The first one is not.
+        </p>
+        <p>
+            Consider a popular homepage feed cached with a 60-second TTL, serving 100,000 requests per second. For
+            59 seconds, everything is smooth — every request hits the cache, the database barely notices. Then the
+            TTL expires. In the next instant, every in-flight request finds the cache empty and races to rebuild
+            it.
+            <strong>One hundred thousand cache misses hit the database simultaneously</strong>
+            . The thing you built to protect the database just handed it a hundred-thousand-request spike.
+        </p>
+        <p>
+            It's a specific kind of irony: the more effective your cache was at absorbing traffic, the worse the
+            stampede when it expires. A high hit rate means more requests silently depending on that one cached
+            value — and more requests racing to rebuild it the moment it's gone.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 3 — Thundering Herd at TTL Expiry</div>
+            <svg viewBox="0 0 780 300" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridK3" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenK3" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="13" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowK3" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#e11d48" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="300" fill="#fefefe" rx="12" />
+                <rect width="780" height="300" fill="url(#dotGridK3)" rx="12" />
+
+                <path d="M 50 100 L 730 100" fill="none" stroke="#ccc" stroke-width="1.5" stroke-dasharray="4,4" />
+                <text x="130" y="90" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    t = 0s
+                </text>
+                <text x="620" y="90" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">
+                    t = 60s — TTL expires
+                </text>
+
+                <rect x="60" y="115" width="500" height="24" rx="5" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2"
+                    filter="url(#roughenK3)" />
+                <text x="310" y="132" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    100K req/s, all served from cache — database untouched
+                </text>
+
+                <rect x="580" y="150" width="150" height="90" rx="8" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"
+                    filter="url(#roughenK3)" />
+                <text x="655" y="175" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    100,000
+                </text>
+                <text x="655" y="192" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    simultaneous
+                </text>
+                <text x="655" y="209" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    misses
+                </text>
+                <text x="655" y="226" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    all racing to rebuild
+                </text>
+
+                <path d="M 620 145 L 620 118" fill="none" stroke="#e11d48" stroke-width="2"
+                    marker-end="url(#exArrowK3)" />
+
+                <rect x="180" y="255" width="420" height="30" rx="6" fill="#fff7ed" stroke="#d97706" stroke-width="1.2"
+                    filter="url(#roughenK3)" />
+                <text x="390" y="275" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Database receives 100,000 concurrent queries at once
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Fifty-nine seconds of calm, then every request hits an empty cache in the same instant — the
+                database absorbs the full spike the cache was supposed to prevent.
+            </p>
+        </div>
+
+        <p>Two approaches address it, and they compose well together.</p>
+
+        <h3>Request Coalescing ("Single Flight")</h3>
+        <p>
+            Only one request is allowed to rebuild a given cache key at a time. Every other request for that same
+            key waits and reads from the cache once it's been repopulated, instead of independently hitting the
+            database.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Single Flight (conceptual)</span>
+            <pre><code><span class="type">ConcurrentHashMap</span>&lt;String, <span class="type">CompletableFuture</span>&lt;String&gt;&gt; inFlight = <span class="keyword">new</span> ConcurrentHashMap&lt;&gt;();
+
+String getWithCoalescing(String key) {
+    String cached = redis.get(key);
+    <span class="keyword">if</span> (cached != <span class="keyword">null</span>) <span class="keyword">return</span> cached;
+
+    <span class="comment">// computeIfAbsent is atomic — only the first caller actually rebuilds</span>
+    <span class="type">CompletableFuture</span>&lt;String&gt; future = inFlight.computeIfAbsent(key, k -&gt;
+        CompletableFuture.supplyAsync(() -&gt; {
+            String fresh = db.query(key);
+            redis.set(key, fresh, <span class="type">Duration</span>.ofSeconds(<span class="number">60</span>));
+            <span class="keyword">return</span> fresh;
+        })
+    );
+    <span class="keyword">try</span> {
+        <span class="keyword">return</span> future.get();          <span class="comment">// every other caller just waits here</span>
+    } <span class="keyword">finally</span> {
+        inFlight.remove(key, future);
+    }
+}</code></pre>
+        </div>
+
+        <h3>Cache Warming (Refresh Before Expiry)</h3>
+        <p>
+            Rather than letting a key expire, proactively refresh it just before the deadline. At the 55-second
+            mark, kick off a background refresh for a 60-second TTL. From the perspective of any request, the key
+            never actually expires.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>
+                Volunteer both fixes and explain the difference in intent: single-flight limits the
+                <em>damage</em>
+                of an expiry (only one query gets through instead of 100,000); cache warming tries to
+                <em>prevent the expiry from being visible at all</em>
+                . Production systems often run both — warming as the primary defense, single-flight as the safety
+                net for keys warming didn't catch in time.
+            </p>
+        </div>
+
+        <!-- Section 6: Consistency -->
+        <h2 id="consistency">
+            <span class="section-number">06</span>
+            Failure Mode 2 — Consistency &amp; Staleness
+        </h2>
+
+        <p>
+            The cache and the database are two separate stores. Any time you write to one and read from the other,
+            there's a window where they disagree.
+        </p>
+        <p>
+            A user updates their profile picture. The database gets the new image immediately. The cache still
+            holds the old one. For the next few minutes — however long the TTL is — anyone reading that profile
+            sees the old photo. This is stale data, and it's the
+            <em>normal operating condition</em>
+            of any cache-aside system, not a bug.
+        </p>
+        <p>
+            How much this matters depends entirely on what the data is. A news feed that's stale for 60 seconds is
+            fine. A bank balance that's stale for 60 seconds is not. The right response isn't to avoid caching
+            things that change — it's to be deliberate about the tradeoff.
+        </p>
+
+        <ul>
+            <li>
+                <strong>Invalidation on write</strong>
+                — the aggressive option. When the database updates, immediately delete the corresponding cache
+                key. The next read misses and fetches fresh data. More complex (you're coordinating two operations
+                on every write) but keeps the inconsistency window as small as it can be.
+            </li>
+            <li>
+                <strong>Short TTLs</strong>
+                — the passive option. Accept the cache will be stale for a bounded period, and set that period to
+                something the system can actually tolerate. Works well when a brief delay is genuinely harmless.
+            </li>
+            <li>
+                <strong>Eventual consistency</strong>
+                — explicitly acknowledging the system isn't strongly consistent, and that's fine. For most
+                user-facing data, a few seconds of staleness is invisible to the person experiencing it. This is an
+                architectural choice, not a shortcut.
+            </li>
+        </ul>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Watch Out</div>
+            <p>
+                Never let "we have a cache" become the default answer for data where staleness has a dollar cost —
+                account balances, inventory counts near zero, anything feeding a fraud or compliance decision.
+                For that class of data, either invalidate on write with a tight SLA, or don't cache it at all and
+                accept the latency cost.
+            </p>
+        </div>
+
+        <!-- Section 7: Hot Keys -->
+        <h2 id="hot-keys">
+            <span class="section-number">07</span>
+            Failure Mode 3 — Hot Keys
+        </h2>
+
+        <p>
+            A cache does a good job distributing load across many keys. What it doesn't solve is a single key that
+            receives a disproportionate share of all traffic.
+        </p>
+        <p>
+            A celebrity posts something significant. Their profile key goes from a few hundred reads per second to
+            a few million. That key lives on one Redis node. The rest of the cluster is fine.
+            <strong>That one node is on fire.</strong>
+            The cache hit rate across the system looks great — the p99 latency on requests for that one profile is
+            falling apart.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 4 — One Key, One Overloaded Node</div>
+            <svg viewBox="0 0 780 260" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridK4" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenK4" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="14" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowK4" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="260" fill="#fefefe" rx="12" />
+                <rect width="780" height="260" fill="url(#dotGridK4)" rx="12" />
+
+                <text x="150" y="35" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Millions of reads for one key
+                </text>
+
+                <rect x="500" y="60" width="120" height="60" rx="8" fill="#f5f5f7" stroke="#333" stroke-width="1.2"
+                    filter="url(#roughenK4)" />
+                <text x="560" y="85" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Node 2
+                </text>
+                <text x="560" y="102" fill="#16a34a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    healthy
+                </text>
+
+                <rect x="640" y="60" width="120" height="60" rx="8" fill="#f5f5f7" stroke="#333" stroke-width="1.2"
+                    filter="url(#roughenK4)" />
+                <text x="700" y="85" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Node 3
+                </text>
+                <text x="700" y="102" fill="#16a34a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    healthy
+                </text>
+
+                <rect x="500" y="140" width="260" height="80" rx="9" fill="#fff1f2" stroke="#e11d48" stroke-width="1.8"
+                    filter="url(#roughenK4)" />
+                <text x="630" y="165" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Node 1 — celebrity:profile
+                </text>
+                <text x="630" y="184" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    🔥 2M reads/sec on one key
+                </text>
+                <text x="630" y="200" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    p99 latency collapsing
+                </text>
+
+                <path d="M 260 40 C 350 40, 380 90, 496 100" fill="none" stroke="#333" stroke-width="1.5"
+                    stroke-dasharray="3,3" marker-end="url(#exArrowK4)" />
+                <path d="M 260 40 C 350 60, 400 130, 496 170" fill="none" stroke="#e11d48" stroke-width="2.5"
+                    marker-end="url(#exArrowK4)" />
+                <text x="380" y="150" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    almost all traffic
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Cluster-wide hit rate stays high the entire time — the metric that looks fine is hiding exactly
+                where the fire is.
+            </p>
+        </div>
+
+        <p>Two approaches help.</p>
+        <ul>
+            <li>
+                <strong>Replicate hot keys</strong>
+                across multiple cache nodes so reads distribute instead of all landing on one — a small pool of
+                read replicas just for the handful of keys that need it.
+            </li>
+            <li>
+                <strong>Pull the hottest keys into in-process caches</strong>
+                on each application server, so the most extreme traffic never reaches Redis at all — trading a
+                little staleness for removing the bottleneck entirely.
+            </li>
+        </ul>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Takeaway</div>
+            <p>
+                Hot keys are a reminder that caching improves aggregate throughput but doesn't eliminate the
+                concept of a bottleneck — it just moves it somewhere new. Cluster-wide metrics (average hit rate,
+                average latency) will actively hide a hot key problem; you need per-key or per-shard visibility to
+                catch this before p99 users notice.
+            </p>
+        </div>
+
+        <!-- Section 8: Cache Penetration -->
+        <h2 id="penetration">
+            <span class="section-number">08</span>
+            Failure Mode 4 — Cache Penetration
+        </h2>
+
+        <p>
+            Thundering herd and hot keys both involve keys that exist. Cache penetration is different: repeated
+            requests for keys that
+            <strong>don't exist in the database at all</strong>
+            . A cache can only return a hit for something it's stored, and it never stores a value for a lookup
+            that came back empty — so every request for a nonexistent ID sails straight past the cache and hits
+            the database, every single time.
+        </p>
+        <p>
+            This is a common attack vector, not just an edge case: an attacker who wants to bypass your cache
+            entirely can simply request random, non-existent user IDs in a loop. Every request is a guaranteed
+            cache miss and a guaranteed database query.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 5 — Cache Penetration: Every Request Skips the Cache</div>
+            <svg viewBox="0 0 780 240" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridK5" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenK5" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="15" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowK5" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#e11d48" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="240" fill="#fefefe" rx="12" />
+                <rect width="780" height="240" fill="url(#dotGridK5)" rx="12" />
+
+                <text x="120" y="40" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    GET user:9999991
+                </text>
+                <text x="120" y="58" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    GET user:9999992
+                </text>
+                <text x="120" y="76" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    ... (IDs that don't exist)
+                </text>
+
+                <rect x="260" y="30" width="150" height="70" rx="9" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"
+                    filter="url(#roughenK5)" />
+                <text x="335" y="55" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    Cache
+                </text>
+                <text x="335" y="72" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    always a miss —
+                </text>
+                <text x="335" y="86" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    nothing to hit
+                </text>
+
+                <rect x="500" y="30" width="150" height="70" rx="9" fill="#fff7ed" stroke="#d97706" stroke-width="1.5"
+                    filter="url(#roughenK5)" />
+                <text x="575" y="55" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    Database
+                </text>
+                <text x="575" y="72" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    queried every
+                </text>
+                <text x="575" y="86" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    single time
+                </text>
+
+                <path d="M 175 55 L 256 55" fill="none" stroke="#333" stroke-width="1.5" marker-end="url(#exArrowK5)" />
+                <path d="M 410 65 L 496 65" fill="none" stroke="#e11d48" stroke-width="2"
+                    marker-end="url(#exArrowK5)" />
+
+                <rect x="80" y="150" width="620" height="60" rx="9" fill="#f5f5f7" stroke="#333" stroke-dasharray="4,3"
+                    stroke-width="1.2" filter="url(#roughenK5)" />
+                <text x="390" y="175" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Fix: cache the absence too — "user:9999991 → NOT_FOUND, TTL 30s"
+                </text>
+                <text x="390" y="193" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Now repeated lookups of the same missing key hit the cache, not the database
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Nonexistent keys defeat a normal cache by design — there was never a value to store. Negative
+                caching closes that gap.
+            </p>
+        </div>
+
+        <h3>The Fix: Negative Caching</h3>
+        <p>
+            Cache the absence, not just the presence. When a lookup comes back empty, store a short-lived
+            sentinel value — <code>NOT_FOUND</code> — so the next request for that same missing key hits the
+            cache instead of the database.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Negative Caching</span>
+            <pre><code>String getUser(String id) {
+    String cached = redis.get(<span class="string">"user:"</span> + id);
+    <span class="keyword">if</span> (cached != <span class="keyword">null</span>) {
+        <span class="keyword">return</span> cached.equals(<span class="string">"__NOT_FOUND__"</span>) ? <span class="keyword">null</span> : cached;
+    }
+    String fromDb = db.query(<span class="string">"SELECT ... WHERE id = ?"</span>, id);
+    <span class="keyword">if</span> (fromDb == <span class="keyword">null</span>) {
+        <span class="comment">// short TTL — a legitimately new user shouldn't stay "not found" for long</span>
+        redis.set(<span class="string">"user:"</span> + id, <span class="string">"__NOT_FOUND__"</span>, <span class="type">Duration</span>.ofSeconds(<span class="number">30</span>));
+        <span class="keyword">return null</span>;
+    }
+    redis.set(<span class="string">"user:"</span> + id, fromDb, <span class="type">Duration</span>.ofMinutes(<span class="number">10</span>));
+    <span class="keyword">return</span> fromDb;
+}</code></pre>
+        </div>
+
+        <div class="deep-dive">
+            <div class="deep-dive-header" onclick="toggleDeepDive('bloom-filter')">
+                <h4>Deep Dive: Bloom Filters — Negative Caching Without Storing Every Key</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content" id="bloom-filter">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Negative caching one key at a time works, but a wide enough attack (millions of distinct
+                        fake IDs) still fills Redis with millions of <code>NOT_FOUND</code> entries. A
+                        <strong>Bloom filter</strong>
+                        solves this more cheaply: a compact probabilistic structure that answers "might this key
+                        exist?" using a fraction of the memory a real key set would need. It can never produce a
+                        false negative — if it says "definitely not present," it's right — but it can produce rare
+                        false positives.
+                    </p>
+                    <p>
+                        Placed in front of the cache, a Bloom filter lets you reject impossible lookups instantly,
+                        before they even become a cache miss: check the filter first, and if it says "definitely
+                        not present," skip both the cache and the database entirely. This is the standard defense
+                        large-scale systems use against penetration attacks, layered on top of — not instead of —
+                        negative caching for the keys that do pass through.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 9: Back-of-Envelope -->
+        <h2 id="back-of-envelope">
+            <span class="section-number">09</span>
+            Back-of-Envelope: Sizing a Cache
+        </h2>
+
+        <p>
+            "How big should the cache be?" is a question interviewers ask precisely because it forces you to
+            connect hit rate, working set, and memory cost instead of reciting definitions.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Estimate — User Profile Cache</span>
+            <pre><code><span class="comment">// Inputs</span>
+Daily active users:        20,000,000
+Avg profile object size:   2 KB
+Target hit rate:           90%
+Read traffic:               50,000 req/s
+
+<span class="comment">// Working set: how many distinct profiles get read on a typical day</span>
+<span class="comment">// Assume 80/20 skew — 20% of DAU account for 80% of reads</span>
+Hot working set  ≈ 20,000,000 × 20%  = 4,000,000 profiles
+
+<span class="comment">// Memory needed to hold that working set</span>
+4,000,000 × 2 KB  = 8,000,000 KB  ≈ 7.6 GB
+
+<span class="comment">// Add ~30% overhead for Redis key metadata, hash structures, replication buffer</span>
+7.6 GB × 1.3  ≈ 10 GB   <span class="comment">// realistic cluster sizing target</span>
+
+<span class="comment">// Database queries avoided per second at 90% hit rate</span>
+50,000 req/s × 90%  = 45,000 req/s absorbed by the cache
+50,000 req/s × 10%  =  5,000 req/s still reaching the database</code></pre>
+        </div>
+
+        <p>
+            The number that actually matters for the sizing conversation isn't "how much data exists" — it's
+            <strong>the working set</strong>
+            , the slice of data that gets read often enough to be worth keeping warm. Caching 100% of a dataset is
+            rarely the goal; caching the 20% that drives 80% of reads usually gets you 90%+ of the benefit at a
+            fraction of the memory cost.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>
+                When asked to size a cache, state your assumptions out loud before computing anything — DAU,
+                object size, access skew, target hit rate. The number itself matters less than showing you know
+                which four or five inputs actually determine it. If the interviewer pushes on your skew assumption,
+                that's a signal to talk about instrumenting real hit-rate metrics rather than guessing forever.
+            </p>
+        </div>
+
+        <!-- Section 10: Real Decision -->
+        <h2 id="real-decision">
+            <span class="section-number">10</span>
+            The Real Decision — Speed vs. Consistency vs. Complexity
+        </h2>
+
+        <p>
+            Every caching decision is really a three-way tradeoff, and the honest answer to "should I add a
+            cache here?" is never just yes or no.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>You Optimize For</th>
+                    <th>You Give Up</th>
+                    <th>Typical Choice</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Maximum speed</td>
+                    <td>Freshness guarantees</td>
+                    <td>Longer TTL, cache-aside reads, tolerate staleness</td>
+                </tr>
+                <tr>
+                    <td>Strong consistency</td>
+                    <td>Write latency, added failure modes</td>
+                    <td>Write-through + invalidation on write</td>
+                </tr>
+                <tr>
+                    <td>Operational simplicity</td>
+                    <td>Some performance headroom</td>
+                    <td>Short TTL cache-aside, skip write-through entirely</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p>
+            The failure modes covered above — thundering herd, staleness, hot keys, penetration — aren't reasons to
+            avoid caching. They're the cost of admission for the 10,000× speedup. The engineering job is choosing
+            which of them you can tolerate and building the specific, narrow mitigation for the ones you can't.
+        </p>
+
+        <!-- Section 11: Interview Essentials & Levels -->
+        <h2 id="interview-essentials">
+            <span class="section-number">11</span>
+            Interview Essentials &amp; Level Expectations
+        </h2>
+
+        <p>
+            Caching questions scale from "what's the difference between LRU and LFU" to "design the caching layer
+            for a global e-commerce checkout with regional data residency requirements." Here's what's typically
+            expected at each level.
+        </p>
+
+        <div class="level-grid reveal-element">
+            <div class="level-card mid">
+                <div class="level-label">Mid-Level (E4)</div>
+                <h4>Know the Vocabulary</h4>
+                <p>
+                    Explain what a cache is and why it's faster than a database. Know cache-aside at a basic level.
+                    Name LRU as an eviction policy and explain the intuition. Recognize that caches can go stale.
+                </p>
+                <span class="level-focus">80% Concepts · 20% Ops</span>
+            </div>
+            <div class="level-card senior">
+                <div class="level-label">Senior (E5)</div>
+                <h4>Own the Trade-offs</h4>
+                <p>
+                    Choose between cache-aside, write-through, and write-behind with justification. Size a cache
+                    using working-set math. Explain thundering herd and at least one concrete fix. Diagnose a hot
+                    key from lopsided per-node metrics.
+                </p>
+                <span class="level-focus">50% Design · 50% Depth</span>
+            </div>
+            <div class="level-card staff">
+                <div class="level-label">Staff+ (E6)</div>
+                <h4>Operate at Scale</h4>
+                <p>
+                    Design multi-region cache topology with data residency and replication lag in mind. Reason
+                    about Bloom filters and negative caching as a penetration defense at scale. Set org-wide
+                    standards for TTL policy and invalidation strategy across dozens of services with different
+                    consistency needs.
+                </p>
+                <span class="level-focus">30% Design · 70% Depth</span>
+            </div>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Senior Signal</div>
+            <p>
+                Volunteer the failure modes before being asked. An interviewer who hears "I'd use cache-aside with
+                a 60-second TTL" and nothing else will probe for thundering herd. An interviewer who hears "I'd use
+                cache-aside with a 60-second TTL, and I'd add single-flight coalescing so expiry doesn't cause a
+                stampede" has already answered the follow-up. That's the signal staff-level candidates give without
+                being asked for it.
+            </p>
+        </div>
+
+        <!-- Section 12: Summary -->
+        <h2 id="summary">
+            <span class="section-number">12</span>
+            Summary
+        </h2>
+
+        <p>
+            Caching is simple in concept — keep a copy closer, save the round trip — and genuinely hard in
+            practice, because every mechanism that makes it fast also opens a specific way for it to fail under
+            load: a stampede at expiry, a stale read after a write, one key melting one node, or a flood of
+            lookups for things that were never there to begin with.
+        </p>
+        <p>
+            None of these failure modes are reasons to avoid caching. They're the reason caching is a system
+            design topic and not a one-line optimization. Name the layer, name the read/write pattern, name the
+            eviction policy, and — critically — name which failure modes you're accepting and which you're
+            actively defending against.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Concept</th>
+                    <th>One-Line Recall</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Cache-Aside</td>
+                    <td>App checks cache, queries DB on miss, writes result back — the default read pattern</td>
+                </tr>
+                <tr>
+                    <td>Write-Through</td>
+                    <td>Synchronous cache + DB write; always fresh, slower, dual-write risk</td>
+                </tr>
+                <tr>
+                    <td>Write-Behind</td>
+                    <td>Fast async write, batched to DB later; risk of loss on crash before flush</td>
+                </tr>
+                <tr>
+                    <td>LRU Eviction</td>
+                    <td>Evict least-recently-used; O(1) via hash map + doubly linked list</td>
+                </tr>
+                <tr>
+                    <td>Thundering Herd</td>
+                    <td>Mass simultaneous misses at TTL expiry; fixed with single-flight or warming</td>
+                </tr>
+                <tr>
+                    <td>Hot Key</td>
+                    <td>One key overloads one node; cluster-wide metrics hide it — check per-key</td>
+                </tr>
+                <tr>
+                    <td>Cache Penetration</td>
+                    <td>Requests for nonexistent keys always miss; fixed with negative caching / Bloom filters</td>
+                </tr>
+                <tr>
+                    <td>Working Set</td>
+                    <td>The slice of data worth keeping warm — usually far smaller than total data size</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Final Thought</div>
+            <p>
+                A cache that's never failed under load hasn't been tested by load yet. The engineers who reason
+                well about caching aren't the ones who've memorized the four architecture patterns — they're the
+                ones who've watched a TTL expire at the worst possible moment and built the single-flight guard
+                afterward. This article is meant to get you that instinct without the incident.
+            </p>
+        </div>
+
+        <div class="callout" style="margin-top: 2rem;">
+            <div class="callout-label">Source</div>
+            <p>
+                This is an expanded, diagram-illustrated edition of a shorter piece originally published on
+                <a href="https://medium.com/@ajay.kotnalajpr/the-hidden-complexity-of-caching-7b075a9db920"
+                    target="_blank" style="color: var(--cache-amber); font-weight: 600;">Medium</a>
+                — this version corrects the LRU code sample, and adds cache penetration, back-of-envelope sizing,
+                and the level-expectation breakdown.
+            </p>
+        </div>
+    </article>
+
+    <!-- Author Footer -->
+    <div class="article-footer">
+        <div class="author-card reveal-element">
+            <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar" />
+            <div class="author-info">
+                <h4>Ajay Kotnala</h4>
+                <div class="author-role">Senior Solution Architect</div>
+                <p>
+                    15+ years designing cloud-native, event-driven architectures at enterprise scale. Passionate
+                    about system design, API-first thinking, and making complex systems feel simple.
+                </p>
+            </div>
+        </div>
+        <div class="back-links-row">
+            <a href="../index.html" class="back-link">← Back to Portfolio</a>
+            <a href="./index.html" class="back-link">Back to Deep Dive Articles →</a>
+        </div>
+    </div>
+
+    <!-- Global Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-bottom">
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank">LinkedIn</a>
+                    <a href="https://github.com/ajaykotnala" target="_blank">GitHub</a>
+                    <a href="https://medium.com/@ajay.kotnalajpr" target="_blank">Medium</a>
+                </div>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll Progress Bar
+        window.addEventListener("scroll", () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrollTop / docHeight) * 100;
+            document.getElementById("progressBar").style.width = progress + "%";
+        });
+
+        // Intersection Observer for scroll-reveal animations
+        document.addEventListener("DOMContentLoaded", () => {
+            const observerOptions = {
+                threshold: 0.12,
+                rootMargin: "0px 0px -40px 0px",
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("active");
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll(".reveal-element").forEach((el) => {
+                observer.observe(el);
+            });
+        });
+
+        // Deep Dive Accordion
+        function toggleDeepDive(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle("open");
+        }
+
+        // Smooth scroll for TOC and anchor links
+        document.querySelectorAll('.toc a, a[href^="#"]').forEach((anchor) => {
+            anchor.addEventListener("click", function (e) {
+                const targetId = this.getAttribute("href");
+                if (targetId.startsWith("#")) {
+                    e.preventDefault();
+                    const target = document.querySelector(targetId);
+                    if (target) {
+                        const offset = 110;
+                        const targetPosition = target.getBoundingClientRect().top + window.scrollY - offset;
+                        window.scrollTo({ top: targetPosition, behavior: "smooth" });
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
