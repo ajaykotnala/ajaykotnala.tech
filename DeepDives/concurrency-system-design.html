@@ -1803,7 +1803,7 @@ bookedSeats.incrementAndGet();   <span class="comment">// thread-safe, no lock r
             </p>
         </div>
 
-        <div class="deep-dive">
+        <div class="deep-dive" id="cas-deep-dive">
             <div class="deep-dive-header" onclick="toggleDeepDive('cas-deep-dive')">
                 <h4>Deep Dive: What Does AtomicInteger Actually Do Under the Hood?</h4>
                 <div class="deep-dive-toggle">+</div>
@@ -2160,7 +2160,7 @@ pool.submit(() -&gt; handleRequest(req));  <span class="comment">// submit work,
             </p>
         </div>
 
-        <div class="deep-dive">
+        <div class="deep-dive" id="sem-vs-mutex">
             <div class="deep-dive-header" onclick="toggleDeepDive('sem-vs-mutex')">
                 <h4>Deep Dive: Semaphore vs. Mutex — What's Actually Different?</h4>
                 <div class="deep-dive-toggle">+</div>
@@ -2632,7 +2632,7 @@ atomic.AddInt64(&amp;booked, <span class="number">1</span>)</code></pre>
             </li>
         </ul>
 
-        <div class="deep-dive">
+        <div class="deep-dive" id ="virtual-threads">
             <div class="deep-dive-header" onclick="toggleDeepDive('virtual-threads')">
                 <h4>Deep Dive: Do Virtual Threads Make Thread Pools Obsolete?</h4>
                 <div class="deep-dive-toggle">+</div>
