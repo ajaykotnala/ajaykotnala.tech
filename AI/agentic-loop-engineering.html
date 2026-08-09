@@ -1,0 +1,3317 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agentic Loop Engineering — Designing Systems That Run Themselves | Ajay Kotnala</title>
+    <meta name="description"
+        content="A practitioner's guide to building agentic loops — tool design as an API contract, termination guards, context compaction across turns, error recovery, when multi-agent helps, observability, the quadratic cost of loops, and blast-radius control. By Ajay Kotnala, Senior Solution Architect." />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+        rel="stylesheet" />
+    <style>
+        /* ===== Apple Design Tokens (matching index.html) ===== */
+        :root {
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-pearl: #fafafc;
+            --color-on-primary: #ffffff;
+
+            /* Loop-article accents. Indigo is this article's identity colour;
+               teal and rose stay semantic (good / bad) across the AI section. */
+            --ai-violet: #4338ca;
+            --ai-teal: #0d9488;
+            --ai-rose: #e11d48;
+            --ai-gradient: linear-gradient(135deg, #4338ca, #d97706);
+
+            /* Typography */
+            --font-headline:
+                system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+                sans-serif;
+            --font-body: "Lora", Georgia, "Times New Roman", serif;
+            --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+
+            /* Border Radii */
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            /* Shadows */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06);
+
+            /* Article */
+            --article-width: 680px;
+        }
+
+        /* ===== Reset ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* ===== 1. Global Navigation Bar ===== */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            font-family: var(--font-ui);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .global-nav-logo .logo-icon {
+            font-size: 16px;
+            color: var(--color-primary-on-dark);
+        }
+
+        .global-nav-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .global-nav-actions a {
+            color: #cccccc;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .global-nav-actions a:hover {
+            color: #ffffff;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ===== 2. Sub Navigation Bar (Frosted Sticky) ===== */
+        .sub-nav-frosted {
+            position: sticky;
+            top: 44px;
+            left: 0;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 999;
+            border-bottom: 1px solid var(--color-divider-soft);
+        }
+
+        .sub-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .sub-nav-title {
+            font-family: var(--font-headline);
+            font-size: 21px;
+            font-weight: 600;
+            color: var(--color-ink);
+            text-decoration: none;
+            letter-spacing: 0.231px;
+        }
+
+        .sub-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sub-nav-link {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink);
+            text-decoration: none;
+            opacity: 0.8;
+            transition: color 0.2s ease, opacity 0.2s ease;
+        }
+
+        .sub-nav-link:hover {
+            color: var(--color-primary);
+            opacity: 1;
+        }
+
+        .sub-nav-button {
+            background: var(--color-primary);
+            color: var(--color-on-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            border-radius: var(--rounded-pill);
+            text-decoration: none;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        .sub-nav-button:hover {
+            background: var(--color-primary-focus);
+        }
+
+        .sub-nav-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== Scroll Progress Bar ===== */
+        .progress-bar {
+            position: fixed;
+            top: 44px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--ai-gradient);
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        /* ===== Article Hero ===== */
+        .article-hero {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(96px + 4rem) 2rem 4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .article-hero-inner {
+            max-width: var(--article-width);
+            width: 100%;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .article-category {
+            display: inline-block;
+            padding: 4px 14px;
+            background: var(--ai-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .article-date {
+            color: var(--color-body-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .article-read-time {
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 13px;
+        }
+
+        .article-read-time::before {
+            content: "·";
+            margin-right: 0.5rem;
+            color: var(--color-body-muted);
+        }
+
+        .article-hero h1 {
+            font-family: var(--font-headline);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+        }
+
+        .article-hero h1 .gradient-text {
+            background: var(--ai-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .article-hero-desc {
+            font-family: var(--font-body);
+            font-size: 20px;
+            color: var(--color-body-muted);
+            line-height: 1.7;
+            max-width: 600px;
+        }
+
+        .article-hero-desc em {
+            font-style: italic;
+            color: var(--color-ink-muted-80);
+        }
+
+        /* ===== Author Bar ===== */
+        .author-bar {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--color-divider-soft);
+            margin-bottom: 2.5rem;
+        }
+
+        .author-bar-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-bar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .author-bar-name {
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-ink);
+        }
+
+        .author-bar-meta {
+            font-family: var(--font-ui);
+            font-size: 13px;
+            color: var(--color-body-muted);
+        }
+
+        /* ===== Table of Contents ===== */
+        .toc-wrapper {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .toc {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem 2.5rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--ai-gradient);
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toc h3 {
+            font-size: 12px;
+            margin-bottom: 1.2rem;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            padding: 0.35rem 0;
+        }
+
+        .toc li a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 15px;
+            transition: color 0.2s ease, padding-left 0.2s ease;
+            display: inline-block;
+        }
+
+        .toc li a::before {
+            content: counter(toc-counter, decimal-leading-zero) ".";
+            color: var(--ai-violet);
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-right: 0.8rem;
+            font-size: 13px;
+        }
+
+        .toc li a:hover {
+            color: var(--color-primary);
+            padding-left: 4px;
+        }
+
+        /* ===== Article Body ===== */
+        .article-body {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .article-body h2 {
+            font-family: var(--font-headline);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-top: 3.5rem;
+            margin-bottom: 1.2rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .article-body h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .article-body h2 .section-number {
+            color: var(--ai-violet);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .article-body h3 {
+            font-family: var(--font-headline);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-top: 2.5rem;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .article-body h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin-top: 1.8rem;
+            margin-bottom: 0.6rem;
+            color: var(--color-ink);
+        }
+
+        .article-body p {
+            font-family: var(--font-body);
+            font-size: 19px;
+            line-height: 1.85;
+            color: var(--color-ink-muted-80);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.003em;
+        }
+
+        .article-body ul,
+        .article-body ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .article-body li {
+            font-family: var(--font-body);
+            color: var(--color-ink-muted-80);
+            margin-bottom: 0.6rem;
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .article-body strong {
+            color: var(--color-ink);
+            font-weight: 600;
+        }
+
+        .article-body em {
+            color: var(--color-ink-muted-80);
+            font-style: italic;
+        }
+
+        .article-body a {
+            color: var(--ai-violet);
+            text-decoration: none;
+            border-bottom: 1px solid rgba(67, 56, 202, 0.3);
+        }
+
+        .article-body a:hover {
+            border-bottom-color: var(--ai-violet);
+        }
+
+        .article-body code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--color-canvas-parchment);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--ai-violet);
+        }
+
+        /* ===== Callout Boxes ===== */
+        .callout {
+            background: var(--color-canvas-parchment);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 0 var(--rounded-sm) var(--rounded-sm) 0;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .callout.callout-warning {
+            border-left-color: var(--ai-rose);
+            background: #fff5f6;
+        }
+
+        .callout.callout-insight {
+            border-left-color: var(--ai-violet);
+            background: #eef2ff;
+        }
+
+        .callout.callout-rule {
+            border-left-color: var(--ai-teal);
+            background: #f0fdfa;
+        }
+
+        .callout .callout-label {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.6rem;
+            color: var(--color-primary);
+        }
+
+        .callout.callout-warning .callout-label {
+            color: var(--ai-rose);
+        }
+
+        .callout.callout-insight .callout-label {
+            color: var(--ai-violet);
+        }
+
+        .callout.callout-rule .callout-label {
+            color: var(--ai-teal);
+        }
+
+        .callout p {
+            margin-bottom: 0;
+            font-size: 16px !important;
+            line-height: 1.7 !important;
+        }
+
+        .callout p + p {
+            margin-top: 0.9rem;
+        }
+
+        /* ===== Code Blocks ===== */
+        .code-block {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-hairline);
+            border-radius: var(--rounded-sm);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0 2rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--color-hairline);
+            color: var(--color-body-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 0 var(--rounded-sm) 0 var(--rounded-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--color-ink);
+            line-height: 1.7;
+            white-space: pre;
+            background: none;
+            padding: 0;
+            border-radius: 0;
+            display: block;
+        }
+
+        .code-block .keyword {
+            color: #cf222e;
+        }
+
+        .code-block .string {
+            color: #0a3069;
+        }
+
+        .code-block .comment {
+            color: #6e7781;
+            font-style: italic;
+        }
+
+        .code-block .type {
+            color: #953800;
+        }
+
+        .code-block .number {
+            color: #0550ae;
+        }
+
+        /* ===== Poor vs. Good Prompt Pairs ===== */
+        .prompt-pair {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .prompt-card {
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.2rem 1.4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .prompt-card.bad {
+            border-top: 3px solid var(--ai-rose);
+        }
+
+        .prompt-card.good {
+            border-top: 3px solid var(--ai-teal);
+        }
+
+        .prompt-card .prompt-label {
+            font-family: var(--font-ui);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            display: block;
+        }
+
+        .prompt-card.bad .prompt-label {
+            color: var(--ai-rose);
+        }
+
+        .prompt-card.good .prompt-label {
+            color: var(--ai-teal);
+        }
+
+        .prompt-card pre {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            line-height: 1.65;
+            color: var(--color-ink-muted-80);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .prompt-verdict {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin: -1rem 0 2rem !important;
+            font-style: italic;
+        }
+
+        /* ===== Entity Cards ===== */
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .entity-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 1.8rem;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .entity-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .entity-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .entity-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin: 0 0 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .entity-card p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ===== SVG Diagrams ===== */
+        .diagram-container {
+            margin: 3rem -2rem;
+            padding: 2rem;
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            overflow-x: auto;
+        }
+
+        .diagram-title {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-body-muted);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .diagram-caption {
+            text-align: center;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            margin-top: 1rem;
+            font-style: italic;
+        }
+
+        .diagram-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== Comparison Table ===== */
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 2rem 0;
+            border-radius: var(--rounded-md);
+            overflow: hidden;
+            border: 1px solid var(--color-divider-soft);
+            font-family: var(--font-ui);
+        }
+
+        .comparison-table th {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            background: var(--color-canvas);
+            color: var(--color-ink-muted-80);
+            font-size: 15px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--color-divider-soft);
+            line-height: 1.5;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--color-canvas-parchment);
+        }
+
+        .check-icon {
+            color: var(--ai-teal);
+            font-weight: 700;
+        }
+
+        .cross-icon {
+            color: var(--color-body-muted);
+            font-weight: 700;
+        }
+
+        .table-scroll {
+            overflow-x: auto;
+            margin: 2rem 0;
+        }
+
+        .table-scroll .comparison-table {
+            margin: 0;
+            min-width: 560px;
+        }
+
+        /* ===== Scale Numbers ===== */
+        .scale-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .scale-stat {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 1.2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition: box-shadow 0.3s ease, transform 0.3s ease;
+        }
+
+        .scale-stat:hover {
+            box-shadow: var(--shadow-card);
+            transform: translateY(-2px);
+        }
+
+        .scale-stat::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--ai-gradient);
+        }
+
+        .scale-stat .stat-value {
+            font-size: 30px;
+            font-weight: 700;
+            background: var(--ai-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-headline);
+        }
+
+        .scale-stat .stat-desc {
+            color: var(--color-body-muted);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ===== Deep Dive Accordion ===== */
+        .deep-dive {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            margin: 1.5rem 0;
+            overflow: hidden;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .deep-dive:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .deep-dive-header {
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            transition: background 0.2s ease;
+            width: 100%;
+            background: none;
+            border: none;
+            text-align: left;
+            font: inherit;
+        }
+
+        .deep-dive-header:hover {
+            background: var(--color-canvas-parchment);
+        }
+
+        .deep-dive-header h4 {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--color-ink);
+            margin: 0;
+        }
+
+        .deep-dive-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-canvas-parchment);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            transition: transform 0.3s ease, background 0.3s ease;
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        .deep-dive.open .deep-dive-toggle {
+            transform: rotate(45deg);
+            background: #f0fdfa;
+            color: var(--ai-teal);
+        }
+
+        .deep-dive-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .deep-dive.open .deep-dive-content {
+            max-height: 4000px;
+        }
+
+        .deep-dive-content-inner {
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .deep-dive-content-inner p,
+        .deep-dive-content-inner li {
+            font-size: 16px !important;
+        }
+
+        /* ===== Level Expectation Cards ===== */
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .level-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .level-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .level-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .level-card.mid::before {
+            background: var(--color-primary);
+        }
+
+        .level-card.senior::before {
+            background: var(--ai-violet);
+        }
+
+        .level-card.staff::before {
+            background: var(--ai-teal);
+        }
+
+        .level-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .level-card.mid .level-label {
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-label {
+            color: var(--ai-violet);
+        }
+
+        .level-card.staff .level-label {
+            color: var(--ai-teal);
+        }
+
+        .level-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            margin: 0 0 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .level-card p {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .level-focus {
+            display: inline-block;
+            margin-top: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .level-card.mid .level-focus {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-focus {
+            background: #eef2ff;
+            color: var(--ai-violet);
+        }
+
+        .level-card.staff .level-focus {
+            background: #f0fdfa;
+            color: var(--ai-teal);
+        }
+
+        /* ===== Author Footer Card ===== */
+        .article-footer {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+        }
+
+        .author-card {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-canvas);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            flex-shrink: 0;
+        }
+
+        .author-info h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: var(--color-ink);
+        }
+
+        .author-info .author-role {
+            color: var(--color-primary);
+            font-size: 14px;
+            font-family: var(--font-ui);
+            margin-bottom: 0.6rem;
+        }
+
+        .author-info p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+        }
+
+        .back-links-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-weight: 500;
+            font-size: 15px;
+            transition: gap 0.2s ease;
+        }
+
+        .back-link:hover {
+            gap: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* ===== Global Footer ===== */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .footer-container {
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .social-links a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        .fine-print {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink-muted-48);
+            letter-spacing: -0.12px;
+        }
+
+        /* ===== Wide screens: let comparisons and diagrams breathe ===== */
+        /* The reading column stays 680px, but side-by-side prompts and the
+           780px-wide SVGs are unreadable squeezed into it. Break them out,
+           centred on the same axis as the column. */
+        /* 616px column + 162px each side = 940px. At the 1060px breakpoint the
+           column's own gutter is 190px, so this never pushes past the viewport. */
+        @media (min-width: 1060px) {
+            .prompt-pair,
+            .diagram-container {
+                margin-left: -162px;
+                margin-right: -162px;
+            }
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 833px) {
+            .sub-nav-container {
+                padding: 0 16px;
+            }
+
+            .sub-nav-right {
+                gap: 12px;
+            }
+
+            .article-hero {
+                padding: calc(96px + 2rem) 1.5rem 3rem;
+            }
+
+            .article-body {
+                padding: 0 1.5rem 4rem;
+            }
+
+            .toc-wrapper {
+                padding: 0 1.5rem;
+            }
+
+            .toc {
+                padding: 1.5rem 1.6rem;
+            }
+
+            .entity-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .prompt-pair {
+                grid-template-columns: 1fr;
+            }
+
+            .scale-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .level-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .author-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .diagram-container {
+                margin: 2rem -1rem;
+                padding: 1.5rem 1rem;
+            }
+
+            .comparison-table {
+                font-size: 14px;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 8px 10px;
+            }
+
+            .code-block {
+                padding: 1.2rem 1.2rem;
+            }
+
+            .author-bar {
+                padding: 0 1.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .scale-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        /* ===== Animations ===== */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(24px);
+            transition:
+                opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1),
+                transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .reveal-element.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            html {
+                scroll-behavior: auto;
+            }
+
+            .reveal-element {
+                opacity: 1;
+                transform: none;
+                transition: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- 1. Global Navigation Bar -->
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="index.html" class="global-nav-logo">
+                <span class="logo-icon">[AK]</span>
+                Ajay Kotnala
+            </a>
+            <div class="global-nav-actions">
+                <a href="https://github.com/ajaykotnala" target="_blank" rel="noopener" aria-label="GitHub">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
+                    </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" rel="noopener" aria-label="LinkedIn">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" rel="noopener" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. Sticky Sub Navigation Bar -->
+    <nav class="sub-nav-frosted">
+        <div class="sub-nav-container">
+            <a href="#" class="sub-nav-title">Agentic Loops</a>
+            <div class="sub-nav-right">
+                <a href="./index.html" class="sub-nav-link">AI Articles</a>
+                <a href="../index.html" class="sub-nav-link">Portfolio</a>
+                <a href="../index.html#contact" class="sub-nav-button">Get in Touch</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Article Hero -->
+    <section class="article-hero">
+        <div class="article-hero-inner reveal-element active">
+            <div class="article-meta">
+                <span class="article-category">AI &amp; LLM Engineering</span>
+                <span class="article-date">August 2026</span>
+                <span class="article-read-time">30 min read</span>
+            </div>
+            <h1>
+                Agentic Loop
+                <span class="gradient-text">Engineering</span>
+            </h1>
+            <p class="article-hero-desc">
+                A single model call is a function you can review before it runs. A loop is a <em>program that
+                decides its own control flow</em> — and then takes actions in your systems. This is what you
+                actually own once you put a model inside a <code>while</code>: the tools, the budget, the exit
+                doors, the context, and the blast radius.
+            </p>
+        </div>
+    </section>
+
+    <!-- Author Bar -->
+    <div class="author-bar reveal-element active">
+        <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar" />
+        <div class="author-bar-info">
+            <div class="author-bar-name">Ajay Kotnala</div>
+            <div class="author-bar-meta">Senior Solution Architect · August 2026 · 30 min read</div>
+        </div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc-wrapper">
+        <div class="toc reveal-element">
+            <h3>In This Article</h3>
+            <ol>
+                <li><a href="#introduction">Why a Loop Changes Everything</a></li>
+                <li><a href="#mental-model">A Prompt Is a Call, a Loop Is a Program</a></li>
+                <li><a href="#anatomy">The Anatomy of an Agent Loop</a></li>
+                <li><a href="#tools">Tools Are an API Contract</a></li>
+                <li><a href="#termination">Termination — The Hard Part</a></li>
+                <li><a href="#context">Context Across Turns</a></li>
+                <li><a href="#errors">Error Recovery &amp; Retry Semantics</a></li>
+                <li><a href="#multi-agent">Multi-Agent: When It Helps, When It Doesn't</a></li>
+                <li><a href="#observability">Observability for Loops</a></li>
+                <li><a href="#economics">Cost &amp; Latency Blowups</a></li>
+                <li><a href="#blast-radius">Blast Radius &amp; Human Gates</a></li>
+                <li><a href="#failures">The Failure Taxonomy</a></li>
+                <li><a href="#what-good-looks-like">What Good Looks Like — Levels &amp; Cheatsheet</a></li>
+                <li><a href="#summary">Summary</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Article Body -->
+    <article class="article-body">
+        <!-- ===== Section 1 ===== -->
+        <h2 id="introduction">
+            <span class="section-number">01</span>
+            Why a Loop Changes Everything
+        </h2>
+
+        <p>
+            The first agent I put into production did something I still think about. Asked to find why a nightly
+            job had started failing, it read the logs, formed a sensible hypothesis, checked the wrong config file,
+            found nothing, re-read the same logs, formed the same hypothesis, checked the same wrong file — and
+            did that eleven more times before the budget ran out. Every individual step was reasonable. The
+            sequence was insane.
+        </p>
+        <p>
+            That's the shape of the problem. Putting a model in a loop doesn't just make it more capable; it
+            changes the failure modes entirely. A single call can be wrong. A loop can be wrong
+            <em>persistently, expensively, and with side effects</em>.
+        </p>
+        <p>
+            Start with the arithmetic, because it explains most of what follows. Suppose each step in your loop is
+            95% reliable — a good number, better than most tool-using steps manage on messy real-world input. Ten
+            steps in sequence, all of which must be right:
+        </p>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">95%</div>
+                <div class="stat-desc">Per-Step Reliability</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">60%</div>
+                <div class="stat-desc">After 10 Steps</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">99%</div>
+                <div class="stat-desc">Per-Step, Improved</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">90%</div>
+                <div class="stat-desc">After 10 Steps</div>
+            </div>
+        </div>
+
+        <p>
+            Two things fall out of that table, and they set the agenda for this entire article. First,
+            <strong>per-step reliability compounds brutally</strong> — the difference between 95% and 99% per step
+            is the difference between a coin flip and something you'd ship. Second, and more importantly:
+            <strong>a loop that can notice and recover from a bad step beats a loop with better steps.</strong>
+            Recovery breaks the multiplication. That is the whole game.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 What this article assumes</div>
+            <p>
+                That you've written prompts that work and now want to put one inside a loop that calls tools and
+                changes things. If you haven't read it, the companion piece on
+                <a href="prompt-engineering-for-developers.html">prompt engineering</a> covers the single-call
+                foundations — structured output and injection defence especially, both of which get harder here.
+            </p>
+        </div>
+
+        <!-- ===== Section 2 ===== -->
+        <h2 id="mental-model">
+            <span class="section-number">02</span>
+            A Prompt Is a Call, a Loop Is a Program
+        </h2>
+
+        <p>
+            The mental model from single-call work was: the model is a pure function, and your prompt is the
+            argument. That still holds, but it's no longer the interesting part. In a loop, something stranger is
+            true: <strong>the model has become your control flow.</strong>
+        </p>
+        <p>
+            You wrote no <code>if</code> statements. You didn't decide that step three would be a database query
+            rather than a web search. You didn't write the retry. The model chose all of it, at runtime, and it
+            will choose differently tomorrow on the same input.
+        </p>
+        <p>
+            So what do you actually own? Five things — and everything in this article is about one of them.
+        </p>
+
+        <div class="entity-grid">
+            <div class="entity-card">
+                <div class="entity-icon">🧰</div>
+                <h4>The Tools</h4>
+                <p>The instruction set. The model can only do what you gave it a verb for.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🧠</div>
+                <h4>The State</h4>
+                <p>What's in context each turn, what gets compacted, what gets forgotten.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">⛔</div>
+                <h4>The Exit Doors</h4>
+                <p>Budgets and termination conditions. Enforced in code, never in prose.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🔐</div>
+                <h4>The Permissions</h4>
+                <p>What a successful run — or a hijacked one — is physically able to do.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🔭</div>
+                <h4>The Trace</h4>
+                <p>Whether you can reconstruct why it did what it did, after the fact.</p>
+            </div>
+        </div>
+
+        <p>
+            The useful reframe: <strong>you are not writing the program. You are designing the machine the program
+            runs on.</strong> You specify the instruction set, the memory model, the fuel, and the halting
+            conditions. Someone else — something else — writes the program, fresh, every run.
+        </p>
+        <p>
+            One practical consequence worth internalising early: your debugging question changes. It used to be
+            "why is this output wrong?" It is now "<em>why did it take this path?</em>" You cannot answer that
+            question from the final output. You can only answer it from a trace, which is why
+            <a href="#observability">section 9</a> is not the optional one it looks like.
+        </p>
+
+        <!-- ===== Section 3 ===== -->
+        <h2 id="anatomy">
+            <span class="section-number">03</span>
+            The Anatomy of an Agent Loop
+        </h2>
+
+        <p>
+            The loop itself is almost insultingly simple. Here it is, complete, with nothing that matters in it:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Pseudocode</span>
+            <code><span class="keyword">var</span> state = initialContext(task);
+
+<span class="keyword">while</span> (<span class="keyword">true</span>) {
+    <span class="keyword">var</span> response = model.call(state, tools);
+
+    <span class="keyword">if</span> (response.isFinal()) <span class="keyword">return</span> response.result();
+
+    <span class="keyword">var</span> results = execute(response.toolCalls());
+    state = state.append(response, results);
+}</code>
+        </div>
+
+        <p>
+            Eight lines, and every one of them is a lie by omission. There's no budget, so it runs forever. There's
+            no error handling, so one 503 kills the run. <code>state.append</code> grows without bound. There's no
+            progress check, so it can ping-pong between two tools until your bill arrives. And
+            <code>execute</code> will happily run whatever the model asked for.
+        </p>
+        <p>
+            The real loop is the same eight lines wrapped in guards. Here is what a production version actually
+            looks like in shape — the annotations are the article:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java · the shape that survives</span>
+            <code><span class="keyword">public</span> <span class="type">RunResult</span> run(<span class="type">Task</span> task, <span class="type">Budget</span> budget) {
+    <span class="keyword">var</span> state = initialContext(task);
+    <span class="keyword">var</span> progress = <span class="keyword">new</span> <span class="type">ProgressTracker</span>();   <span class="comment">// §5 — no-progress detection</span>
+
+    <span class="keyword">for</span> (<span class="type">int</span> turn = <span class="number">0</span>; turn &lt; budget.maxTurns(); turn++) {
+        budget.assertNotExhausted();               <span class="comment">// §5 — tokens, cost, wall clock</span>
+        state = contextPolicy.fit(state);          <span class="comment">// §6 — compaction happens HERE</span>
+
+        <span class="keyword">var</span> response = model.call(state, tools);   <span class="comment">// §7 — transport retries inside</span>
+        trace.recordTurn(turn, state, response);   <span class="comment">// §9 — before anything can throw</span>
+
+        <span class="keyword">if</span> (response.calledFinish()) {
+            <span class="keyword">return</span> RunResult.completed(response.result(), trace);
+        }
+
+        <span class="keyword">var</span> results = executor.execute(               <span class="comment">// §11 — gates live in here,</span>
+                response.toolCalls(), task.permissions());  <span class="comment">//      not in the prompt</span>
+
+        <span class="keyword">if</span> (progress.isStuck(response.toolCalls(), results)) {
+            <span class="keyword">return</span> RunResult.stalled(state, trace);  <span class="comment">// §5 — break the ping-pong</span>
+        }
+        state = state.append(response, results);
+    }
+    <span class="keyword">return</span> RunResult.budgetExhausted(state, trace); <span class="comment">// §5 — partial work, not an exception</span>
+}</code>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 1 — The Loop, With the Parts That Matter</div>
+            <svg viewBox="0 0 780 450" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL1" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL1" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="13" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowL1" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                    <marker id="exArrowGL1" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0d9488" stroke-width="1.6"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="450" fill="#fefefe" rx="12" />
+                <rect width="780" height="450" fill="url(#dotGridL1)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="12"
+                    text-anchor="middle">The cycle is trivial. Everything hard is bolted to the outside of it.</text>
+
+                <!-- Guards panel, top left -->
+                <rect x="24" y="58" width="150" height="116" rx="9" fill="#ffffff" stroke="#e11d48" stroke-width="1.6"
+                    stroke-dasharray="5,4" filter="url(#roughenL1)" />
+                <text x="99" y="80" fill="#e11d48" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">GUARDS · every turn</text>
+                <text x="38" y="102" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8">
+                    · budget check · §5</text>
+                <text x="38" y="120" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8">
+                    · no-progress check · §5</text>
+                <text x="38" y="138" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8">
+                    · context compaction · §6</text>
+                <text x="38" y="156" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8">
+                    · trace write · §9</text>
+
+                <!-- Model -->
+                <rect x="216" y="58" width="200" height="76" rx="9" fill="#eef2ff" stroke="#4338ca" stroke-width="1.8"
+                    filter="url(#roughenL1)" />
+                <text x="316" y="82" fill="#4338ca" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">MODEL DECIDES</text>
+                <text x="316" y="102" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8"
+                    text-anchor="middle">sees: full context + tool schemas</text>
+                <text x="316" y="120" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8"
+                    text-anchor="middle">emits: tool calls, or finish()</text>
+
+                <!-- model -> execute -->
+                <path d="M 420 96 L 484 96" fill="none" stroke="#333" stroke-width="1.6"
+                    marker-end="url(#exArrowL1)" />
+                <text x="452" y="86" fill="#86868b" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8"
+                    text-anchor="middle">tool calls</text>
+
+                <!-- Execute -->
+                <rect x="488" y="58" width="212" height="90" rx="9" fill="#fff7ed" stroke="#d97706" stroke-width="1.8"
+                    filter="url(#roughenL1)" />
+                <text x="594" y="80" fill="#d97706" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">YOUR CODE EXECUTES</text>
+                <text x="502" y="100" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8">
+                    permission gate · §11</text>
+                <text x="502" y="118" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8">
+                    transport retry · §7</text>
+                <text x="502" y="136" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8">
+                    result size cap · §4</text>
+
+                <!-- execute -> observation -->
+                <path d="M 594 152 L 594 196" fill="none" stroke="#333" stroke-width="1.6"
+                    marker-end="url(#exArrowL1)" />
+                <text x="604" y="178" fill="#86868b" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8">
+                    results</text>
+
+                <!-- Observation -->
+                <rect x="488" y="200" width="212" height="76" rx="9" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.8"
+                    filter="url(#roughenL1)" />
+                <text x="594" y="224" fill="#0d9488" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">OBSERVATION APPENDED</text>
+                <text x="594" y="244" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8"
+                    text-anchor="middle">context grows every single turn</text>
+                <text x="594" y="262" fill="#e11d48" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8"
+                    text-anchor="middle" font-weight="700">and this is untrusted input · §11</text>
+
+                <!-- observation -> model (return) -->
+                <path d="M 484 238 L 336 238 L 336 138" fill="none" stroke="#333" stroke-width="1.6"
+                    marker-end="url(#exArrowL1)" />
+                <text x="410" y="254" fill="#86868b" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8"
+                    text-anchor="middle">next turn · the whole context is re-sent · §10</text>
+
+                <!-- model -> exits -->
+                <path d="M 262 138 L 262 306" fill="none" stroke="#0d9488" stroke-width="1.7" stroke-dasharray="6,4"
+                    marker-end="url(#exArrowGL1)" />
+                <text x="254" y="212" fill="#0d9488" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8.5"
+                    text-anchor="end" font-weight="700">or the run ends</text>
+
+                <!-- Exit doors panel -->
+                <rect x="60" y="310" width="660" height="86" rx="9" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.8"
+                    filter="url(#roughenL1)" />
+                <text x="390" y="332" fill="#0d9488" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="10.5"
+                    text-anchor="middle" font-weight="700">FOUR EXIT DOORS — AND ONLY FOUR · §5</text>
+                <text x="86" y="358" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8.5">
+                    1 · finish() called</text>
+                <text x="256" y="358" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8.5">
+                    2 · budget exhausted</text>
+                <text x="436" y="358" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8.5">
+                    3 · stalled, no progress</text>
+                <text x="606" y="358" fill="#333" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8.5">
+                    4 · escalated to a human</text>
+                <text x="390" y="382" fill="#86868b" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="8"
+                    text-anchor="middle">doors 2, 3 and 4 return partial work with the reason — never an exception</text>
+
+                <text x="390" y="424" fill="#4338ca" font-family="&apos;Segoe Print&apos;, &apos;Comic Neue&apos;, cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">
+                    If a run can&apos;t leave through one of the four doors, it doesn&apos;t leave.
+                </text>
+            </svg>
+            <div class="diagram-caption">
+                The model owns the arrows. You own the boxes around them — and every guard is code, not wording.
+            </div>
+        </div>
+
+        <!-- ===== Section 4 ===== -->
+        <h2 id="tools">
+            <span class="section-number">04</span>
+            Tools Are an API Contract
+        </h2>
+
+        <p>
+            If you want one lever that improves an agent more than anything else, it is not the system prompt. It
+            is the tools. I have watched teams spend a week rewording instructions to stop an agent misbehaving,
+            when renaming two tools and fixing an error message would have done it in an afternoon.
+        </p>
+        <p>
+            The reason is simple once you see it: <strong>a tool definition is a prompt</strong>. The name, the
+            description, the parameter names, the parameter descriptions — all of it goes into the model's context
+            on every single turn. A vague tool description isn't a documentation problem. It's a prompt problem
+            that you're paying for repeatedly.
+        </p>
+
+        <h3>Design for the agent, not for your service</h3>
+        <p>
+            The most common mistake is wrapping an existing REST API one-endpoint-to-one-tool. Your API was
+            designed for a programmer who has read the docs, holds the domain model in their head, and can compose
+            six calls to get one answer. The agent has none of that and pays context for every option you expose.
+        </p>
+        <p>
+            Expose the <em>operations an agent needs</em>, not the surface you happen to have. Five well-named
+            tools beat forty faithful ones, every time.
+        </p>
+
+        <div class="prompt-pair">
+            <div class="prompt-card bad">
+                <span class="prompt-label">✕ Faithful to the API</span>
+                <pre>getUser(id)
+getUserOrders(userId)
+getOrder(id)
+getOrderItems(orderId)
+getProduct(id)
+getProductInventory(sku)
+… 34 more
+
+"Find why customer 8812's last
+order hasn't shipped"
+→ 7 chained calls, 5 chances
+  to pick wrong, 40 tool
+  schemas in context</pre>
+            </div>
+            <div class="prompt-card good">
+                <span class="prompt-label">✓ Designed for the agent</span>
+                <pre>findCustomer(query)
+  → id, name, tier, flags
+
+getOrderStatus(orderId)
+  → status, blockers[], timeline
+     (joins order + items +
+      inventory + shipment)
+
+searchOrders(customerId, filters)
+
+"Find why customer 8812's last
+order hasn't shipped"
+→ 2 calls, and the second one
+  already contains the answer</pre>
+            </div>
+        </div>
+        <p class="prompt-verdict">
+            The right question is never "what does my service expose?" It's "what would one tool call have to
+            return for this task to be one step shorter?"
+        </p>
+
+        <h3>Make errors instructive</h3>
+        <p>
+            Every tool error lands in the model's context and becomes the input to its next decision. That makes
+            error messages the highest-leverage strings in the entire system, and most of them are wasted.
+        </p>
+
+        <div class="prompt-pair">
+            <div class="prompt-card bad">
+                <span class="prompt-label">✕ Teaches nothing</span>
+                <pre>Error: 400 Bad Request
+
+Error: null
+
+java.lang.IllegalArgument
+Exception: invalid input
+
+Error: not found</pre>
+            </div>
+            <div class="prompt-card good">
+                <span class="prompt-label">✓ Teaches recovery</span>
+                <pre>Error: `limit` must be 1–100,
+got 500. Retry with limit=100
+and use `cursor` to page.
+
+Error: no customer matches
+"jon smith". Try findCustomer
+with a partial email or the
+account id instead.
+
+Error: `orderId` looks like a
+SKU (ORD- prefix expected, got
+SKU-441). Use searchOrders to
+find the order id first.</pre>
+            </div>
+        </div>
+        <p class="prompt-verdict">
+            Format that works: <strong>what failed · why · what to do differently.</strong> The third clause is the
+            one everybody omits and the only one that changes the next turn.
+        </p>
+
+        <h3>Control what a tool returns</h3>
+        <p>
+            Tool output is not a response to your program. It is <em>text you are injecting into the model's
+            context, permanently, for the rest of the run</em>. A tool that dumps 40,000 tokens of JSON hasn't
+            returned data; it has poisoned every subsequent turn with cost, latency, and noise.
+        </p>
+        <ul>
+            <li><strong>Cap and paginate.</strong> Return the first N with a cursor and a total count, not
+                everything.</li>
+            <li><strong>Return the answer, not the payload.</strong> If the agent always computes the same
+                summary from a blob, compute it in the tool.</li>
+            <li><strong>Return handles for big things.</strong> Write the 40k-token file to storage, return the
+                path plus a 200-token summary. The agent can read the parts it needs.</li>
+            <li><strong>Truncate loudly.</strong> "…showing 20 of 4,312 results, use cursor=abc for more" is
+                information. Silent truncation is a bug the model will confidently reason past.</li>
+        </ul>
+
+        <div class="code-block">
+            <span class="code-block-label">Java · a tool definition that carries its own weight</span>
+            <code><span class="type">@Tool</span>(
+    name = <span class="string">"get_order_status"</span>,
+    description = <span class="string">"""
+        Get the current fulfilment status of one order, including any
+        blockers preventing shipment (payment holds, stock shortfalls,
+        address problems). Use this before searchOrders when you already
+        have an order id — it returns the joined view in one call.
+        Returns at most 20 timeline events, newest first.
+        """</span>)
+<span class="keyword">public</span> <span class="type">OrderStatus</span> getOrderStatus(
+        <span class="type">@Param</span>(description = <span class="string">"Order id, format ORD-nnnnn. Not a SKU."</span>)
+        <span class="type">String</span> orderId) {
+
+    <span class="keyword">var</span> order = orders.find(orderId)
+        .orElseThrow(() -&gt; <span class="keyword">new</span> <span class="type">ToolException</span>(
+            <span class="comment">// what failed · why · what to do differently</span>
+            <span class="string">"No order '%s'. If this came from a customer message it may be "</span> +
+            <span class="string">"an order *number*; use searchOrders(customerId) to get the id."</span>
+                .formatted(orderId)));
+
+    <span class="keyword">return</span> OrderStatus.from(order).withTimelineCapped(<span class="number">20</span>);  <span class="comment">// bounded output</span>
+}</code>
+        </div>
+
+        <div class="callout callout-rule">
+            <div class="callout-label">Two properties worth engineering for</div>
+            <p>
+                <strong>Idempotent where possible.</strong> Retries happen — from your transport layer, from the
+                model repeating itself, from a resumed run. A tool that's safe to call twice removes an entire
+                category of incident.
+            </p>
+            <p>
+                <strong>Destructive operations should be awkward.</strong> Not <code>update(entity, fields)</code>
+                where one field happens to be <code>deleted=true</code>, but a separate, narrowly-named
+                <code>archive_order</code> that the model has to deliberately choose — and that your executor can
+                gate on. Ambiguous verbs get invoked by accident.
+            </p>
+        </div>
+
+        <div class="deep-dive">
+            <button type="button" class="deep-dive-header" onclick="toggleDeepDive(this)" aria-expanded="false">
+                <h4>Deep Dive: Diagnosing "It Keeps Picking the Wrong Tool"</h4>
+                <div class="deep-dive-toggle" aria-hidden="true">+</div>
+            </button>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Consistent wrong-tool selection is almost never a reasoning failure. It's a specification
+                        failure, and there are four usual culprits — check them in this order:
+                    </p>
+                    <ul>
+                        <li>
+                            <strong>Overlapping descriptions.</strong> If <code>searchOrders</code> and
+                            <code>findOrders</code> both say "find orders matching criteria", you have not given
+                            the model a decision procedure — you've given it a coin. Every description should
+                            contain an explicit <em>"use this when… use X instead when…"</em> clause. That single
+                            sentence fixes more wrong-tool problems than anything else.
+                        </li>
+                        <li>
+                            <strong>The name lies.</strong> Models weight the name heavily. <code>getUser</code>
+                            that actually performs a fuzzy search across three systems will get called in
+                            situations where a fuzzy search is wrong. Name it what it does.
+                        </li>
+                        <li>
+                            <strong>Too many tools.</strong> Past roughly a couple of dozen, selection accuracy
+                            degrades noticeably and the schemas start crowding out actual context. If you're above
+                            that, either merge related operations behind one tool with a mode parameter, or split
+                            the agent so each sub-agent sees only its own subset.
+                        </li>
+                        <li>
+                            <strong>The right tool doesn't exist.</strong> The model picks the nearest available
+                            verb, because there is no "none of these" option. When you see persistent misuse of
+                            one tool, the finding is usually that the task needs a tool you haven't written.
+                        </li>
+                    </ul>
+                    <p>
+                        A cheap diagnostic: take twenty real traces, extract just the first tool call from each,
+                        and check them by hand. Wrong-tool problems show up in the first call far more often than
+                        in the fifth, and the pattern is usually obvious once the calls are side by side without
+                        the surrounding narrative.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Section 5 ===== -->
+        <h2 id="termination">
+            <span class="section-number">05</span>
+            Termination — The Hard Part
+        </h2>
+
+        <p>
+            Here's the thing nobody warns you about: <strong>knowing when to stop is harder than knowing what to
+            do.</strong> A model that is 90% good at choosing the next action can be nearly 0% good at recognising
+            that there is no useful next action — because "I should stop now" competes against a very strong prior
+            that a helpful assistant keeps helping.
+        </p>
+
+        <h3>Four legitimate exits, and only four</h3>
+        <p>
+            Every run must leave through one of these doors. If your loop has a path that doesn't, it has an
+            infinite path.
+        </p>
+        <ol>
+            <li><strong>Completed</strong> — the model called the finish tool with a result.</li>
+            <li><strong>Budget exhausted</strong> — turns, tokens, wall clock, or money hit a ceiling.</li>
+            <li><strong>Stalled</strong> — your progress detector concluded it's going in circles.</li>
+            <li><strong>Escalated</strong> — the agent hit something requiring a human, and said so.</li>
+        </ol>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 2 — Exit Doors and the Runaway Shapes They Catch</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL2" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL2" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="27" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowL2" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                    <marker id="exArrowRL2" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#e11d48" stroke-width="1.6"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGridL2)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">Three ways a loop refuses to end — and the guard that catches each</text>
+
+                <!-- Runaway shapes column -->
+                <text x="176" y="58" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">RUNAWAY SHAPES</text>
+
+                <!-- ping-pong -->
+                <rect x="30" y="72" width="292" height="86" rx="8" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"
+                    filter="url(#roughenL2)" />
+                <text x="44" y="92" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">1 · PING-PONG</text>
+                <text x="44" y="110" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    read_logs → check_config → read_logs →</text>
+                <text x="44" y="124" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    check_config → … same args, same results</text>
+                <text x="44" y="146" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    the state never changed, so neither does the plan</text>
+
+                <!-- stuck retry -->
+                <rect x="30" y="168" width="292" height="86" rx="8" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"
+                    filter="url(#roughenL2)" />
+                <text x="44" y="188" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">2 · STUCK RETRY</text>
+                <text x="44" y="206" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    same call → same error → "let me try again"</text>
+                <text x="44" y="220" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    → identical call → identical error → …</text>
+                <text x="44" y="242" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    the error message wasn't actionable · §4</text>
+
+                <!-- drift -->
+                <rect x="30" y="264" width="292" height="86" rx="8" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"
+                    filter="url(#roughenL2)" />
+                <text x="44" y="284" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">3 · POLISH DRIFT</text>
+                <text x="44" y="302" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    task is done at turn 4; turns 5–30 are</text>
+                <text x="44" y="316" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    "let me also improve…" nobody asked for</text>
+                <text x="44" y="338" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    no crisp definition of done · no finish tool</text>
+
+                <!-- arrows -->
+                <path d="M 326 115 L 380 115" fill="none" stroke="#e11d48" stroke-width="1.4"
+                    marker-end="url(#exArrowRL2)" />
+                <path d="M 326 211 L 380 211" fill="none" stroke="#e11d48" stroke-width="1.4"
+                    marker-end="url(#exArrowRL2)" />
+                <path d="M 326 307 L 380 307" fill="none" stroke="#e11d48" stroke-width="1.4"
+                    marker-end="url(#exArrowRL2)" />
+
+                <!-- Guards -->
+                <text x="580" y="58" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">THE GUARD THAT CATCHES IT</text>
+
+                <rect x="384" y="72" width="366" height="86" rx="8" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"
+                    filter="url(#roughenL2)" />
+                <text x="398" y="92" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">NO-PROGRESS DETECTOR</text>
+                <text x="398" y="110" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    hash(tool, args) each turn. Same hash + same result</text>
+                <text x="398" y="124" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    twice in a window → the world isn't changing → stall.</text>
+                <text x="398" y="146" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    exit door 3 · return partial work, not an exception</text>
+
+                <rect x="384" y="168" width="366" height="86" rx="8" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"
+                    filter="url(#roughenL2)" />
+                <text x="398" y="188" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">CONSECUTIVE-ERROR CAP</text>
+                <text x="398" y="206" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    Same semantic error 3× in a row → the model is not</text>
+                <text x="398" y="220" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    learning from it. Stop. Surface the error to a human.</text>
+                <text x="398" y="242" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    exit door 4 · §7</text>
+
+                <rect x="384" y="264" width="366" height="86" rx="8" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"
+                    filter="url(#roughenL2)" />
+                <text x="398" y="284" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">EXPLICIT finish() TOOL + HARD BUDGET</text>
+                <text x="398" y="302" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    Completion becomes a structured event you can detect,</text>
+                <text x="398" y="316" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    not a vibe. maxTurns is the backstop behind it.</text>
+                <text x="398" y="338" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    exit doors 1 and 2</text>
+
+                <text x="390" y="378" fill="#4338ca" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">
+                    Every guard here is your code. A prompt cannot enforce a budget it can't count.
+                </text>
+            </svg>
+            <div class="diagram-caption">
+                Runaways are not exotic. They're three shapes, and each has a cheap mechanical guard.
+            </div>
+        </div>
+
+        <h3>Make "done" a structured event</h3>
+        <p>
+            Do not ask the model to "stop when the task is complete" in prose and then try to detect completion by
+            inspecting its output. Give it a <code>finish</code> tool with required parameters, and treat calling
+            that tool as the only way to succeed.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java · the finish tool does real work</span>
+            <code><span class="type">@Tool</span>(name = <span class="string">"finish"</span>, description = <span class="string">"""
+    Call this when the task is complete. This is the ONLY way to finish.
+    You must provide evidence: which tool results support your answer.
+    If you cannot provide evidence, the task is not complete — keep working
+    or call escalate() instead.
+    """</span>)
+<span class="keyword">public</span> <span class="type">void</span> finish(
+        <span class="type">@Param</span>(description = <span class="string">"The answer, addressing the original task directly"</span>)
+        <span class="type">String</span> result,
+        <span class="type">@Param</span>(description = <span class="string">"Turn numbers whose tool results support this answer"</span>)
+        <span class="type">List</span>&lt;<span class="type">Integer</span>&gt; evidenceTurns,
+        <span class="type">@Param</span>(description = <span class="string">"Anything you could not verify, or empty"</span>)
+        <span class="type">List</span>&lt;<span class="type">String</span>&gt; caveats) { }</code>
+        </div>
+
+        <p>
+            The <code>evidenceTurns</code> parameter is doing something sneaky and valuable. Requiring the model to
+            <em>point at</em> the observations backing its answer makes the "declared success without doing the
+            work" failure much harder to reach — and when it does happen, you can detect it automatically, because
+            you can check whether those turns exist and whether they actually ran the tools claimed.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠ Budgets belong in code</div>
+            <p>
+                "Use at most 10 tool calls" in a system prompt is a suggestion, not a limit. The model cannot
+                reliably count its own turns, and by turn 15 that instruction is buried a long way up the context.
+                Every budget — turns, tokens, wall clock, currency — must be enforced by the caller, checked at
+                the top of every iteration, and hit hard.
+            </p>
+            <p>
+                And when a budget is hit: <strong>return partial work with the reason</strong>, not an exception.
+                A run that says "here's what I established in 20 turns, here's what I was about to check next" is
+                useful. A stack trace is not.
+            </p>
+        </div>
+
+        <!-- ===== Section 6 ===== -->
+        <h2 id="context">
+            <span class="section-number">06</span>
+            Context Across Turns
+        </h2>
+
+        <p>
+            In a single call, context engineering is about choosing what to include. In a loop it becomes something
+            harder, because the context is no longer yours alone — <strong>the agent appends to it every turn, and
+            it never appends less.</strong>
+        </p>
+        <p>
+            Turn 1 is a tidy 2,000 tokens. Turn 20, after nineteen tool results have landed, is 80,000. Three
+            things degrade simultaneously and they reinforce each other: cost per turn rises, latency per turn
+            rises, and the signal-to-noise ratio falls exactly as the task gets more complex. The agent gets slower
+            and dumber at the same time, which is why long runs so often feel like they lose the plot near the end.
+            They do.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 3 — Four Ways to Stop Context Eating the Run</div>
+            <svg viewBox="0 0 780 420" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL3" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL3" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="41" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowL3" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="420" fill="#fefefe" rx="12" />
+                <rect width="780" height="420" fill="url(#dotGridL3)" rx="12" />
+
+                <text x="390" y="26" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">Left to itself, context grows monotonically. These are your four levers.</text>
+
+                <!-- growth chart -->
+                <path d="M 60 190 L 60 48" stroke="#b0b0b0" stroke-width="1.2" />
+                <path d="M 60 190 L 330 190" stroke="#b0b0b0" stroke-width="1.2" />
+                <text x="54" y="54" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5"
+                    text-anchor="end">tokens</text>
+                <text x="332" y="202" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    turns</text>
+
+                <path d="M 60 184 L 330 60" fill="none" stroke="#e11d48" stroke-width="2" stroke-linecap="round" />
+                <text x="278" y="80" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    font-weight="700">unmanaged</text>
+
+                <path d="M 60 184 L 150 148 L 150 172 L 240 136 L 240 160 L 330 128" fill="none" stroke="#0d9488"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <text x="252" y="152" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    font-weight="700">compacted at checkpoints</text>
+
+                <text x="150" y="130" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7"
+                    text-anchor="middle">↓</text>
+                <text x="240" y="118" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7"
+                    text-anchor="middle">↓</text>
+
+                <!-- four levers -->
+                <rect x="376" y="44" width="376" height="70" rx="8" fill="#eef2ff" stroke="#4338ca" stroke-width="1.5"
+                    filter="url(#roughenL3)" />
+                <text x="390" y="64" fill="#4338ca" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    font-weight="700">1 · TRIM — drop the raw, keep the extract</text>
+                <text x="390" y="82" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    A 9,000-token file dump read once at turn 3 becomes</text>
+                <text x="390" y="96" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    "read config.yml — datasource block on line 42, pool size 5".</text>
+
+                <rect x="376" y="122" width="376" height="70" rx="8" fill="#eef2ff" stroke="#4338ca" stroke-width="1.5"
+                    filter="url(#roughenL3)" />
+                <text x="390" y="142" fill="#4338ca" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    font-weight="700">2 · COMPACT — summarise old turns at a checkpoint</text>
+                <text x="390" y="160" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    Replace turns 1–12 with a structured recap. Do it rarely and</text>
+                <text x="390" y="174" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    deliberately — every compaction costs you the cache prefix. §10</text>
+
+                <rect x="376" y="200" width="376" height="70" rx="8" fill="#fff7ed" stroke="#d97706" stroke-width="1.5"
+                    filter="url(#roughenL3)" />
+                <text x="390" y="220" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    font-weight="700">3 · EXTERNALISE — memory becomes a tool call</text>
+                <text x="390" y="238" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    Write findings to a scratchpad file; keep only the path in context.</text>
+                <text x="390" y="252" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    The agent re-reads on demand instead of carrying everything.</text>
+
+                <rect x="376" y="278" width="376" height="70" rx="8" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"
+                    filter="url(#roughenL3)" />
+                <text x="390" y="298" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    font-weight="700">4 · ISOLATE — spend the tokens somewhere else</text>
+                <text x="390" y="316" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    Sub-agent burns 100k searching, returns a 200-token answer.</text>
+                <text x="390" y="330" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    The parent's window never sees the 100k. §8</text>
+
+                <!-- never compact box -->
+                <rect x="30" y="228" width="316" height="122" rx="8" fill="#fff1f2" stroke="#e11d48" stroke-width="1.6"
+                    filter="url(#roughenL3)" />
+                <text x="188" y="250" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">NEVER COMPACT THESE AWAY</text>
+                <text x="44" y="272" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    · the original task, verbatim</text>
+                <text x="44" y="290" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    · hard constraints and permissions</text>
+                <text x="44" y="308" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    · the ledger of what was already TRIED AND FAILED</text>
+                <text x="44" y="330" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    lose the third and the agent cheerfully re-tries everything</text>
+
+                <text x="390" y="382" fill="#4338ca" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">
+                    The task statement should be the LAST thing in context every turn, not the first.
+                </text>
+                <text x="390" y="402" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">
+                    By turn 20 the original ask is 60,000 tokens upstream — exactly where attention is weakest.
+                </text>
+            </svg>
+            <div class="diagram-caption">
+                Compaction is lossy by definition. The skill is choosing what it's allowed to lose.
+            </div>
+        </div>
+
+        <h3>Re-pin the goal every turn</h3>
+        <p>
+            This is the cheapest high-value trick in the article and almost nobody does it. By turn 20, the
+            original task sits tens of thousands of tokens upstream — precisely the "lost in the middle" region
+            where instruction adherence is weakest. Meanwhile the most recent thing in context is a tool result
+            about a config file, which is not what you asked for.
+        </p>
+        <p>
+            So re-append it. A short block at the <em>end</em> of the context on every turn:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Appended after the latest observation, every turn</span>
+            <code>--- CURRENT TASK (unchanged since turn 0) ---
+Find why the nightly reconciliation job started failing on 6 Aug
+and report the root cause with evidence.
+
+Constraints: read-only access. Do not restart the job.
+Turn 14 of 25. Tokens used: 41k of 120k.
+
+Already tried and ruled out:
+  - config drift in reconciler.yml  (turn 3, identical to 5 Aug)
+  - upstream feed delay             (turn 7, feed landed 02:11, on time)
+  - schema change in ledger table   (turn 11, no migrations since 1 Aug)</code>
+        </div>
+
+        <p>
+            Three things are happening there. The goal is fresh. The budget is visible, which measurably reduces
+            dithering. And the tried-and-failed ledger is the single most effective anti-looping device I've
+            deployed — most ping-pong behaviour is just an agent that has forgotten it already went down that road.
+        </p>
+
+        <div class="callout callout-rule">
+            <div class="callout-label">Compact at checkpoints, not continuously</div>
+            <p>
+                It's tempting to trim a little every turn. Don't. Every edit to earlier context invalidates the
+                prompt cache from that point on, and in a loop the cache is carrying most of your cost — see
+                <a href="#economics">section 10</a>. Let context grow append-only, then compact in one deliberate
+                step when you cross a threshold. You pay one cache miss instead of twenty.
+            </p>
+        </div>
+
+        <!-- ===== Section 7 ===== -->
+        <h2 id="errors">
+            <span class="section-number">07</span>
+            Error Recovery &amp; Retry Semantics
+        </h2>
+
+        <p>
+            Recovery is where reliability actually comes from — remember the compounding arithmetic from section 1.
+            A loop that recovers from a bad step doesn't multiply that step's failure into the run.
+        </p>
+        <p>
+            The core distinction, and getting it wrong is the most common architectural mistake I see in agent
+            code: <strong>there are two kinds of error, and they belong to different layers.</strong>
+        </p>
+
+        <div class="table-scroll">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Transport errors</th>
+                        <th>Semantic errors</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Examples</strong></td>
+                        <td>Timeout, 503, connection reset, rate limit</td>
+                        <td>Bad arguments, not found, permission denied, validation failed</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Whose problem</strong></td>
+                        <td>Your infrastructure</td>
+                        <td>The model's decision</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Who handles it</strong></td>
+                        <td>Your code, silently</td>
+                        <td>The model, on the next turn</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Does the model see it?</strong></td>
+                        <td><span class="cross-icon">No</span> — retry with backoff, then fail the run</td>
+                        <td><span class="check-icon">Yes</span> — as an instructive message</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Failure to separate</strong></td>
+                        <td>Model "reasons about" a 503 and invents a workaround</td>
+                        <td>Your code swallows a bad-argument error, agent never learns</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p>
+            Surfacing a transport error to the model is genuinely harmful. It will try to be helpful about it —
+            switching tools, inventing a fallback, concluding the data doesn't exist — when the correct behaviour
+            was to wait 400ms and call the same thing again. Conversely, swallowing a semantic error and returning
+            an empty result teaches the agent that the thing it asked for isn't there, which sends it down a
+            completely wrong branch with total confidence.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java · the split, made explicit</span>
+            <code><span class="keyword">public</span> <span class="type">ToolResult</span> execute(<span class="type">ToolCall</span> call, <span class="type">Permissions</span> perms) {
+    <span class="keyword">try</span> {
+        <span class="comment">// Transport failures retry in here and never reach the model.</span>
+        <span class="keyword">return</span> ToolResult.ok(retrying(() -&gt; dispatch(call, perms)));
+
+    } <span class="keyword">catch</span> (<span class="type">ToolException</span> e) {
+        <span class="comment">// Semantic: the model asked for something wrong. It must see this,</span>
+        <span class="comment">// phrased so the next turn can do something different. §4</span>
+        <span class="keyword">return</span> ToolResult.error(e.guidanceForModel());
+
+    } <span class="keyword">catch</span> (<span class="type">TransportException</span> e) {
+        <span class="comment">// Retries already exhausted. This is not the model's problem to</span>
+        <span class="comment">// solve — fail the run cleanly rather than let it improvise.</span>
+        <span class="keyword">throw</span> <span class="keyword">new</span> <span class="type">RunFailedException</span>(<span class="string">"tool transport failed: "</span> + call.name(), e);
+    }
+}</code>
+        </div>
+
+        <h3>Cap the semantic retries too</h3>
+        <p>
+            Feeding an error back is only useful if the model learns from it. When the same semantic error occurs
+            three times consecutively, it isn't learning — either the error message isn't actionable, or the thing
+            the agent wants genuinely cannot be done. Both are conclusions, and both should end the run through
+            exit door 3 or 4 rather than burning the rest of the budget.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The error message is the fix</div>
+            <p>
+                When you find an agent stuck in a retry loop, the instinct is to add a rule to the system prompt.
+                Resist it. Go and read the actual error string the tool returned. Nine times in ten it says
+                something like <code>"Error: invalid request"</code>, and rewriting it to name the problem and the
+                remedy fixes the behaviour with no prompt change at all — and fixes it for every future agent that
+                touches that tool.
+            </p>
+        </div>
+
+        <!-- ===== Section 8 ===== -->
+        <h2 id="multi-agent">
+            <span class="section-number">08</span>
+            Multi-Agent: When It Helps, When It Doesn't
+        </h2>
+
+        <p>
+            Let me be blunt, because this is where a lot of effort gets wasted: <strong>most multi-agent systems
+            are worse than one well-equipped agent</strong>, and they're worse for a reason that sounds boring
+            until it bites you. Splitting work across agents means splitting context, and context is where the
+            agent's understanding lives.
+        </p>
+        <p>
+            When you hand a subtask to another agent, you are choosing to forget everything the parent knew that
+            didn't fit in the handoff message. You've introduced a serialisation boundary and, with it, an entire
+            distributed-systems failure surface — except the protocol is English and the nodes are non-deterministic.
+        </p>
+        <p>
+            So the question is never "does this task have three parts?" Tasks always have parts. The question is:
+            <strong>am I buying context isolation, parallelism, or a permission boundary?</strong> If the answer is
+            none of those three, use one agent.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 4 — Three Topologies and What Each One Buys</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL4" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL4" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="55" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowL4" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.6"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGridL4)" rx="12" />
+
+                <text x="390" y="26" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">Start at the left. Only move right when you can name what you're buying.</text>
+
+                <!-- 1. single -->
+                <text x="128" y="56" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">SINGLE AGENT + TOOLS</text>
+                <rect x="66" y="70" width="124" height="60" rx="9" fill="#eef2ff" stroke="#4338ca" stroke-width="1.7"
+                    filter="url(#roughenL4)" />
+                <text x="128" y="96" fill="#4338ca" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">agent</text>
+                <text x="128" y="114" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5"
+                    text-anchor="middle">one context, one plan</text>
+
+                <path d="M 90 132 L 78 158" fill="none" stroke="#333" stroke-width="1.3" marker-end="url(#exArrowL4)" />
+                <path d="M 128 132 L 128 158" fill="none" stroke="#333" stroke-width="1.3" marker-end="url(#exArrowL4)" />
+                <path d="M 166 132 L 178 158" fill="none" stroke="#333" stroke-width="1.3" marker-end="url(#exArrowL4)" />
+                <rect x="58" y="162" width="40" height="26" rx="5" fill="#fff7ed" stroke="#d97706" stroke-width="1.2" />
+                <rect x="108" y="162" width="40" height="26" rx="5" fill="#fff7ed" stroke="#d97706" stroke-width="1.2" />
+                <rect x="158" y="162" width="40" height="26" rx="5" fill="#fff7ed" stroke="#d97706" stroke-width="1.2" />
+                <text x="128" y="204" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5"
+                    text-anchor="middle">tools</text>
+
+                <rect x="40" y="222" width="176" height="94" rx="8" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.4"
+                    filter="url(#roughenL4)" />
+                <text x="128" y="242" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle" font-weight="700">THE DEFAULT</text>
+                <text x="52" y="260" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    + nothing is forgotten</text>
+                <text x="52" y="275" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    + one trace to read</text>
+                <text x="52" y="290" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    − context fills up · §6</text>
+                <text x="52" y="305" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    − everything is serial</text>
+
+                <!-- 2. orchestrator-worker -->
+                <text x="390" y="56" fill="#4338ca" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">ORCHESTRATOR + WORKERS</text>
+                <rect x="330" y="70" width="120" height="46" rx="9" fill="#eef2ff" stroke="#4338ca" stroke-width="1.7"
+                    filter="url(#roughenL4)" />
+                <text x="390" y="98" fill="#4338ca" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">orchestrator</text>
+
+                <path d="M 356 118 L 320 152" fill="none" stroke="#333" stroke-width="1.3" marker-end="url(#exArrowL4)" />
+                <path d="M 390 118 L 390 152" fill="none" stroke="#333" stroke-width="1.3" marker-end="url(#exArrowL4)" />
+                <path d="M 424 118 L 460 152" fill="none" stroke="#333" stroke-width="1.3" marker-end="url(#exArrowL4)" />
+
+                <rect x="278" y="156" width="76" height="48" rx="7" fill="#fff7ed" stroke="#d97706" stroke-width="1.4"
+                    filter="url(#roughenL4)" />
+                <text x="316" y="176" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle" font-weight="700">worker</text>
+                <text x="316" y="192" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7"
+                    text-anchor="middle">fresh 100k</text>
+
+                <rect x="352" y="156" width="76" height="48" rx="7" fill="#fff7ed" stroke="#d97706" stroke-width="1.4"
+                    filter="url(#roughenL4)" />
+                <text x="390" y="176" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle" font-weight="700">worker</text>
+                <text x="390" y="192" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7"
+                    text-anchor="middle">fresh 100k</text>
+
+                <rect x="426" y="156" width="76" height="48" rx="7" fill="#fff7ed" stroke="#d97706" stroke-width="1.4"
+                    filter="url(#roughenL4)" />
+                <text x="464" y="176" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle" font-weight="700">worker</text>
+                <text x="464" y="192" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7"
+                    text-anchor="middle">fresh 100k</text>
+
+                <path d="M 316 208 L 360 232" fill="none" stroke="#0d9488" stroke-width="1.4" />
+                <path d="M 390 208 L 390 230" fill="none" stroke="#0d9488" stroke-width="1.4" />
+                <path d="M 464 208 L 420 232" fill="none" stroke="#0d9488" stroke-width="1.4" />
+                <text x="390" y="248" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle" font-weight="700">only ~200 tokens each come back</text>
+
+                <rect x="298" y="258" width="184" height="58" rx="8" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.4"
+                    filter="url(#roughenL4)" />
+                <text x="390" y="276" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle" font-weight="700">BUYS: isolation + parallelism</text>
+                <text x="310" y="294" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    needs: genuinely independent subtasks</text>
+                <text x="310" y="308" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    costs: workers can't see each other</text>
+
+                <!-- 3. pipeline -->
+                <text x="650" y="56" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">SEQUENTIAL PIPELINE</text>
+
+                <rect x="566" y="70" width="72" height="40" rx="7" fill="#f5f5f7" stroke="#86868b" stroke-width="1.4"
+                    filter="url(#roughenL4)" />
+                <text x="602" y="94" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">agent A</text>
+                <path d="M 640 90 L 662 90" fill="none" stroke="#333" stroke-width="1.3" marker-end="url(#exArrowL4)" />
+                <rect x="666" y="70" width="72" height="40" rx="7" fill="#f5f5f7" stroke="#86868b" stroke-width="1.4"
+                    filter="url(#roughenL4)" />
+                <text x="702" y="94" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">agent B</text>
+                <path d="M 702 112 L 702 130 L 602 130 L 602 148" fill="none" stroke="#333" stroke-width="1.3"
+                    marker-end="url(#exArrowL4)" />
+                <rect x="566" y="152" width="72" height="40" rx="7" fill="#f5f5f7" stroke="#86868b" stroke-width="1.4"
+                    filter="url(#roughenL4)" />
+                <text x="602" y="176" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">agent C</text>
+
+                <rect x="546" y="212" width="204" height="104" rx="8" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"
+                    filter="url(#roughenL4)" />
+                <text x="648" y="232" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle" font-weight="700">USUALLY A MISTAKE</text>
+                <text x="558" y="250" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    Sequential + shared state means you've</text>
+                <text x="558" y="264" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    built a distributed system whose wire</text>
+                <text x="558" y="278" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    protocol is English.</text>
+                <text x="558" y="298" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5"
+                    font-weight="700">Every arrow is a lossy handoff.</text>
+                <text x="558" y="311" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5">
+                    One agent with three tools is better.</text>
+
+                <text x="390" y="352" fill="#4338ca" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">
+                    Add an agent to buy context isolation, parallelism, or a permission boundary.
+                </text>
+                <text x="390" y="374" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Never because the task description happened to have three bullet points.
+                </text>
+            </svg>
+            <div class="diagram-caption">
+                The middle topology earns its keep. The right-hand one is usually one agent wearing three hats.
+            </div>
+        </div>
+
+        <h3>The three legitimate reasons</h3>
+        <ul>
+            <li>
+                <strong>Context isolation.</strong> The strongest reason by far. A subtask needs to read 100,000
+                tokens of search results to produce a 200-token conclusion. Run it in a sub-agent with its own
+                window; the parent receives only the conclusion. You have bought the parent 99,800 tokens of
+                headroom for the price of one handoff.
+            </li>
+            <li>
+                <strong>Parallelism.</strong> Genuinely independent subtasks with no shared evolving state — check
+                these six services, summarise these ten documents. Wall-clock time drops by roughly the fan-out.
+                The word doing the work is <em>independent</em>: if worker B needs anything worker A discovered,
+                this isn't parallelism, it's a pipeline with extra steps.
+            </li>
+            <li>
+                <strong>Permission boundaries.</strong> A read-only researcher and a narrowly write-capable
+                executor. This is a real security win: the agent processing untrusted web content has no write
+                tools, so a successful injection there can't do anything.
+                <a href="#blast-radius">Section 11</a> leans on this.
+            </li>
+        </ul>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠ What the handoff costs</div>
+            <p>
+                A sub-agent result is a summary written by a system that couldn't ask a clarifying question. The
+                parent gets a confident paragraph and has no way to tell how much was inferred. Mitigate it by
+                making sub-agent results structured rather than prose — findings, confidence, what it could not
+                determine — and by giving the parent a way to ask for the raw material if it needs to.
+            </p>
+        </div>
+
+        <!-- ===== Section 9 ===== -->
+        <h2 id="observability">
+            <span class="section-number">09</span>
+            Observability for Loops
+        </h2>
+
+        <p>
+            You cannot debug what you cannot replay, and with agents you cannot replay from the output — the output
+            is one paragraph at the end of a thirty-step decision tree that will never be reproduced exactly. The
+            trace <em>is</em> the artefact. Build it first, not after the first incident.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 5 — What a Run Trace Has to Capture</div>
+            <svg viewBox="0 0 780 360" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL5" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL5" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="67" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.3" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="360" fill="#fefefe" rx="12" />
+                <rect width="780" height="360" fill="url(#dotGridL5)" rx="12" />
+
+                <text x="390" y="26" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">One span per run, one per turn, one per tool call</text>
+
+                <!-- run span -->
+                <rect x="40" y="46" width="700" height="34" rx="7" fill="#eef2ff" stroke="#4338ca" stroke-width="1.7"
+                    filter="url(#roughenL5)" />
+                <text x="54" y="67" fill="#4338ca" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    font-weight="700">RUN · task id · model+version · exit door · total turns / tokens / cost / wall clock</text>
+
+                <!-- turn 1 -->
+                <rect x="70" y="90" width="640" height="30" rx="6" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.4"
+                    filter="url(#roughenL5)" />
+                <text x="84" y="109" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    font-weight="700">TURN 1 · in 2,140 tok · out 180 tok · 1.9s · cache hit 0%</text>
+
+                <rect x="100" y="126" width="580" height="26" rx="5" fill="#fff7ed" stroke="#d97706" stroke-width="1.2"
+                    filter="url(#roughenL5)" />
+                <text x="112" y="143" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    TOOL read_logs(service="reconciler", since="2026-08-06") → ok · 4,102 tok · 240ms</text>
+
+                <!-- turn 2 -->
+                <rect x="70" y="162" width="640" height="30" rx="6" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.4"
+                    filter="url(#roughenL5)" />
+                <text x="84" y="181" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    font-weight="700">TURN 2 · in 6,420 tok · out 96 tok · 1.4s · cache hit 33%</text>
+
+                <rect x="100" y="198" width="284" height="26" rx="5" fill="#fff7ed" stroke="#d97706" stroke-width="1.2"
+                    filter="url(#roughenL5)" />
+                <text x="112" y="215" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    TOOL get_config(...) → ok · 890 tok</text>
+                <rect x="396" y="198" width="284" height="26" rx="5" fill="#fff7ed" stroke="#d97706" stroke-width="1.2"
+                    filter="url(#roughenL5)" />
+                <text x="408" y="215" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    TOOL check_feed(...) → ok · 310 tok</text>
+                <text x="540" y="240" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5"
+                    text-anchor="middle" font-weight="700">↑ parallel in one turn — free latency win · §10</text>
+
+                <!-- turn 3 error -->
+                <rect x="70" y="252" width="640" height="30" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.4"
+                    filter="url(#roughenL5)" />
+                <text x="84" y="271" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    font-weight="700">TURN 3 · SEMANTIC ERROR surfaced to model · consecutive-error count = 1</text>
+
+                <rect x="100" y="288" width="580" height="26" rx="5" fill="#ffffff" stroke="#e11d48" stroke-width="1.2"
+                    stroke-dasharray="4,3" filter="url(#roughenL5)" />
+                <text x="112" y="305" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    TOOL get_order_status("SKU-441") → error: looks like a SKU, expected ORD- prefix</text>
+
+                <text x="390" y="340" fill="#4338ca" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">
+                    Write the turn span BEFORE executing tools — otherwise crashes lose the turn that caused them.
+                </text>
+            </svg>
+            <div class="diagram-caption">
+                Token counts and cache-hit rates per turn are not vanity metrics; they're how you find the run
+                that quietly cost forty times the others.
+            </div>
+        </div>
+
+        <h3>The minimum you'll wish you had logged</h3>
+        <ul>
+            <li><strong>Per run:</strong> task, model and version, which exit door it left through, total turns,
+                tokens, cost, wall clock, final result.</li>
+            <li><strong>Per turn:</strong> turn index, input and output token counts, cache hit rate, latency, the
+                tool calls with their arguments, and the finish reason.</li>
+            <li><strong>Per tool call:</strong> name, arguments, outcome, result size in tokens, duration, and
+                whether it was gated or auto-approved.</li>
+        </ul>
+        <p>
+            Truncate large payloads in the span itself but store the full version behind a pointer. You will need
+            the full version roughly once a month, and on that day nothing else will do.
+        </p>
+
+        <h3>The artefact that actually gets used</h3>
+        <p>
+            Metrics tell you a run went wrong. Only a <strong>rendered transcript</strong> — the whole run, top to
+            bottom, prompt then call then result then call, readable like a conversation — tells you why. Build a
+            page that renders one. You will read hundreds of them, and every hour spent making that view pleasant
+            pays back within a week.
+        </p>
+
+        <div class="callout callout-rule">
+            <div class="callout-label">Sampled production runs are your eval set</div>
+            <p>
+                Store a small random sample of full production runs — even 0.1% — plus every run that ended in an
+                exit door other than "completed". That corpus becomes the evaluation set for the agent, and unlike
+                a hand-written one it is made of things that actually happened.
+            </p>
+            <p>
+                One important difference from single-call evaluation: for agents you score the
+                <strong>trajectory</strong>, not just the answer. Did it pick the right first tool? How many turns?
+                Did it recover from the error or spiral? Two runs can produce the same correct answer and only one
+                of them is a system you want.
+            </p>
+        </div>
+
+        <!-- ===== Section 10 ===== -->
+        <h2 id="economics">
+            <span class="section-number">10</span>
+            Cost &amp; Latency Blowups
+        </h2>
+
+        <p>
+            Here is the single most under-appreciated fact about agent loops, and the reason so many pilots come in
+            wildly over budget: <strong>a 20-turn run does not cost 20× a single call. It costs roughly 200×.</strong>
+        </p>
+        <p>
+            The mechanism is simple once stated. The entire context is re-sent on every turn. If context grows
+            roughly linearly — turn 1 sends 1 unit, turn 2 sends 2, turn <em>n</em> sends <em>n</em> — then total
+            input across the run is the sum of the series, which is <em>n(n+1)/2</em>. Quadratic. Twenty turns of a
+            linearly growing context sends about 210 turn-one-equivalents of input, not 20.
+        </p>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">O(n²)</div>
+                <div class="stat-desc">Input Tokens Over n Turns</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">~210×</div>
+                <div class="stat-desc">Turn-1 Equivalents at 20 Turns</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">Serial</div>
+                <div class="stat-desc">Turns — Latency Simply Adds Up</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">Per Run</div>
+                <div class="stat-desc">The Only Unit Worth Budgeting</div>
+            </div>
+        </div>
+
+        <p>
+            Two consequences follow immediately. First, <strong>measure per run, never per call</strong> — a
+            dashboard of average cost-per-model-call will look completely healthy while your agent product loses
+            money on every ticket. Second, anything that slows context growth pays back quadratically, which is
+            what makes <a href="#context">section 6</a> an economic argument as much as a quality one.
+        </p>
+
+        <h3>Prompt caching is worth more in a loop than anywhere else</h3>
+        <p>
+            This is the redeeming detail, and it's genuinely elegant. In an append-only loop, every turn's prompt
+            is <em>the previous turn's entire prompt plus a bit more</em>. That means the cacheable prefix is
+            almost the whole request, and it grows along with the conversation. Loops are close to the ideal case
+            for prompt caching — but only if you leave the earlier turns alone.
+        </p>
+
+        <div class="prompt-pair">
+            <div class="prompt-card bad">
+                <span class="prompt-label">✕ Cache-destroying</span>
+                <pre>Every turn:
+  · re-summarise turns 1..n-3
+  · re-sort the tool schemas
+  · stamp "turn 14 of 25, 14:22:01"
+    at the TOP of the context
+
+Result: the prefix differs from
+byte ~400 onward, every turn.
+Cache hit rate ≈ 0%.
+You pay full price 20 times.</pre>
+            </div>
+            <div class="prompt-card good">
+                <span class="prompt-label">✓ Cache-preserving</span>
+                <pre>Every turn:
+  · append only — never edit
+    what's already there
+  · stable tool schemas, stable
+    order
+  · budget/goal block appended
+    at the END (see §6)
+
+Compaction happens at ONE
+checkpoint, not continuously:
+one cache miss, then the new
+prefix is stable again.</pre>
+            </div>
+        </div>
+        <p class="prompt-verdict">
+            The tension with section 6 is real and resolves cleanly: grow append-only, compact rarely and
+            deliberately, and put the volatile "turn 14 of 25" block at the end where it costs you nothing.
+        </p>
+
+        <h3>Latency is a sum, so buy back turns</h3>
+        <p>
+            Turns are strictly serial — turn <em>n</em>+1 can't start until the tools from turn <em>n</em> return.
+            Total latency is the sum, and users feel every second of it. The levers, in rough order of payoff:
+        </p>
+        <ul>
+            <li>
+                <strong>Parallel tool calls within a turn.</strong> If the model requests three independent
+                lookups, execute them concurrently. This is close to free and most implementations don't do it.
+            </li>
+            <li>
+                <strong>Fewer, richer tools.</strong> Every tool that answers a question in one call instead of
+                three removes two full round trips of model latency, not just tool latency. This is the real
+                payoff of <a href="#tools">section 4</a>.
+            </li>
+            <li>
+                <strong>Right-size the model per turn.</strong> Much of a run is mechanical — deciding to read the
+                next file, extracting a field. A smaller, faster model handles those well; escalate to the large
+                one for planning and final synthesis. Your trace data tells you which turns are which.
+            </li>
+            <li>
+                <strong>Stream progress, not just the answer.</strong> Doesn't reduce latency, transforms the
+                experience of it. "Reading logs… checking config…" makes a 40-second run feel like work rather
+                than a hang.
+            </li>
+        </ul>
+
+        <!-- ===== Section 11 ===== -->
+        <h2 id="blast-radius">
+            <span class="section-number">11</span>
+            Blast Radius &amp; Human Gates
+        </h2>
+
+        <p>
+            Everything the prompt-engineering article said about
+            <a href="prompt-engineering-for-developers.html#injection">prompt injection</a> is still true here, and
+            then two things make it materially worse.
+        </p>
+        <p>
+            First: <strong>every tool result is untrusted input</strong>. A web page the agent fetched, a file it
+            read, an issue body, a log line, another service's error message — all of it lands in context and all
+            of it can carry text shaped like instructions. In a single call you controlled what went in. In a loop,
+            the agent decides what goes in, and it does so repeatedly, based on content it just read.
+        </p>
+        <p>
+            Second: <strong>the agent acts</strong>. A hijacked single call produces bad text you can review. A
+            hijacked loop makes tool calls.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠ The combination that actually hurts</div>
+            <p>
+                Three capabilities are each individually fine and catastrophic together — often called the
+                <strong>lethal trifecta</strong>: access to private data, exposure to untrusted content, and the
+                ability to communicate externally. Any two of those is a manageable system. All three is a
+                data-exfiltration machine waiting for the right web page.
+            </p>
+            <p>
+                When you audit an agent, audit for this shape first. An agent that reads your internal wiki
+                (private data), fetches linked pages (untrusted content), and can post to a webhook (external
+                communication) does not need to be "tricked" in any sophisticated way. It just needs to read the
+                wrong page once.
+            </p>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 6 — The Capability Ladder</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL6" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL6" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="79" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowL6" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGridL6)" rx="12" />
+
+                <text x="390" y="26" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">The gate lives in the executor, never in the system prompt</text>
+
+                <!-- Tier 0 -->
+                <rect x="60" y="46" width="600" height="58" rx="8" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.6"
+                    filter="url(#roughenL6)" />
+                <text x="76" y="68" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    font-weight="700">TIER 0 · READ-ONLY, NO EGRESS</text>
+                <text x="76" y="86" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    search, read a file, query a replica · fully autonomous · no approval, no audit burden</text>
+                <text x="676" y="80" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">let it run</text>
+
+                <!-- Tier 1 -->
+                <rect x="60" y="112" width="600" height="58" rx="8" fill="#eef2ff" stroke="#4338ca" stroke-width="1.6"
+                    filter="url(#roughenL6)" />
+                <text x="76" y="134" fill="#4338ca" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    font-weight="700">TIER 1 · REVERSIBLE WRITES</text>
+                <text x="76" y="152" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    post a comment, open a draft PR, write to a scratch branch · autonomous + audit log</text>
+                <text x="676" y="146" fill="#4338ca" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">log it</text>
+
+                <!-- Tier 2 -->
+                <rect x="60" y="178" width="600" height="58" rx="8" fill="#fff7ed" stroke="#d97706" stroke-width="1.6"
+                    filter="url(#roughenL6)" />
+                <text x="76" y="200" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    font-weight="700">TIER 2 · BOUNDED &amp; CONSEQUENTIAL</text>
+                <text x="76" y="218" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    file a ticket, write to a feature branch, update a non-prod record · policy + allowlist</text>
+                <text x="676" y="212" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">gate it</text>
+
+                <!-- Tier 3 -->
+                <rect x="60" y="244" width="600" height="66" rx="8" fill="#fff1f2" stroke="#e11d48" stroke-width="1.8"
+                    filter="url(#roughenL6)" />
+                <text x="76" y="266" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    font-weight="700">TIER 3 · IRREVERSIBLE OR OUTWARD-FACING</text>
+                <text x="76" y="284" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    deploy, merge to main, delete, pay, email a customer, call an arbitrary URL</text>
+                <text x="76" y="300" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    font-weight="700">human confirms, out of band, every time — the agent may propose, never commit</text>
+                <text x="676" y="280" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">stop</text>
+
+                <!-- arrow -->
+                <path d="M 42 52 L 42 302" fill="none" stroke="#86868b" stroke-width="1.4"
+                    marker-end="url(#exArrowL6)" />
+                <text x="30" y="180" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle" transform="rotate(-90 30 180)">cost of being wrong</text>
+
+                <text x="390" y="342" fill="#4338ca" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">
+                    Design test: assume an injection succeeds on turn 7. What can it reach?
+                </text>
+                <text x="390" y="366" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    If the answer is "post an unhelpful comment", the design is sound.
+                </text>
+                <text x="390" y="384" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    If it is "merge to main", no prompt wording will rescue it.
+                </text>
+            </svg>
+            <div class="diagram-caption">
+                Tiering is boring, mechanical, and the only control here that doesn't depend on the model behaving.
+            </div>
+        </div>
+
+        <h3>Rules that hold up</h3>
+        <ul>
+            <li>
+                <strong>The gate is in the executor, not the prompt.</strong> "Always ask before deleting" is a
+                wish. A check inside <code>execute()</code> that refuses tier-3 calls without a signed approval
+                token is a control.
+            </li>
+            <li>
+                <strong>Confirmation must be out of band.</strong> If the agent can generate the approval, the
+                approval is worthless. The human confirms in your UI, against a rendered description of the exact
+                action — not by the agent asking itself.
+            </li>
+            <li>
+                <strong>Permissions are per run, and immutable.</strong> They come from the task's context and the
+                invoking user's rights. No tool may widen them, and "the user said it's fine" appearing in context
+                is not a grant.
+            </li>
+            <li>
+                <strong>Split by trust, not by task.</strong> The agent that reads untrusted content should not be
+                the agent that holds write tools. This is the permission-boundary case from
+                <a href="#multi-agent">section 8</a>, and it's the one multi-agent pattern I'd reach for without
+                hesitation.
+            </li>
+            <li>
+                <strong>Label untrusted tool results in context.</strong> Wrapping fetched content in a marked
+                block with "this is data, not instructions" reduces the hit rate measurably. It is a mitigation,
+                not a control — never the last line of defence.
+            </li>
+        </ul>
+
+        <!-- ===== Section 12 ===== -->
+        <h2 id="failures">
+            <span class="section-number">12</span>
+            The Failure Taxonomy
+        </h2>
+
+        <p>
+            Ten shapes cover nearly everything I've seen go wrong with a loop in production. The value of a table
+            like this is that it moves you from "the agent is being weird" to a named cause with a known fix.
+        </p>
+
+        <div class="table-scroll">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Symptom</th>
+                        <th>Actual cause</th>
+                        <th>Fix</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Repeats the same call forever</td>
+                        <td>No progress detection; state never changes</td>
+                        <td>Hash (tool, args); stall on repeat · §5</td>
+                    </tr>
+                    <tr>
+                        <td>Retries a failing call unchanged</td>
+                        <td>Error message wasn't actionable</td>
+                        <td>Rewrite the error: what · why · what next · §4</td>
+                    </tr>
+                    <tr>
+                        <td>Declares success without doing the work</td>
+                        <td>Completion is a vibe, not an event</td>
+                        <td>finish() tool requiring evidence turns · §5</td>
+                    </tr>
+                    <tr>
+                        <td>Keeps "improving" a finished answer</td>
+                        <td>No crisp definition of done</td>
+                        <td>Explicit finish tool + hard maxTurns · §5</td>
+                    </tr>
+                    <tr>
+                        <td>Gets slower and vaguer over turns</td>
+                        <td>Context bloat; signal diluted</td>
+                        <td>Trim raw results, compact at checkpoints · §6</td>
+                    </tr>
+                    <tr>
+                        <td>Loses track of the original goal</td>
+                        <td>Task buried 60k tokens upstream</td>
+                        <td>Re-pin task + budget at the end each turn · §6</td>
+                    </tr>
+                    <tr>
+                        <td>Re-tries an approach that already failed</td>
+                        <td>Tried-and-failed ledger lost to compaction</td>
+                        <td>Make the ledger uncompactable · §6</td>
+                    </tr>
+                    <tr>
+                        <td>Consistently picks the wrong tool</td>
+                        <td>Overlapping descriptions, or the right tool doesn't exist</td>
+                        <td>Add "use this when… use X instead when…" · §4</td>
+                    </tr>
+                    <tr>
+                        <td>One tool call ruins the whole run</td>
+                        <td>Unbounded result dumped into context</td>
+                        <td>Cap, paginate, or return a handle · §4</td>
+                    </tr>
+                    <tr>
+                        <td>Costs 10× the estimate</td>
+                        <td>Quadratic context growth, measured per call</td>
+                        <td>Budget and alert per <em>run</em> · §10</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Notice the pattern</div>
+            <p>
+                Eight of those ten fixes are ordinary code — a hash check, a cap, a rewritten string, a
+                re-appended block. Only two involve changing what you say to the model. That ratio holds up in
+                practice, and it's the most useful thing to know when an agent starts misbehaving: your instinct
+                will be to edit the prompt, and it is usually the wrong instinct.
+            </p>
+        </div>
+
+        <!-- ===== Section 13 ===== -->
+        <h2 id="what-good-looks-like">
+            <span class="section-number">13</span>
+            What Good Looks Like — Levels &amp; Cheatsheet
+        </h2>
+
+        <div class="level-grid reveal-element">
+            <div class="level-card mid">
+                <div class="level-label">Working knowledge</div>
+                <h4>Can Build a Loop</h4>
+                <p>
+                    Wires up tool calling and a turn cap. Understands that the model chooses the sequence. Reads
+                    transcripts when something goes wrong. Knows tool results land in context.
+                </p>
+                <span class="level-focus">Mechanics</span>
+            </div>
+            <div class="level-card senior">
+                <div class="level-label">Senior</div>
+                <h4>Builds Loops That Terminate</h4>
+                <p>
+                    Four exit doors, all enforced in code. Tools designed for the agent, with instructive errors
+                    and bounded output. Transport and semantic errors separated. Context compaction at
+                    checkpoints. Traces good enough to debug from.
+                </p>
+                <span class="level-focus">Reliability</span>
+            </div>
+            <div class="level-card staff">
+                <div class="level-label">Staff+</div>
+                <h4>Owns the Blast Radius</h4>
+                <p>
+                    Capability tiers with gates in the executor. Trust-split topology, and can say why each agent
+                    exists. Budgets and alerts per run, with the quadratic understood. Sampled production runs
+                    feeding trajectory-level evals. Can argue for a plain workflow instead of an agent.
+                </p>
+                <span class="level-focus">Judgement</span>
+            </div>
+        </div>
+
+        <h3>The cheatsheet</h3>
+
+        <div class="code-block">
+            <span class="code-block-label">Checklist</span>
+            <code>BEFORE THE FIRST RUN
+  □ Every tool has a "use this when… use X instead when…" clause
+  □ Every tool error says: what failed · why · what to do differently
+  □ Every tool result is size-capped, paginated, or a handle
+  □ Destructive operations are separate, narrowly-named tools
+  □ A finish() tool exists and requires evidence
+  □ maxTurns, maxTokens, maxCost, maxWallClock — all enforced in code
+
+EVERY TURN
+  □ Budget checked at the top
+  □ No-progress detector fed (tool + args + result hash)
+  □ Task, constraints, budget and tried-and-failed re-pinned at the END
+  □ Turn span written BEFORE tools execute
+  □ Context append-only — compaction only at checkpoints
+
+BEFORE IT TOUCHES ANYTHING REAL
+  □ Every tool assigned a capability tier
+  □ Tier 3 gated in the executor, confirmed out of band
+  □ Permissions fixed per run; no tool can widen them
+  □ Lethal trifecta check: private data + untrusted content + egress?
+  □ Untrusted tool results delimited and labelled
+  □ Assume an injection lands on turn 7 — write down what it reaches
+
+ONCE IT'S LIVE
+  □ Cost and latency alerted per RUN, not per call
+  □ Exit-door distribution tracked (completed / budget / stalled / escalated)
+  □ Non-completed runs and a 0.1% sample stored as the eval set
+  □ Trajectory scored, not just the final answer</code>
+        </div>
+
+        <div class="callout callout-rule">
+            <div class="callout-label">The question to ask before building any of this</div>
+            <p>
+                Does this task actually need a loop? If the sequence of steps is known in advance, write the
+                sequence — a workflow with a model call at three fixed points is cheaper, faster, testable, and
+                debuggable, and it cannot spin. Agents earn their complexity when the path genuinely can't be known
+                until you're partway down it. That's a real category, and it's smaller than the enthusiasm suggests.
+            </p>
+        </div>
+
+        <!-- ===== Section 14 ===== -->
+        <h2 id="summary">
+            <span class="section-number">14</span>
+            Summary
+        </h2>
+
+        <p>
+            Five things, if you keep nothing else.
+        </p>
+        <ul>
+            <li><strong>Recovery beats accuracy.</strong> Per-step reliability compounds, so the loop that notices
+                and corrects a bad step beats the loop with slightly better steps.</li>
+            <li><strong>Tools are the real lever.</strong> Names, descriptions, error strings and result sizes
+                move agent behaviour further than prompt wording, and they fix it for every future agent too.</li>
+            <li><strong>Termination is code.</strong> Four exit doors, all enforced by the caller. A prompt cannot
+                count its own turns or hold a budget.</li>
+            <li><strong>Context is a managed resource.</strong> It grows every turn, costs quadratically, and
+                dilutes the goal. Re-pin the task at the end, compact at checkpoints, never lose the
+                tried-and-failed ledger.</li>
+            <li><strong>Design for the injection that succeeds.</strong> Tier your capabilities and gate them in
+                the executor, so a hijacked run is boring rather than expensive.</li>
+        </ul>
+        <p>
+            The honest summary of the whole discipline: putting a model in a loop hands it your control flow, and
+            almost everything in this article is about taking back the parts you should never have given away —
+            the budget, the exits, the permissions, and the record of what happened. The model gets to choose the
+            path. You still own the map, the fuel, and the walls.
+        </p>
+
+        <div class="callout" style="margin-top: 2rem;">
+            <div class="callout-label">Related</div>
+            <p>
+                This piece assumes the single-call foundations covered in
+                <a href="prompt-engineering-for-developers.html">Prompt Engineering for Developers</a> — the
+                prompt-as-function-call model, structured output, context engineering, evaluation, and the trust
+                boundary. Read that one first if any of those are unfamiliar; the loop makes every one of them
+                harder.
+            </p>
+        </div>
+    </article>
+
+    <!-- Author Footer -->
+    <div class="article-footer">
+        <div class="author-card reveal-element">
+            <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar" />
+            <div class="author-info">
+                <h4>Ajay Kotnala</h4>
+                <div class="author-role">Senior Solution Architect</div>
+                <p>
+                    15+ years designing cloud-native, event-driven architectures at enterprise scale. Passionate
+                    about system design, API-first thinking, and making complex systems feel simple.
+                </p>
+            </div>
+        </div>
+        <div class="back-links-row">
+            <a href="../index.html" class="back-link">← Back to Portfolio</a>
+            <a href="./index.html" class="back-link">Back to AI Articles →</a>
+        </div>
+    </div>
+
+    <!-- Global Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-bottom">
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" rel="noopener">LinkedIn</a>
+                    <a href="https://github.com/ajaykotnala" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" rel="noopener">Medium</a>
+                </div>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll Progress Bar
+        window.addEventListener("scroll", () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+            document.getElementById("progressBar").style.width = progress + "%";
+        });
+
+        // Intersection Observer for scroll-reveal animations
+        document.addEventListener("DOMContentLoaded", () => {
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add("active");
+                        }
+                    });
+                },
+                { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
+            );
+
+            document.querySelectorAll(".reveal-element").forEach((el) => observer.observe(el));
+        });
+
+        // Deep Dive Accordion — toggles the wrapper, which is what the CSS keys off
+        function toggleDeepDive(headerEl) {
+            const panel = headerEl.closest(".deep-dive");
+            const isOpen = panel.classList.toggle("open");
+            headerEl.setAttribute("aria-expanded", String(isOpen));
+        }
+
+        // Smooth scroll for TOC and anchor links
+        document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
+            anchor.addEventListener("click", function (e) {
+                const targetId = this.getAttribute("href");
+                if (targetId.length > 1) {
+                    const target = document.querySelector(targetId);
+                    if (target) {
+                        e.preventDefault();
+                        const offset = 110;
+                        const targetPosition = target.getBoundingClientRect().top + window.scrollY - offset;
+                        window.scrollTo({ top: targetPosition, behavior: "smooth" });
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

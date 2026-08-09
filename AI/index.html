@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI &amp; LLM Engineering - Ajay Kotnala</title>
+    <meta name="description"
+        content="Practitioner notes on building with large language models — prompt engineering, context engineering, structured output, evaluation, and the failure modes that only show up in production." />
+
+    <!-- Google Fonts for SF Pro substitutes (Inter) and code (Source Code Pro) -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <style>
+        /* Modern CSS Custom Properties representing Apple Design Tokens */
+        :root {
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-tile-1: #272729;
+            --color-surface-tile-2: #2a2a2c;
+            --color-on-primary: #ffffff;
+
+            /* AI section accents */
+            --ai-violet: #7c3aed;
+            --ai-teal: #0d9488;
+            --ai-gradient: linear-gradient(135deg, #7c3aed 0%, #0d9488 100%);
+
+            --font-headline: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-body: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+            --spacing-section: 80px;
+
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            --shadow-product: 0 20px 40px rgba(0, 0, 0, 0.12);
+            --shadow-product-hover: 0 30px 60px rgba(0, 0, 0, 0.18);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+            font-family: var(--font-body);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* Navigation */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            letter-spacing: -0.02em;
+        }
+
+        .global-nav-links {
+            display: flex;
+            list-style: none;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .global-nav-links a {
+            color: #cccccc;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 400;
+            letter-spacing: -0.12px;
+            transition: color 0.2s ease;
+        }
+
+        .global-nav-links a:hover {
+            color: #ffffff;
+        }
+
+        /* Hero Section */
+        .hero {
+            padding-top: calc(var(--spacing-section) + 44px);
+            padding-bottom: var(--spacing-section);
+            min-height: 50vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--color-canvas);
+        }
+
+        .hero-content {
+            text-align: center;
+            max-width: 800px;
+        }
+
+        .hero-title {
+            font-family: var(--font-headline);
+            font-size: 48px;
+            font-weight: 700;
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .hero-title .gradient-text {
+            background: var(--ai-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-family: var(--font-headline);
+            font-size: 24px;
+            font-weight: 400;
+            line-height: 1.25;
+            letter-spacing: -0.01em;
+            color: var(--ai-violet);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .hero-description {
+            font-size: 17px;
+            font-weight: 400;
+            line-height: 1.47;
+            letter-spacing: -0.374px;
+            color: var(--color-body-muted);
+            max-width: 620px;
+            margin: 0 auto;
+        }
+
+        /* Topic strip */
+        .topic-strip {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin-top: var(--spacing-lg);
+        }
+
+        .topic-chip {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--color-ink-muted-80);
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-pill);
+            padding: 5px 14px;
+        }
+
+        /* Articles Section */
+        .articles-section {
+            padding: var(--spacing-section) 2rem;
+            background: var(--color-canvas-parchment);
+        }
+
+        .section-title {
+            font-family: var(--font-headline);
+            font-size: 40px;
+            font-weight: 600;
+            line-height: 1.1;
+            letter-spacing: -0.015em;
+            color: var(--color-ink);
+            text-align: center;
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .section-lede {
+            text-align: center;
+            font-size: 17px;
+            color: var(--color-body-muted);
+            max-width: 620px;
+            margin: 0 auto var(--spacing-xxl);
+            line-height: 1.5;
+        }
+
+        .articles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: var(--spacing-lg);
+        }
+
+        .article-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: var(--spacing-lg);
+            transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+            position: relative;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .article-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.04);
+            border-color: rgba(0, 0, 0, 0.12);
+        }
+
+        /* Cards sit in a row, so the meta strip is pinned to the bottom
+           and every card in the row ends at the same line. */
+        .article-card {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .article-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--ai-gradient);
+        }
+
+        .article-card.loop::before {
+            background: linear-gradient(135deg, #4338ca 0%, #d97706 100%);
+        }
+
+        .article-card.loop .article-badge {
+            background: linear-gradient(135deg, #4338ca 0%, #d97706 100%);
+        }
+
+        .article-card.loop .read-link,
+        .article-card.loop .card-highlights li::before {
+            color: #4338ca;
+        }
+
+        .article-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            background: var(--ai-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 10px;
+        }
+
+        .article-title {
+            font-family: var(--font-headline);
+            font-size: 26px;
+            font-weight: 600;
+            color: var(--color-ink);
+            margin-bottom: 12px;
+            letter-spacing: -0.015em;
+            line-height: 1.2;
+        }
+
+        .article-description {
+            font-size: 15px;
+            line-height: 1.6;
+            color: var(--color-body-muted);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: var(--spacing-md);
+            border-top: 1px solid var(--color-divider-soft);
+            gap: var(--spacing-sm);
+            flex-wrap: wrap;
+            margin-top: auto;
+        }
+
+        .article-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .tech-tag {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            padding: 4px 10px;
+            border-radius: var(--rounded-sm);
+            font-size: 12px;
+            font-family: var(--font-mono);
+        }
+
+        .read-link {
+            font-size: 14px;
+            font-family: var(--font-mono);
+            color: var(--ai-violet);
+            opacity: 0.9;
+            white-space: nowrap;
+        }
+
+        .article-card:hover .read-link {
+            text-decoration: underline;
+        }
+
+        /* Highlights list inside featured card */
+        .card-highlights {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: var(--spacing-md) var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .card-highlights h4 {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--color-body-muted);
+            margin-bottom: 12px;
+        }
+
+        .card-highlights ul {
+            list-style: none;
+        }
+
+        .card-highlights li {
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--color-ink-muted-80);
+            padding-left: 20px;
+            position: relative;
+            margin-bottom: 9px;
+        }
+
+        .card-highlights li:last-child {
+            margin-bottom: 0;
+        }
+
+        .card-highlights li::before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: var(--ai-teal);
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+            text-align: center;
+        }
+
+        .footer-link {
+            color: var(--color-primary);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+
+        .footer-link:hover {
+            color: var(--color-primary-focus);
+            text-decoration: underline;
+        }
+
+        @media (max-width: 833px) {
+            .global-nav-links {
+                display: none;
+            }
+
+            .hero-title {
+                font-size: 36px;
+            }
+
+            .articles-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .article-title {
+                font-size: 22px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Global Navigation Bar -->
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="../index.html" class="global-nav-logo">← Back to Portfolio</a>
+            <ul class="global-nav-links">
+                <li><a href="../index.html#knowledge-hub">Knowledge Hub</a></li>
+                <li><a href="../index.html#about">About</a></li>
+                <li><a href="../index.html#contact">Contact</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container hero-content">
+            <h1 class="hero-title">AI &amp; <span class="gradient-text">LLM Engineering</span></h1>
+            <div class="hero-subtitle">Building With Language Models</div>
+            <p class="hero-description">
+                Practitioner notes on shipping software that uses large language models — how to write prompts that
+                behave, how to engineer the context around them, how to test them like code, and how they fail once
+                real users and untrusted input arrive.
+            </p>
+            <div class="topic-strip">
+                <span class="topic-chip">Prompt Engineering</span>
+                <span class="topic-chip">Context Engineering</span>
+                <span class="topic-chip">Agentic Loops</span>
+                <span class="topic-chip">Tool Design</span>
+                <span class="topic-chip">Evaluation</span>
+                <span class="topic-chip">Prompt Injection</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Articles Section -->
+    <section class="articles-section">
+        <div class="container">
+            <h2 class="section-title">AI Engineering Articles</h2>
+            <p class="section-lede">
+                Long-form, diagram-led guides written for engineers who have to put this in production — not demos.
+            </p>
+            <div class="articles-grid">
+                <!-- Prompt Engineering -->
+                <a href="prompt-engineering-for-developers.html" class="article-card">
+                    <span class="article-badge">Prompt Engineering</span>
+                    <h3 class="article-title">Prompt Engineering for Developers</h3>
+                    <p class="article-description">
+                        A prompt is the only interface you have to a model that cannot see your repository,
+                        remember your last conversation, or ask you a clarifying question. The full working
+                        guide: the ten techniques that carry the weight, the ones that quietly aged out, and the
+                        four things that separate a clever prompt from a production one.
+                    </p>
+                    <div class="card-highlights">
+                        <h4>Inside the article</h4>
+                        <ul>
+                            <li>The prompt-as-function-call mental model</li>
+                            <li>Ten techniques, with poor vs. good pairs</li>
+                            <li>Structured output instead of parsing prose</li>
+                            <li>Context engineering &amp; prompt caching</li>
+                            <li>Evaluating prompts like code, in CI</li>
+                            <li>Prompt injection and the trust boundary</li>
+                        </ul>
+                    </div>
+                    <div class="article-meta">
+                        <div class="article-tags">
+                            <span class="tech-tag">LLM</span>
+                            <span class="tech-tag">Java</span>
+                            <span class="tech-tag">28 min read</span>
+                        </div>
+                        <span class="read-link">Read article →</span>
+                    </div>
+                </a>
+
+                <!-- Agentic Loop Engineering -->
+                <a href="agentic-loop-engineering.html" class="article-card loop">
+                    <span class="article-badge">Agentic Systems</span>
+                    <h3 class="article-title">Agentic Loop Engineering</h3>
+                    <p class="article-description">
+                        A single call is a function you can review before it runs. A loop is a program that
+                        decides its own control flow — and then takes actions in your systems. What you actually
+                        own once a model goes inside a <code>while</code>: the tools, the budget, the exit doors,
+                        the context, and the blast radius.
+                    </p>
+                    <div class="card-highlights">
+                        <h4>Inside the article</h4>
+                        <ul>
+                            <li>Why per-step reliability compounds brutally</li>
+                            <li>Tool design as the real quality lever</li>
+                            <li>Termination: four exit doors, enforced in code</li>
+                            <li>Context compaction &amp; the O(n²) cost of loops</li>
+                            <li>When multi-agent helps — and when it doesn't</li>
+                            <li>Capability tiers and the lethal trifecta</li>
+                        </ul>
+                    </div>
+                    <div class="article-meta">
+                        <div class="article-tags">
+                            <span class="tech-tag">Agents</span>
+                            <span class="tech-tag">Tool Use</span>
+                            <span class="tech-tag">30 min read</span>
+                        </div>
+                        <span class="read-link">Read article →</span>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <a href="../index.html#knowledge-hub" class="footer-link">← Back to Knowledge Hub</a>
+        </div>
+    </footer>
+</body>
+
+</html>

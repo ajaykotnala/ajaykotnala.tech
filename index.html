@@ -1460,9 +1460,37 @@
         <div class="container">
             <h2 class="section-title">Knowledge Hub</h2>
             <p style="text-align: center; font-size: 17px; color: var(--color-body-muted); max-width: 600px; margin: 0 auto var(--spacing-xl);">
-                Explore my technical deep dives, system design analyses, and design pattern implementations.
+                Explore my AI engineering notes, technical deep dives, system design analyses, and design pattern implementations.
             </p>
-            <div class="knowledge-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--spacing-lg);">
+            <div class="knowledge-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: var(--spacing-lg);">
+                <!-- AI & LLM Engineering Card -->
+                <a href="AI/index.html" class="knowledge-card store-utility-card" style="text-decoration: none; color: inherit; display: block; transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: var(--spacing-md);">
+                        <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #7c3aed 0%, #0d9488 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="2.5"></circle>
+                                <circle cx="5" cy="6" r="2"></circle>
+                                <circle cx="19" cy="6" r="2"></circle>
+                                <circle cx="5" cy="18" r="2"></circle>
+                                <circle cx="19" cy="18" r="2"></circle>
+                                <path d="M6.7 7.2 10 10.4M17.3 7.2 14 10.4M6.7 16.8 10 13.6M17.3 16.8 14 13.6"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 style="font-family: var(--font-headline); font-size: 21px; font-weight: 600; color: var(--color-ink); margin: 0; letter-spacing: -0.01em;">AI &amp; LLM Engineering</h3>
+                            <span style="font-size: 13px; color: var(--color-primary); font-family: var(--font-mono);">2 Articles</span>
+                        </div>
+                    </div>
+                    <p style="font-size: 15px; line-height: 1.5; color: var(--color-body-muted); margin-bottom: var(--spacing-md);">
+                        Practitioner notes on building with large language models — prompt and context engineering, agentic loops, tool design, evaluation, and production failure modes.
+                    </p>
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                        <span style="background: var(--color-canvas-parchment); color: var(--color-ink-muted-80); padding: 4px 10px; border-radius: var(--rounded-sm); font-size: 12px; font-family: var(--font-mono);">Prompt Engineering</span>
+                        <span style="background: var(--color-canvas-parchment); color: var(--color-ink-muted-80); padding: 4px 10px; border-radius: var(--rounded-sm); font-size: 12px; font-family: var(--font-mono);">Agentic Loops</span>
+                        <span style="background: var(--color-canvas-parchment); color: var(--color-ink-muted-80); padding: 4px 10px; border-radius: var(--rounded-sm); font-size: 12px; font-family: var(--font-mono);">Evaluation</span>
+                    </div>
+                </a>
+
                 <!-- Design Patterns Card -->
                 <a href="DesignPatterns/index.html" class="knowledge-card store-utility-card" style="text-decoration: none; color: inherit; display: block; transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);">
                     <div style="display: flex; align-items: center; gap: 12px; margin-bottom: var(--spacing-md);">
