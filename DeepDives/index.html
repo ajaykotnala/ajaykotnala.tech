@@ -239,6 +239,10 @@
             background: linear-gradient(135deg, #e34d0d 0%, #ba733c 100%);
         }
 
+        .article-badge.ratelimit {
+            background: linear-gradient(135deg, #6d28d9 0%, #db2777 100%);
+        }
+
         .article-title {
             font-family: var(--font-headline);
             font-size: 21px;
@@ -404,6 +408,26 @@
                             <span class="tech-tag">Distributed System</span>
                             <span class="tech-tag">Thundering Herds</span>
                             <span class="tech-tag">20 min read</span>
+                        </div>
+                        <span class="read-link">Read article →</span>
+                    </div>
+                </a>
+
+                <!-- rate limiting system design -->
+                <a href="api-rate-limiting-system-design.html" class="article-card">
+                    <span class="article-badge ratelimit">Rate Limiting</span>
+                    <h3 class="article-title">Rate Limiting Is Not One Problem</h3>
+                    <p class="article-description">
+                        Uber burned a year's AI budget in four months, and none of the five textbook algorithms
+                        would have stopped it — because requests per second was never the unit that mattered. What
+                        you count, where the counter lives, and what breaks when it does.
+                    </p>
+                    <div class="article-meta">
+                        <div class="article-tags">
+                            <span class="tech-tag">Rate Limiting</span>
+                            <span class="tech-tag">Token Bucket</span>
+                            <span class="tech-tag">Cost-Aware</span>
+                            <span class="tech-tag">32 min read</span>
                         </div>
                         <span class="read-link">Read article →</span>
                     </div>

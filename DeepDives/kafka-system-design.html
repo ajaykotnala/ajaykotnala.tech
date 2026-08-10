@@ -3444,8 +3444,10 @@
 
         // Deep Dive Accordion
         function toggleDeepDive(id) {
-            const el = document.getElementById(id);
-            el.classList.toggle("open");
+            const content = document.getElementById(id);
+            if (!content) return;
+            const panel = content.closest(".deep-dive");
+            if (panel) panel.classList.toggle("open");
         }
 
         // Smooth scroll for TOC and anchor links

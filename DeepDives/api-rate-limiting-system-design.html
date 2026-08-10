@@ -1,0 +1,4053 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>API Rate Limiting — System Design Deep Dive | Ajay Kotnala</title>
+    <meta name="description"
+        content="A system design deep dive into API rate limiting — what you count, the six algorithms, cost-aware limiting for LLM APIs, distributed coordination, atomicity, fail-open vs fail-closed, retry storms, and the budget enforcement problem that rate limiting cannot solve. Written by Ajay Kotnala, Senior Solution Architect." />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+        rel="stylesheet" />
+    <style>
+        /* ===== Apple Design Tokens (matching index.html) ===== */
+        :root {
+            /* Color System */
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-pearl: #fafafc;
+            --color-on-primary: #ffffff;
+
+            /* Rate limiting brand accents (kept for article identity) */
+            --rl-violet: #6d28d9;
+            --rl-pink: #db2777;
+            --rl-gradient: linear-gradient(135deg, #6d28d9, #db2777);
+
+            /* Typography */
+            --font-headline:
+                system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+                sans-serif;
+            --font-body: "Lora", Georgia, "Times New Roman", serif;
+            --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+
+            /* Border Radii */
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            /* Shadows */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06);
+
+            /* Article */
+            --article-width: 680px;
+        }
+
+        /* ===== Reset ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* ===== 1. Global Navigation Bar (Apple Thin Black Bar) ===== */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            font-family: var(--font-ui);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .global-nav-logo .logo-icon {
+            font-size: 16px;
+            color: var(--color-primary-on-dark);
+        }
+
+        .global-nav-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .global-nav-actions a {
+            color: #cccccc;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .global-nav-actions a:hover {
+            color: #ffffff;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ===== 2. Sub Navigation Bar (Frosted Sticky) ===== */
+        .sub-nav-frosted {
+            position: sticky;
+            top: 44px;
+            left: 0;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 999;
+            border-bottom: 1px solid var(--color-divider-soft);
+        }
+
+        .sub-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .sub-nav-title {
+            font-family: var(--font-headline);
+            font-size: 21px;
+            font-weight: 600;
+            color: var(--color-ink);
+            text-decoration: none;
+            letter-spacing: 0.231px;
+        }
+
+        .sub-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sub-nav-link {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink);
+            text-decoration: none;
+            opacity: 0.8;
+            transition:
+                color 0.2s ease,
+                opacity 0.2s ease;
+        }
+
+        .sub-nav-link:hover {
+            color: var(--color-primary);
+            opacity: 1;
+        }
+
+        .sub-nav-button {
+            background: var(--color-primary);
+            color: var(--color-on-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            border-radius: var(--rounded-pill);
+            text-decoration: none;
+            transition:
+                background 0.2s ease,
+                transform 0.1s ease;
+        }
+
+        .sub-nav-button:hover {
+            background: var(--color-primary-focus);
+        }
+
+        .sub-nav-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== Scroll Progress Bar ===== */
+        .progress-bar {
+            position: fixed;
+            top: 44px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--rl-gradient);
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        /* ===== Article Hero ===== */
+        .article-hero {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(96px + 4rem) 2rem 4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .article-hero-inner {
+            max-width: var(--article-width);
+            width: 100%;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .article-category {
+            display: inline-block;
+            padding: 4px 14px;
+            background: var(--rl-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .article-date {
+            color: var(--color-body-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .article-read-time {
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 13px;
+        }
+
+        .article-read-time::before {
+            content: "·";
+            margin-right: 0.5rem;
+            color: var(--color-body-muted);
+        }
+
+        .article-hero h1 {
+            font-family: var(--font-headline);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+        }
+
+        .article-hero h1 .gradient-text {
+            background: var(--rl-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .article-hero-desc {
+            font-family: var(--font-body);
+            font-size: 20px;
+            color: var(--color-body-muted);
+            line-height: 1.7;
+            max-width: 600px;
+        }
+
+        .article-hero-desc em {
+            font-style: italic;
+            color: var(--color-ink-muted-80);
+        }
+
+        /* ===== Author Bar (Medium-style) ===== */
+        .author-bar {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--color-divider-soft);
+            margin-bottom: 2.5rem;
+        }
+
+        .author-bar-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-bar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .author-bar-name {
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-ink);
+        }
+
+        .author-bar-meta {
+            font-family: var(--font-ui);
+            font-size: 13px;
+            color: var(--color-body-muted);
+        }
+
+        /* ===== Table of Contents ===== */
+        .toc-wrapper {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .toc {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem 2.5rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--rl-gradient);
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toc h3 {
+            font-size: 12px;
+            margin-bottom: 1.2rem;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            padding: 0.35rem 0;
+        }
+
+        .toc li a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 15px;
+            transition:
+                color 0.2s ease,
+                padding-left 0.2s ease;
+            display: inline-block;
+        }
+
+        .toc li a::before {
+            content: counter(toc-counter, decimal-leading-zero) ".";
+            color: var(--rl-violet);
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-right: 0.8rem;
+            font-size: 13px;
+        }
+
+        .toc li a:hover {
+            color: var(--color-primary);
+            padding-left: 4px;
+        }
+
+        /* ===== Article Body (Medium-friendly) ===== */
+        .article-body {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .article-body h2 {
+            font-family: var(--font-headline);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-top: 3.5rem;
+            margin-bottom: 1.2rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .article-body h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .article-body h2 .section-number {
+            color: var(--rl-violet);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .article-body h3 {
+            font-family: var(--font-headline);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-top: 2.5rem;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .article-body p {
+            font-family: var(--font-body);
+            font-size: 19px;
+            line-height: 1.85;
+            color: var(--color-ink-muted-80);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.003em;
+        }
+
+        .article-body ul,
+        .article-body ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .article-body li {
+            font-family: var(--font-body);
+            color: var(--color-ink-muted-80);
+            margin-bottom: 0.6rem;
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .article-body strong {
+            color: var(--color-ink);
+            font-weight: 600;
+        }
+
+        .article-body em {
+            color: var(--color-ink-muted-80);
+            font-style: italic;
+        }
+
+        .article-body code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--color-canvas-parchment);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--rl-violet);
+        }
+
+        /* ===== Callout Boxes ===== */
+        .callout {
+            background: var(--color-canvas-parchment);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 0 var(--rounded-sm) var(--rounded-sm) 0;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .callout.callout-warning {
+            border-left-color: var(--rl-pink);
+            background: #fdf2f8;
+        }
+
+        .callout.callout-insight {
+            border-left-color: var(--rl-violet);
+            background: #f5f3ff;
+        }
+
+        .callout .callout-label {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.6rem;
+            color: var(--color-primary);
+        }
+
+        .callout.callout-warning .callout-label {
+            color: var(--rl-pink);
+        }
+
+        .callout.callout-insight .callout-label {
+            color: var(--rl-violet);
+        }
+
+        .callout p {
+            margin-bottom: 0;
+            font-size: 16px !important;
+            line-height: 1.7 !important;
+        }
+
+        .callout p + p {
+            margin-top: 0.8rem;
+        }
+
+        /* ===== Code Blocks (GitHub Light Theme) ===== */
+        .code-block {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-hairline);
+            border-radius: var(--rounded-sm);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0 2rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--color-hairline);
+            color: var(--color-body-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 0 var(--rounded-sm) 0 var(--rounded-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--color-ink);
+            line-height: 1.7;
+            white-space: pre;
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .code-block .keyword {
+            color: #cf222e;
+        }
+
+        .code-block .string {
+            color: #0a3069;
+        }
+
+        .code-block .comment {
+            color: #6e7781;
+            font-style: italic;
+        }
+
+        .code-block .type {
+            color: #953800;
+        }
+
+        .code-block .number {
+            color: #0550ae;
+        }
+
+        /* ===== Entity Cards ===== */
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .entity-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 1.8rem;
+            text-align: center;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .entity-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .entity-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .entity-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .entity-card p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ===== API Endpoint Cards ===== */
+        .api-endpoint {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0;
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .api-endpoint:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .api-method-url {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .api-method {
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .api-method.post {
+            background: #fdf2f8;
+            color: var(--rl-pink);
+        }
+
+        .api-method.get {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .api-url {
+            font-family: var(--font-mono);
+            color: var(--color-ink);
+            font-size: 15px;
+        }
+
+        .api-desc {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 15px !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        /* ===== Excalidraw-Style SVG Architecture Diagrams ===== */
+        .diagram-container {
+            margin: 3rem -2rem;
+            padding: 2rem;
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            overflow-x: auto;
+        }
+
+        .diagram-title {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-body-muted);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .diagram-caption {
+            text-align: center;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            margin-top: 1rem;
+            font-style: italic;
+        }
+
+        .diagram-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== Comparison Table ===== */
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 2rem 0;
+            border-radius: var(--rounded-md);
+            overflow: hidden;
+            border: 1px solid var(--color-divider-soft);
+            font-family: var(--font-ui);
+        }
+
+        .comparison-table th {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            background: var(--color-canvas);
+            color: var(--color-ink-muted-80);
+            font-size: 15px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--color-divider-soft);
+            line-height: 1.5;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--color-canvas-parchment);
+        }
+
+        .table-scroll {
+            overflow-x: auto;
+            margin: 2rem -0.5rem;
+            padding: 0 0.5rem;
+        }
+
+        .table-scroll .comparison-table {
+            min-width: 620px;
+            margin: 0;
+        }
+
+        .check-icon {
+            color: var(--color-primary);
+            font-weight: 700;
+        }
+
+        .cross-icon {
+            color: var(--color-body-muted);
+            font-weight: 700;
+        }
+
+        /* ===== Scale Numbers ===== */
+        .scale-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .scale-stat {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 1.2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition:
+                box-shadow 0.3s ease,
+                transform 0.3s ease;
+        }
+
+        .scale-stat:hover {
+            box-shadow: var(--shadow-card);
+            transform: translateY(-2px);
+        }
+
+        .scale-stat::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--rl-gradient);
+        }
+
+        .scale-stat .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            background: var(--rl-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-headline);
+        }
+
+        .scale-stat .stat-desc {
+            color: var(--color-body-muted);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ===== Deep Dive Accordion ===== */
+        .deep-dive {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            margin: 1.5rem 0;
+            overflow: hidden;
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .deep-dive:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .deep-dive-header {
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            transition: background 0.2s ease;
+        }
+
+        .deep-dive-header:hover {
+            background: var(--color-canvas-parchment);
+        }
+
+        .deep-dive-header h4 {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--color-ink);
+        }
+
+        .deep-dive-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-canvas-parchment);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            transition:
+                transform 0.3s ease,
+                background 0.3s ease;
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        .deep-dive.open .deep-dive-toggle {
+            transform: rotate(45deg);
+            background: #f5f3ff;
+            color: var(--rl-violet);
+        }
+
+        .deep-dive-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .deep-dive.open .deep-dive-content {
+            max-height: 3000px;
+        }
+
+        .deep-dive-content-inner {
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .deep-dive-content-inner p,
+        .deep-dive-content-inner li {
+            font-size: 16px !important;
+        }
+
+        /* ===== Level Expectation Cards ===== */
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .level-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .level-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .level-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .level-card.mid::before {
+            background: var(--color-primary);
+        }
+
+        .level-card.senior::before {
+            background: var(--rl-pink);
+        }
+
+        .level-card.staff::before {
+            background: var(--rl-violet);
+        }
+
+        .level-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .level-card.mid .level-label {
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-label {
+            color: var(--rl-pink);
+        }
+
+        .level-card.staff .level-label {
+            color: var(--rl-violet);
+        }
+
+        .level-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .level-card p {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .level-focus {
+            display: inline-block;
+            margin-top: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .level-card.mid .level-focus {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-focus {
+            background: #fdf2f8;
+            color: var(--rl-pink);
+        }
+
+        .level-card.staff .level-focus {
+            background: #f5f3ff;
+            color: var(--rl-violet);
+        }
+
+        /* ===== Author Footer Card ===== */
+        .article-footer {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+        }
+
+        .author-card {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-canvas);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            flex-shrink: 0;
+        }
+
+        .author-info h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: var(--color-ink);
+        }
+
+        .author-info .author-role {
+            color: var(--color-primary);
+            font-size: 14px;
+            font-family: var(--font-ui);
+            margin-bottom: 0.6rem;
+        }
+
+        .author-info p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+        }
+
+        .back-links-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-weight: 500;
+            font-size: 15px;
+            transition: gap 0.2s ease;
+        }
+
+        .back-link:hover {
+            gap: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* ===== Global Footer ===== */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .footer-container {
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .social-links a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        .fine-print {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink-muted-48);
+            letter-spacing: -0.12px;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 833px) {
+            .sub-nav-container {
+                padding: 0 16px;
+            }
+
+            .article-hero {
+                padding: calc(96px + 2rem) 1.5rem 3rem;
+            }
+
+            .article-body {
+                padding: 0 1.5rem 4rem;
+            }
+
+            .toc-wrapper {
+                padding: 0 1.5rem;
+            }
+
+            .entity-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .scale-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .level-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .author-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .diagram-container {
+                margin: 2rem -1rem;
+                padding: 1.5rem 1rem;
+            }
+
+            .comparison-table {
+                font-size: 14px;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 8px 10px;
+            }
+
+            .author-bar {
+                padding: 0 1.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .scale-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        /* ===== Animations ===== */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(24px);
+            transition:
+                opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1),
+                transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .reveal-element.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- 1. Global Navigation Bar -->
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="index.html" class="global-nav-logo">
+                <span class="logo-icon">[AK]</span>
+                Ajay Kotnala
+            </a>
+            <div class="global-nav-actions">
+                <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
+                    </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" aria-label="LinkedIn">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. Sticky Sub Navigation Bar -->
+    <nav class="sub-nav-frosted">
+        <div class="sub-nav-container">
+            <a href="#" class="sub-nav-title">Rate Limiting</a>
+            <div class="sub-nav-right">
+                <a href="./index.html" class="sub-nav-link">Deep Dives Articles</a>
+                <a href="../index.html" class="sub-nav-link">Portfolio</a>
+                <a href="../index.html#contact" class="sub-nav-button">Get in Touch</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Article Hero -->
+    <section class="article-hero">
+        <div class="article-hero-inner reveal-element active">
+            <div class="article-meta">
+                <span class="article-category">API &amp; Systems</span>
+                <span class="article-date">August 2026</span>
+                <span class="article-read-time">32 min read</span>
+            </div>
+            <h1>
+                Rate Limiting Is Not
+                <span class="gradient-text">One Problem</span>
+            </h1>
+            <p class="article-hero-desc">
+                Uber gave five thousand engineers an AI coding tool and burned a year's budget in four months. Not
+                one of the five algorithms in every rate-limiting article would have stopped it — because
+                <em>requests per second</em>
+                was never the unit that mattered. Here's the full map: what you count, how you count it, where the
+                counter lives, and what breaks when it does.
+            </p>
+        </div>
+    </section>
+
+    <!-- Author Bar (Medium-style) -->
+    <div class="author-bar reveal-element active">
+        <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar" />
+        <div class="author-bar-info">
+            <div class="author-bar-name">Ajay Kotnala</div>
+            <div class="author-bar-meta">Senior Solution Architect · August 2026 · 32 min read</div>
+        </div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc-wrapper">
+        <div class="toc reveal-element">
+            <h3>In This Article</h3>
+            <ol>
+                <li><a href="#the-6000-night">The $6,000 Night — and Why It Wasn't a Rate Limit Problem</a></li>
+                <li><a href="#vocabulary">Five Controls That All Get Called "Rate Limiting"</a></li>
+                <li><a href="#what-you-count">The First Real Decision — What You're Counting Against</a></li>
+                <li><a href="#algorithms">Six Ways to Say No</a></li>
+                <li><a href="#cost-aware">Cost-Aware Limiting — When Requests Aren't Equal</a></li>
+                <li><a href="#where-it-lives">Where the Limiter Lives</a></li>
+                <li><a href="#distributed">Going Distributed — The Part Everyone Waves At</a></li>
+                <li><a href="#atomicity">Atomicity — Where Limiters Actually Break</a></li>
+                <li><a href="#failure-modes">Failure Modes — When the Limiter Is the Outage</a></li>
+                <li><a href="#client-contract">The Client's Half of the Contract</a></li>
+                <li><a href="#budgets">Budget Enforcement — The Problem Uber Actually Had</a></li>
+                <li><a href="#back-of-envelope">Back-of-Envelope: Sizing a Rate Limiter</a></li>
+                <li><a href="#rollout">Rollout, Tuning &amp; Observability</a></li>
+                <li><a href="#interview-essentials">Interview Essentials &amp; Level Expectations</a></li>
+                <li><a href="#summary">Summary</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Article Body -->
+    <article class="article-body">
+        <!-- Section 1 -->
+        <h2 id="the-6000-night">
+            <span class="section-number">01</span>
+            The $6,000 Night — and Why It Wasn't a Rate Limit Problem
+        </h2>
+
+        <p>
+            In December 2025, Uber rolled out Claude Code to roughly five thousand engineers. By April 2026 — four
+            months in — the company had spent its entire annual AI budget.
+        </p>
+        <p>
+            The interesting part isn't the number. It's the mechanism. Engineers were ranked on internal
+            leaderboards by how much they used the tool. Typical monthly spend landed somewhere between $150 and
+            $250 per engineer; the heaviest users cleared $500, and some reached $2,000. Nobody was abusing
+            anything. Everyone was doing exactly what the incentive structure asked them to do.
+        </p>
+        <p>
+            The second story is smaller and sharper. A developer wired up an automated script to check for updates
+            every thirty minutes. It ran unattended overnight. By morning it had generated a
+            <strong>$6,000 bill</strong>
+            .
+        </p>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">5,000</div>
+                <div class="stat-desc">Engineers Onboarded</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">4 mo</div>
+                <div class="stat-desc">To Exhaust an Annual Budget</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">$2,000</div>
+                <div class="stat-desc">Peak Monthly, Single User</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">$6,000</div>
+                <div class="stat-desc">One Unattended Script, One Night</div>
+            </div>
+        </div>
+
+        <p>
+            The standard reading of these stories is "they needed rate limiting." That reading is half right, and
+            the half that's wrong is the more interesting half.
+        </p>
+        <p>
+            Consider the script. Every thirty minutes is
+            <em>two requests per hour</em>
+            . There is no rate limiter on earth configured tightly enough to reject two requests per hour. A token
+            bucket at 100 requests per minute would have waved it through all night and never logged a single
+            rejection. The request rate was never the problem — the
+            <strong>cost per request</strong>
+            was, and request counters are blind to cost.
+        </p>
+        <p>
+            Now consider Uber. Five thousand engineers spending $200 a month each is a perfectly healthy request
+            rate. No individual engineer was bursting. No endpoint was hot. The system was operating exactly within
+            spec at every instant, and still walked off a cliff — because the thing being exceeded was a
+            <strong>budget measured in months</strong>
+            , and rate limiters measure in seconds.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The Reframe</div>
+            <p>
+                "Rate limiting" is a family of controls operating over wildly different time horizons, on wildly
+                different units. A concurrency limiter protects a resource over milliseconds. A rate limiter
+                protects capacity over seconds. A quota protects money over a month. They are not
+                interchangeable, and the algorithm you pick is downstream of choosing the right one.
+            </p>
+            <p>
+                Both Uber stories are budget failures wearing a rate-limiting costume. We'll build the rate
+                limiter properly first — and then, in section 11, build the thing that would actually have stopped
+                them.
+            </p>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 1 — Three Control Loops, Three Time Horizons</div>
+            <svg viewBox="0 0 780 330" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridR1" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenR1" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="21" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowR1" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="330" fill="#fefefe" rx="12" />
+                <rect width="780" height="330" fill="url(#dotGridR1)" rx="12" />
+
+                <text x="390" y="30" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    The same word, three different machines
+                </text>
+
+                <!-- timeline -->
+                <path d="M 60 260 L 720 260" fill="none" stroke="#999" stroke-width="1.5"
+                    marker-end="url(#exArrowR1)" />
+                <text x="70" y="282" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    milliseconds
+                </text>
+                <text x="360" y="282" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    seconds → minutes
+                </text>
+                <text x="690" y="282" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="end">
+                    days → months
+                </text>
+
+                <!-- concurrency -->
+                <rect x="50" y="60" width="190" height="115" rx="9" fill="#eef6ff" stroke="#0066cc" stroke-width="1.5"
+                    filter="url(#roughenR1)" />
+                <text x="145" y="84" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Concurrency Limit
+                </text>
+                <text x="145" y="105" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    "at most N in flight"
+                </text>
+                <text x="145" y="124" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    protects: a scarce resource
+                </text>
+                <text x="145" y="143" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    DB connections, GPU slots,
+                </text>
+                <text x="145" y="156" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    thread pools
+                </text>
+                <path d="M 145 178 L 145 253" fill="none" stroke="#0066cc" stroke-width="1.5" stroke-dasharray="3,3" />
+                <circle cx="145" cy="260" r="5" fill="#0066cc" />
+
+                <!-- rate limit -->
+                <rect x="270" y="60" width="200" height="115" rx="9" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.5"
+                    filter="url(#roughenR1)" />
+                <text x="370" y="84" fill="#6d28d9" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Rate Limit
+                </text>
+                <text x="370" y="105" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    "at most N per window"
+                </text>
+                <text x="370" y="124" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    protects: capacity + fairness
+                </text>
+                <text x="370" y="143" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    noisy neighbours, scrapers,
+                </text>
+                <text x="370" y="156" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    credential stuffing
+                </text>
+                <path d="M 370 178 L 370 253" fill="none" stroke="#6d28d9" stroke-width="1.5" stroke-dasharray="3,3" />
+                <circle cx="370" cy="260" r="5" fill="#6d28d9" />
+
+                <!-- budget -->
+                <rect x="500" y="60" width="230" height="115" rx="9" fill="#fdf2f8" stroke="#db2777" stroke-width="1.5"
+                    filter="url(#roughenR1)" />
+                <text x="615" y="84" fill="#db2777" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Budget / Quota
+                </text>
+                <text x="615" y="105" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    "at most $X per period"
+                </text>
+                <text x="615" y="124" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    protects: money
+                </text>
+                <text x="615" y="143" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    ← Uber's failure and the $6,000
+                </text>
+                <text x="615" y="156" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    overnight script both live here
+                </text>
+                <path d="M 615 178 L 615 253" fill="none" stroke="#db2777" stroke-width="1.5" stroke-dasharray="3,3" />
+                <circle cx="615" cy="260" r="5" fill="#db2777" />
+
+                <text x="390" y="312" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    A control tuned for one horizon is invisible to failures on another.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Two requests per hour is a perfectly legal rate and a catastrophic spend. The counter you install
+                determines which failures you can even see.
+            </p>
+        </div>
+
+        <!-- Section 2 -->
+        <h2 id="vocabulary">
+            <span class="section-number">02</span>
+            Five Controls That All Get Called "Rate Limiting"
+        </h2>
+
+        <p>
+            Before choosing an algorithm, choose the control. These five get conflated constantly, and picking the
+            wrong one means solving a problem you don't have.
+        </p>
+
+        <div class="table-scroll reveal-element">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Control</th>
+                        <th>Question It Answers</th>
+                        <th>Unit</th>
+                        <th>Reach For It When</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Rate limiting</strong></td>
+                        <td>How many, per unit time?</td>
+                        <td>requests / window</td>
+                        <td>You need fairness between tenants and protection from abuse</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Concurrency limiting</strong></td>
+                        <td>How many at once?</td>
+                        <td>in-flight requests</td>
+                        <td>The bottleneck is a finite resource — connections, GPUs, memory</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Load shedding</strong></td>
+                        <td>Are we drowning right now?</td>
+                        <td>observed health signal</td>
+                        <td>You need to survive overload regardless of who caused it</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Throttling</strong></td>
+                        <td>Can we slow it down instead of dropping?</td>
+                        <td>added delay</td>
+                        <td>Latency is cheaper than failure for the caller (batch, async)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Quota / budget</strong></td>
+                        <td>How much total, this period?</td>
+                        <td>tokens, dollars, rows</td>
+                        <td>The scarce thing is cumulative, not instantaneous</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p>
+            The distinction between the first two is worth an extra paragraph, because it's where most designs go
+            wrong. They're linked by
+            <strong>Little's Law</strong>
+            : the average number of items in a system equals arrival rate multiplied by average time in system,
+            <code>L = λW</code>
+            . If you rate-limit a service to 100 requests per second and each request takes 200 milliseconds, the
+            steady-state concurrency is 100 × 0.2 = 20 in flight. That's the number your connection pool actually
+            has to survive.
+        </p>
+        <p>
+            The trap is that
+            <em>W is not a constant</em>
+            . When the downstream slows to 2 seconds per request, the same 100 req/s rate limit now implies 200
+            concurrent requests. Your rate limiter is still happily saying yes while your connection pool is on
+            fire. A rate limit bounds arrivals; it does not bound occupancy. If what you're protecting is a fixed
+            pool of anything, limit concurrency directly — a semaphore, a bulkhead, a bounded queue — and let the
+            rate limit handle fairness separately.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Watch Out</div>
+            <p>
+                This is exactly the shape of an LLM inference backend. A GPU can serve a bounded number of
+                concurrent sequences; a request can take 800ms or 80 seconds depending on output length. Rate
+                limiting alone will not protect it. You need a concurrency limit at the inference layer and a rate
+                limit at the API layer, and they answer different questions.
+            </p>
+        </div>
+
+        <!-- Section 3 -->
+        <h2 id="what-you-count">
+            <span class="section-number">03</span>
+            The First Real Decision — What You're Counting Against
+        </h2>
+
+        <p>
+            Every rate limiter is a counter behind a key. Almost every article jumps straight to how the counter
+            works and skips the key entirely, which is backwards: the key determines what the limiter can protect
+            and who it hurts when it fires. Get the key wrong and no algorithm saves you.
+        </p>
+
+        <div class="table-scroll reveal-element">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Key</th>
+                        <th>Protects Against</th>
+                        <th>Fails When</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>user_id</code></td>
+                        <td>A single authenticated account misbehaving</td>
+                        <td>The attack is pre-auth (login, signup, password reset)</td>
+                    </tr>
+                    <tr>
+                        <td><code>api_key</code> / <code>tenant_id</code></td>
+                        <td>Noisy neighbours; enforcing plan tiers</td>
+                        <td>One tenant has many legitimate end users behind it</td>
+                    </tr>
+                    <tr>
+                        <td><code>ip</code></td>
+                        <td>Unauthenticated abuse, scrapers, credential stuffing</td>
+                        <td>NAT, CGNAT, corporate egress, mobile carriers — see below</td>
+                    </tr>
+                    <tr>
+                        <td><code>endpoint</code></td>
+                        <td>One expensive route saturating shared capacity</td>
+                        <td>Used alone — it can't tell who is responsible</td>
+                    </tr>
+                    <tr>
+                        <td><code>global</code></td>
+                        <td>Total system capacity, regardless of source</td>
+                        <td>Used alone — one caller can consume everyone's budget</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>The IP problem is worse than it looks</h3>
+
+        <p>
+            IP-based limiting is the default for unauthenticated traffic and it's a minefield. A single corporate
+            office, a university, or a mobile carrier's CGNAT pool can put tens of thousands of legitimate users
+            behind one address. Limit that address to 10 requests per minute and you've taken down a customer's
+            entire building while a distributed botnet — one request per IP across 50,000 addresses — sails
+            straight past.
+        </p>
+        <p>
+            Three practical corrections:
+        </p>
+        <ul>
+            <li>
+                <strong>For IPv6, key on the prefix, not the address.</strong>
+                A single residential customer is typically handed a /64 or larger. Counting individual IPv6
+                addresses means an attacker rotates through billions of them for free. Aggregate to the /64, and
+                consider /48 for coarser protection.
+            </li>
+            <li>
+                <strong>Never trust a client-supplied header.</strong>
+                <code>X-Forwarded-For</code>
+                is a comma-separated list that anyone can prepend to. If your limiter reads the leftmost entry,
+                every attacker gets an unlimited supply of fresh identities by sending a random one. Take the
+                address your own trusted proxy appended — count in from the right, past exactly as many hops as
+                you control.
+            </li>
+            <li>
+                <strong>Treat IP as a coarse outer ring, not the real limit.</strong>
+                Set it generously to catch volumetric abuse, and put the tight limits on authenticated identity
+                where collateral damage is bounded.
+            </li>
+        </ul>
+
+        <h3>Composite and hierarchical keys</h3>
+
+        <p>
+            Real systems don't pick one key. They evaluate several, and a request must pass all of them. The usual
+            shape is a hierarchy from coarse to fine:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Key Hierarchy</span>
+            <pre><code><span class="comment">// evaluated in order; first rejection wins</span>
+global                          → 1,000,000 req/min   <span class="comment">// total capacity</span>
+tenant:acme                     →    50,000 req/min   <span class="comment">// plan tier</span>
+tenant:acme|user:u_8812         →       600 req/min   <span class="comment">// per-seat fairness</span>
+tenant:acme|endpoint:/v1/export →        60 req/min   <span class="comment">// expensive route</span>
+ip:203.0.113.0/24               →     5,000 req/min   <span class="comment">// coarse abuse ring</span></code></pre>
+        </div>
+
+        <p>
+            Two design notes that matter more than they look. First, evaluate
+            <strong>cheapest and most-likely-to-reject first</strong>
+            — a global counter in local memory costs nothing, and rejecting there saves you four network round
+            trips. Second, when a request fails, the response must say
+            <em>which</em>
+            limit it hit. A client that can't tell "you personally are going too fast" from "your whole
+            organisation is over quota" cannot take the right corrective action, and will retry into the same wall
+            forever.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 2 — One Request, Five Counters</div>
+            <svg viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridR2" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenR2" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="22" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowR2" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                    <marker id="exArrowR2red" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#be123c" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="340" fill="#fefefe" rx="12" />
+                <rect width="780" height="340" fill="url(#dotGridR2)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Coarse and cheap on the left; fine and expensive on the right
+                </text>
+
+                <rect x="20" y="120" width="80" height="55" rx="8" fill="#f5f5f7" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughenR2)" />
+                <text x="60" y="145" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">Request</text>
+                <text x="60" y="162" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">arrives</text>
+
+                <!-- gates -->
+                <g>
+                    <rect x="130" y="105" width="105" height="85" rx="8" fill="#dcfce7" stroke="#16a34a"
+                        stroke-width="1.5" filter="url(#roughenR2)" />
+                    <text x="182" y="128" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="9" text-anchor="middle" font-weight="700">global</text>
+                    <text x="182" y="146" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                        text-anchor="middle">1M/min</text>
+                    <text x="182" y="164" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="7" text-anchor="middle">local memory</text>
+                    <text x="182" y="178" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="7" text-anchor="middle">~0 ms</text>
+                </g>
+                <g>
+                    <rect x="265" y="105" width="105" height="85" rx="8" fill="#dcfce7" stroke="#16a34a"
+                        stroke-width="1.5" filter="url(#roughenR2)" />
+                    <text x="317" y="128" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="9" text-anchor="middle" font-weight="700">ip /64</text>
+                    <text x="317" y="146" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                        text-anchor="middle">5,000/min</text>
+                    <text x="317" y="164" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="7" text-anchor="middle">edge / CDN</text>
+                    <text x="317" y="178" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="7" text-anchor="middle">~0 ms</text>
+                </g>
+                <g>
+                    <rect x="400" y="105" width="105" height="85" rx="8" fill="#dcfce7" stroke="#16a34a"
+                        stroke-width="1.5" filter="url(#roughenR2)" />
+                    <text x="452" y="128" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="9" text-anchor="middle" font-weight="700">tenant</text>
+                    <text x="452" y="146" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                        text-anchor="middle">50,000/min</text>
+                    <text x="452" y="164" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="7" text-anchor="middle">shared Redis</text>
+                    <text x="452" y="178" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="7" text-anchor="middle">~1 ms</text>
+                </g>
+                <g>
+                    <rect x="535" y="105" width="105" height="85" rx="8" fill="#fff1f2" stroke="#be123c"
+                        stroke-width="1.5" filter="url(#roughenR2)" />
+                    <text x="587" y="128" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="9" text-anchor="middle" font-weight="700">tenant|user</text>
+                    <text x="587" y="146" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                        text-anchor="middle">600/min</text>
+                    <text x="587" y="164" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="8" text-anchor="middle" font-weight="700">EXCEEDED</text>
+                    <text x="587" y="178" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="7" text-anchor="middle">~1 ms</text>
+                </g>
+                <g>
+                    <rect x="670" y="105" width="90" height="85" rx="8" fill="#f5f5f7" stroke="#c9c9c9"
+                        stroke-width="1.5" stroke-dasharray="4,3" filter="url(#roughenR2)" />
+                    <text x="715" y="140" fill="#a0a0a0" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="9" text-anchor="middle" font-weight="700">endpoint</text>
+                    <text x="715" y="158" fill="#a0a0a0" font-family="'Segoe Print', 'Comic Neue', cursive"
+                        font-size="8" text-anchor="middle">never reached</text>
+                </g>
+
+                <path d="M 100 147 L 126 147" fill="none" stroke="#16a34a" stroke-width="1.8"
+                    marker-end="url(#exArrowR2)" />
+                <path d="M 235 147 L 261 147" fill="none" stroke="#16a34a" stroke-width="1.8"
+                    marker-end="url(#exArrowR2)" />
+                <path d="M 370 147 L 396 147" fill="none" stroke="#16a34a" stroke-width="1.8"
+                    marker-end="url(#exArrowR2)" />
+                <path d="M 505 147 L 531 147" fill="none" stroke="#16a34a" stroke-width="1.8"
+                    marker-end="url(#exArrowR2)" />
+
+                <path d="M 587 195 L 587 240" fill="none" stroke="#be123c" stroke-width="2"
+                    marker-end="url(#exArrowR2red)" />
+                <rect x="450" y="248" width="275" height="52" rx="8" fill="#fff1f2" stroke="#be123c" stroke-width="1.5"
+                    filter="url(#roughenR2)" />
+                <text x="587" y="270" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    429 — scope: user, retry-after: 12
+                </text>
+                <text x="587" y="288" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    Naming the scope is what makes the 429 actionable
+                </text>
+
+                <text x="230" y="270" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Order matters: reject on the free counters
+                </text>
+                <text x="230" y="288" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    before paying for the networked ones.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                A request must pass every gate. Cheap local checks run first so that obvious abuse never costs you
+                a Redis round trip — and the rejection names the scope that actually fired.
+            </p>
+        </div>
+
+        <!-- Section 4 -->
+        <h2 id="algorithms">
+            <span class="section-number">04</span>
+            Six Ways to Say No
+        </h2>
+
+        <p>
+            With the key chosen, the algorithm decides how the counter behaves. Five of these show up in every
+            interview. The sixth shows up in production systems and almost never in articles.
+        </p>
+
+        <h3>1. Fixed Window Counter</h3>
+
+        <p>
+            Divide time into fixed windows — say, one minute — and keep a counter per key per window. Increment on
+            each request; reject above the limit; the counter resets at the boundary. It's the simplest thing that
+            works, it's a single
+            <code>INCR</code>
+            in Redis, and it uses one integer per key.
+        </p>
+        <p>
+            Its flaw is the boundary. The limit is enforced per window, not per any minute — so a client can send
+            its full allowance at the very end of one window and its full allowance at the start of the next.
+            <strong>The effective burst is twice the limit</strong>
+            , delivered in an arbitrarily short span across the boundary.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 3 — The Fixed-Window Boundary Problem</div>
+            <svg viewBox="0 0 780 290" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridR3" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenR3" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="23" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="290" fill="#fefefe" rx="12" />
+                <rect width="780" height="290" fill="url(#dotGridR3)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Limit: 100 requests per minute. Actual burst: 200 in two seconds.
+                </text>
+
+                <!-- windows -->
+                <rect x="60" y="60" width="320" height="80" rx="6" fill="#eef6ff" stroke="#0066cc" stroke-width="1.4"
+                    filter="url(#roughenR3)" />
+                <text x="220" y="82" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">Window A — 10:00:00 to 10:00:59</text>
+                <text x="220" y="105" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">counter: 0 … 0 … 0 … then 100 at 10:00:59</text>
+                <text x="220" y="126" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">all 100 allowed ✓</text>
+
+                <rect x="400" y="60" width="320" height="80" rx="6" fill="#eef6ff" stroke="#0066cc" stroke-width="1.4"
+                    filter="url(#roughenR3)" />
+                <text x="560" y="82" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">Window B — 10:01:00 to 10:01:59</text>
+                <text x="560" y="105" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">counter resets to 0, then 100 at 10:01:00</text>
+                <text x="560" y="126" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">all 100 allowed ✓</text>
+
+                <!-- boundary marker -->
+                <path d="M 390 50 L 390 200" fill="none" stroke="#be123c" stroke-width="2" stroke-dasharray="5,4" />
+                <text x="390" y="45" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">reset</text>
+
+                <!-- burst zone -->
+                <rect x="330" y="160" width="120" height="42" rx="6" fill="#fff1f2" stroke="#be123c"
+                    stroke-width="1.5" filter="url(#roughenR3)" />
+                <text x="390" y="178" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">200 requests</text>
+                <text x="390" y="194" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">in ~2 seconds</text>
+
+                <text x="390" y="232" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Both windows are individually compliant. The interval straddling them is 2× the limit.
+                </text>
+                <text x="390" y="256" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Downstream capacity doesn't care where your window boundaries are.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Fixed windows enforce the limit per window, not per any window-length interval — so the worst-case
+                burst is exactly double, and it is trivially reproducible.
+            </p>
+        </div>
+
+        <h3>2. Sliding Window Log</h3>
+
+        <p>
+            Store the timestamp of every request in a sorted set per key. On each request, evict everything older
+            than the window and count what remains. This is
+            <strong>exact</strong>
+            — there is no boundary artefact, because the window genuinely slides with the clock.
+        </p>
+        <p>
+            You pay for that exactness in memory: O(limit) entries per key, forever, for every key. A limit of
+            1,000 requests per minute across 10 million keys is 10 billion timestamps. It also costs more CPU —
+            every request does a range-delete plus a cardinality check. Use it when the limit is small and
+            correctness is non-negotiable (payment endpoints, SMS sends), not as a general-purpose default.
+        </p>
+
+        <h3>3. Sliding Window Counter</h3>
+
+        <p>
+            The pragmatic compromise, and the one most large systems land on. Keep only two counters — the
+            previous window and the current one — and estimate the sliding count by weighting the previous window
+            by however much of it still overlaps:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Sliding Window Counter — Estimate</span>
+            <pre><code>elapsed  = (now - current_window_start) / window_size   <span class="comment">// 0.0 → 1.0</span>
+estimate = current_count + previous_count * (<span class="number">1</span> - elapsed)
+
+<span class="comment">// Worked example — limit 100/min, 25% into the current window:</span>
+<span class="comment">//   previous window saw 80, current window has seen 30 so far</span>
+estimate = <span class="number">30</span> + <span class="number">80</span> * (<span class="number">1</span> - <span class="number">0.25</span>) = <span class="number">30</span> + <span class="number">60</span> = <span class="number">90</span>   <span class="comment">// → allow</span>
+<span class="comment">// at 10% in, the same traffic estimates 30 + 72 = 102       → reject</span></code></pre>
+        </div>
+
+        <p>
+            Two counters per key regardless of limit size, no boundary doubling, and O(1) work per request. The
+            catch is in the word
+            <em>estimate</em>
+            : the formula assumes the previous window's traffic was spread uniformly. If it was actually one spike
+            at the very start, the estimate over-counts and you reject traffic you shouldn't; if the spike was at
+            the very end, you under-count and let a burst through. In practice the error is tiny — Cloudflare,
+            which runs this approach at very large scale, has published production error rates in the low
+            thousandths of a percent — and the memory saving is enormous.
+        </p>
+
+        <h3>4. Leaky Bucket — and the distinction almost everyone misses</h3>
+
+        <p>
+            "Leaky bucket" names
+            <em>two different algorithms</em>
+            , and conflating them is the single most common error in rate-limiting writing.
+        </p>
+        <ul>
+            <li>
+                <strong>Leaky bucket as a queue.</strong>
+                Requests enter a FIFO queue and are drained at a fixed rate. Overflow is dropped. This
+                <em>smooths output</em>
+                — the downstream sees a perfectly constant rate no matter how spiky the input. It also means
+                requests wait, which is a latency cost paid by the caller, and the queue itself becomes a failure
+                surface (see section 9).
+            </li>
+            <li>
+                <strong>Leaky bucket as a meter.</strong>
+                No queue at all. A conceptual bucket fills by one unit per request and drains at a fixed rate; if
+                adding a unit would overflow, reject immediately. This version is
+                <strong>mathematically equivalent to a token bucket</strong>
+                — same admission decisions, just counting from the other end. Anyone who says "leaky bucket
+                doesn't allow bursts" is describing the queue variant and applying it to the meter.
+            </li>
+        </ul>
+
+        <h3>5. Token Bucket</h3>
+
+        <p>
+            The workhorse. A bucket holds up to
+            <code>capacity</code>
+            tokens and refills at
+            <code>refill_rate</code>
+            tokens per second. Each request removes a token; no token, no service. It permits bursts up to the
+            bucket's capacity while bounding the long-run average to the refill rate — which matches how real
+            traffic behaves and why AWS, Stripe, and the major LLM providers all use it.
+        </p>
+        <p>
+            The implementation trick is that you never run a background timer. You store the token count and the
+            timestamp of the last refill, and compute the refill lazily on the next request.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Token Bucket (single node)</span>
+            <pre><code><span class="keyword">public final class</span> TokenBucket {
+
+    <span class="keyword">private final double</span> capacity;      <span class="comment">// max burst size</span>
+    <span class="keyword">private final double</span> refillPerSec;  <span class="comment">// sustained rate</span>
+
+    <span class="keyword">private double</span> tokens;
+    <span class="keyword">private long</span>   lastRefillNanos;
+
+    <span class="keyword">public</span> TokenBucket(<span class="type">double</span> capacity, <span class="type">double</span> refillPerSec) {
+        <span class="keyword">this</span>.capacity     = capacity;
+        <span class="keyword">this</span>.refillPerSec = refillPerSec;
+        <span class="keyword">this</span>.tokens       = capacity;          <span class="comment">// start full</span>
+        <span class="keyword">this</span>.lastRefillNanos = <span class="type">System</span>.nanoTime();
+    }
+
+    <span class="keyword">public synchronized boolean</span> tryConsume(<span class="type">double</span> cost) {
+        refill();
+        <span class="keyword">if</span> (tokens &lt; cost) <span class="keyword">return false</span>;
+        tokens -= cost;
+        <span class="keyword">return true</span>;
+    }
+
+    <span class="keyword">private void</span> refill() {
+        <span class="type">long</span> now = <span class="type">System</span>.nanoTime();
+        <span class="comment">// Multiply first, divide last. Dividing to seconds before</span>
+        <span class="comment">// multiplying truncates every sub-second gap to zero refill —</span>
+        <span class="comment">// the bucket silently never refills under fast traffic.</span>
+        <span class="type">double</span> earned = (now - lastRefillNanos) * refillPerSec / <span class="number">1</span>_<span class="number">000</span>_<span class="number">000</span>_<span class="number">000.0</span>;
+        tokens = <span class="type">Math</span>.min(capacity, tokens + earned);
+        lastRefillNanos = now;
+    }
+}</code></pre>
+        </div>
+
+        <p>
+            Note the <code>cost</code> parameter rather than a bare <code>tryConsume()</code>. That single change
+            is what turns a request counter into a cost meter, and section 5 is entirely about why you want it.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Two Tuning Traps</div>
+            <p>
+                <strong>Capacity is not the limit.</strong>
+                A bucket of capacity 1,000 refilling at 10/sec permits a 1,000-request instantaneous burst.
+                If your downstream can't absorb that, the limit you advertised is a fiction. Capacity should be
+                sized to what the
+                <em>downstream</em>
+                survives, not to what feels generous.
+            </p>
+            <p>
+                <strong>Starting full is a choice.</strong>
+                Initialising every new key's bucket to capacity means the first thing any new client can do is
+                burst. For keys that are cheap to create — per-IP buckets, for instance — that's a free burst per
+                identity. Start those empty or partially filled.
+            </p>
+        </div>
+
+        <div class="deep-dive">
+            <div class="deep-dive-header" onclick="toggleDeepDive('gcra')">
+                <h4>Deep Dive: GCRA — The Sixth Algorithm, and the One Redis Actually Ships</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content" id="gcra">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        The <strong>Generic Cell Rate Algorithm</strong> comes from ATM networking and is what
+                        <code>redis-cell</code> implements. It gives you token-bucket semantics while storing
+                        <em>a single timestamp</em> per key — no token count, no last-refill time, one value.
+                    </p>
+                    <p>
+                        The idea is to track a virtual schedule instead of a balance. Define the emission interval
+                        <code>T = period / limit</code> (at 100/minute, T = 600ms) and a burst tolerance
+                        <code>τ = (burst - 1) × T</code>. Store the <strong>theoretical arrival time</strong>
+                        (TAT) — the earliest moment at which a perfectly conforming client would be allowed to
+                        send its next request.
+                    </p>
+                    <div class="code-block" style="margin-top: 1rem;">
+                        <span class="code-block-label">GCRA — Complete Logic</span>
+                        <pre><code><span class="keyword">if</span> (now &lt; tat - τ) {
+    reject(retryAfter = (tat - τ) - now);   <span class="comment">// too early</span>
+} <span class="keyword">else</span> {
+    tat = <span class="type">Math</span>.max(now, tat) + T;              <span class="comment">// advance the schedule</span>
+    allow();
+}</code></pre>
+                    </div>
+                    <p>
+                        That's the entire algorithm. It is exact — no estimation error like the sliding window
+                        counter — uses O(1) memory with the smallest possible constant, and it hands you the exact
+                        <code>Retry-After</code> value for free rather than making you guess it. The trade is
+                        conceptual: engineers reading the code six months later will recognise a token bucket and
+                        will not recognise a TAT.
+                    </p>
+                    <p>
+                        Knowing GCRA is a genuine senior-plus signal in an interview, precisely because it shows
+                        you've read past the standard five.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <h3>Picking one</h3>
+
+        <div class="table-scroll reveal-element">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Algorithm</th>
+                        <th>Memory / Key</th>
+                        <th>Bursts?</th>
+                        <th>Accuracy</th>
+                        <th>Use When</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Fixed window</td>
+                        <td>1 counter</td>
+                        <td>2× at boundary</td>
+                        <td>Poor</td>
+                        <td>Coarse protection where a 2× burst is harmless</td>
+                    </tr>
+                    <tr>
+                        <td>Sliding log</td>
+                        <td>O(limit)</td>
+                        <td>No</td>
+                        <td>Exact</td>
+                        <td>Small limits, high stakes — payments, SMS, OTP</td>
+                    </tr>
+                    <tr>
+                        <td>Sliding counter</td>
+                        <td>2 counters</td>
+                        <td>No</td>
+                        <td>~Exact</td>
+                        <td>The default for smooth, memory-cheap enforcement</td>
+                    </tr>
+                    <tr>
+                        <td>Leaky (queue)</td>
+                        <td>queue depth</td>
+                        <td>Absorbs, delays</td>
+                        <td>Exact output</td>
+                        <td>Downstream needs constant rate and can tolerate latency</td>
+                    </tr>
+                    <tr>
+                        <td>Token bucket</td>
+                        <td>2 values</td>
+                        <td>Yes, up to capacity</td>
+                        <td>Exact</td>
+                        <td>The default when bursts are legitimate; cost-weighting</td>
+                    </tr>
+                    <tr>
+                        <td>GCRA</td>
+                        <td>1 value</td>
+                        <td>Yes, up to τ</td>
+                        <td>Exact</td>
+                        <td>Token-bucket behaviour at minimum memory; free Retry-After</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>
+                The expected answer is "token bucket if bursts are legitimate, sliding window counter if you want
+                smoothing." The answer that lands better is to ask what the limiter is
+                <em>for</em>
+                before naming one: protecting a fragile downstream argues for smoothing, enforcing a paid plan
+                tier argues for bursts, and defending a login endpoint argues for an exact sliding log because the
+                limit is 5 and the memory cost is irrelevant.
+            </p>
+        </div>
+
+        <!-- Section 5 -->
+        <h2 id="cost-aware">
+            <span class="section-number">05</span>
+            Cost-Aware Limiting — When Requests Aren't Equal
+        </h2>
+
+        <p>
+            Every algorithm above counts requests, and counting requests silently assumes that all requests cost
+            roughly the same. For a CRUD API that assumption is close enough. For the API in our opening story it
+            is catastrophically wrong.
+        </p>
+        <p>
+            One call to an LLM might send 200 tokens and receive 50. Another might send 200,000 tokens of
+            repository context and stream back 8,000 tokens of generated code. Same endpoint, same request count,
+            three orders of magnitude of difference in what it consumes. A limiter that counts requests treats
+            those identically — which is precisely how a script making two requests per hour produces a $6,000
+            bill.
+        </p>
+
+        <h3>Weight the cost, not the call</h3>
+
+        <p>
+            The fix is the <code>cost</code> parameter from the token bucket above. Instead of removing one token
+            per request, remove a number of tokens proportional to what the request actually consumes. The bucket
+            arithmetic is unchanged; only the debit changes.
+        </p>
+        <p>
+            This is exactly how the major LLM providers structure their limits. Anthropic's API, for example,
+            enforces several dimensions simultaneously —
+            <strong>requests per minute</strong>
+            ,
+            <strong>input tokens per minute</strong>
+            , and
+            <strong>output tokens per minute</strong>
+            — each as its own continuously-replenishing bucket. You can be nowhere near your request limit and
+            still get a 429 because you exhausted input tokens. Multi-dimensional limiting is not exotic; it's the
+            baseline for any API where work per call varies.
+        </p>
+
+        <h3>The hard part: you don't know the cost yet</h3>
+
+        <p>
+            Here's the wrinkle that makes this genuinely difficult, and that almost no treatment of rate limiting
+            covers. To debit the bucket you need the cost. But at admission time — the moment you must decide
+            allow or reject — you only know the
+            <em>input</em>
+            . The output tokens don't exist yet. You cannot know what a request costs until after you've served
+            it.
+        </p>
+        <p>
+            The pattern that resolves this is
+            <strong>reserve-then-reconcile</strong>
+            . At admission, debit a conservative
+            <em>estimate</em>
+            . After completion, settle the difference — refund what you over-reserved, or debit the shortfall.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Reserve, Serve, Reconcile</span>
+            <pre><code><span class="comment">// 1. RESERVE — before doing any work</span>
+<span class="type">long</span> inputTokens = tokenizer.count(request.prompt());
+<span class="type">long</span> reserved    = inputTokens + request.maxOutputTokens();  <span class="comment">// worst case</span>
+
+<span class="keyword">if</span> (!bucket.tryConsume(reserved)) {
+    <span class="keyword">throw new</span> RateLimitedException(bucket.retryAfterFor(reserved));
+}
+
+<span class="type">Response</span> response;
+<span class="keyword">try</span> {
+    <span class="comment">// 2. SERVE</span>
+    response = model.invoke(request);
+} <span class="keyword">catch</span> (<span class="type">Exception</span> e) {
+    bucket.refund(reserved);   <span class="comment">// never charge for work that didn't happen</span>
+    <span class="keyword">throw</span> e;
+}
+
+<span class="comment">// 3. RECONCILE — settle against what it actually cost</span>
+<span class="type">long</span> actual = response.usage().inputTokens() + response.usage().outputTokens();
+<span class="keyword">if</span> (actual &lt; reserved) {
+    bucket.refund(reserved - actual);        <span class="comment">// give back the slack</span>
+} <span class="keyword">else if</span> (actual &gt; reserved) {
+    bucket.forceConsume(actual - reserved);  <span class="comment">// allowed to go negative</span>
+}</code></pre>
+        </div>
+
+        <p>
+            Three details make or break this. <strong>Reserve the worst case, not the average</strong> — you can
+            always refund, but you cannot un-serve a request that blew through the budget. <strong>Refund on
+            failure</strong>, or a downstream outage will burn through a tenant's entire quota on requests that
+            returned nothing. And <strong>let the bucket go negative</strong> on reconciliation: an overspend must
+            be repaid out of future allowance, not silently forgiven, or a client that consistently underestimates
+            gets a permanently free lunch.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 4 — Reserve, Serve, Reconcile</div>
+            <svg viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridR4" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenR4" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="24" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowR4" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="340" fill="#fefefe" rx="12" />
+                <rect width="780" height="340" fill="url(#dotGridR4)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    You must decide before you know the cost — so reserve high and settle after
+                </text>
+
+                <!-- step 1 -->
+                <rect x="35" y="60" width="200" height="110" rx="9" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.5"
+                    filter="url(#roughenR4)" />
+                <text x="135" y="84" fill="#6d28d9" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">1 · RESERVE</text>
+                <text x="135" y="106" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">input 12,000 tokens known</text>
+                <text x="135" y="124" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">max_output 4,000 assumed</text>
+                <text x="135" y="146" fill="#6d28d9" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">debit 16,000</text>
+                <text x="135" y="162" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">worst case, never the average</text>
+
+                <!-- step 2 -->
+                <rect x="290" y="60" width="200" height="110" rx="9" fill="#eef6ff" stroke="#0066cc" stroke-width="1.5"
+                    filter="url(#roughenR4)" />
+                <text x="390" y="84" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">2 · SERVE</text>
+                <text x="390" y="106" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">model streams the response</text>
+                <text x="390" y="126" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">actual output: 900 tokens</text>
+                <text x="390" y="150" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">on error → refund the full 16,000</text>
+
+                <!-- step 3 -->
+                <rect x="545" y="60" width="200" height="110" rx="9" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"
+                    filter="url(#roughenR4)" />
+                <text x="645" y="84" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">3 · RECONCILE</text>
+                <text x="645" y="106" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">actual cost: 12,900</text>
+                <text x="645" y="128" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">refund 3,100</text>
+                <text x="645" y="150" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">overspend? debit it, allow negative</text>
+
+                <path d="M 235 115 L 286 115" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowR4)" />
+                <path d="M 490 115 L 541 115" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowR4)" />
+
+                <!-- bucket level bar -->
+                <text x="390" y="212" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">Bucket balance through the request</text>
+
+                <rect x="90" y="228" width="600" height="26" rx="5" fill="#f5f5f7" stroke="#c9c9c9"
+                    stroke-width="1.2" />
+                <rect x="90" y="228" width="230" height="26" rx="5" fill="#dcfce7" stroke="#16a34a"
+                    stroke-width="1.2" />
+                <text x="205" y="246" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">available 40,000</text>
+                <rect x="320" y="228" width="240" height="26" rx="0" fill="#f5f3ff" stroke="#6d28d9"
+                    stroke-width="1.2" />
+                <text x="440" y="246" fill="#6d28d9" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">reserved 16,000 (held)</text>
+                <rect x="560" y="228" width="130" height="26" rx="5" fill="#dcfce7" stroke="#16a34a"
+                    stroke-width="1.2" />
+                <text x="625" y="246" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">3,100 returned</text>
+
+                <text x="390" y="290" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Under-reserving is unrecoverable; over-reserving is just briefly conservative.
+                </text>
+                <text x="390" y="312" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Reserve pessimistically. Refund generously. Never forgive an overspend.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Reserve-then-reconcile is what makes rate limiting work for variable-cost APIs. It's also the
+                mechanism a spend ledger needs, which is where section 11 picks the thread back up.
+            </p>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Senior Signal</div>
+            <p>
+                In any interview involving an AI, media, or analytics API, volunteering "requests are the wrong
+                unit here — I'd weight the bucket by tokens or bytes and reserve-then-reconcile because output
+                size isn't known at admission" moves the conversation two levels up instantly. It's the difference
+                between reciting algorithms and understanding what they're counting.
+            </p>
+        </div>
+
+        <!-- Section 6 -->
+        <h2 id="where-it-lives">
+            <span class="section-number">06</span>
+            Where the Limiter Lives
+        </h2>
+
+        <p>
+            A rate limiter isn't one component in one place. Real systems put counters at several layers, and each
+            layer catches a class of problem the others structurally cannot.
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">🌍</div>
+                <h4>Edge / CDN</h4>
+                <p>Stops volumetric floods before they cost you bandwidth. Coarse keys only — it has no idea who
+                    the user is.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🚪</div>
+                <h4>API Gateway</h4>
+                <p>Knows the API key and plan tier. The natural home for per-tenant quotas and contract
+                    enforcement.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">⚙️</div>
+                <h4>Service Middleware</h4>
+                <p>The only layer that knows what a request actually costs. Where cost-aware limiting has to
+                    live.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🔌</div>
+                <h4>Sidecar / Mesh</h4>
+                <p>Uniform policy across polyglot services without every team reimplementing it.</p>
+            </div>
+        </div>
+
+        <p>
+            <strong>The edge</strong>
+            sees traffic before it costs you anything downstream, which makes it the right place to absorb
+            volumetric attacks. It's also blind: it has no user identity, no plan tier, and no idea whether
+            <code>/v1/export</code>
+            is a thousand times more expensive than
+            <code>/v1/ping</code>
+            . Keep its rules coarse and generous.
+        </p>
+        <p>
+            <strong>The gateway</strong>
+            is where authentication has happened, so it knows the tenant and the plan. This is where "Pro tier gets
+            10,000 requests per minute" belongs — it's a commercial contract, and it should be enforced in one
+            place rather than reimplemented by every service.
+        </p>
+        <p>
+            <strong>Service middleware</strong>
+            is the only layer with the domain knowledge to weight cost. The gateway cannot know that this
+            particular export will scan 40 million rows; the service can. Anything involving reserve-then-reconcile
+            necessarily lives here, because only the service sees the completion.
+        </p>
+        <p>
+            The important consequence: these are not alternatives, and each one's limit means something different.
+            Layering is the point. An attacker who slips past the edge still meets the tenant quota; a legitimate
+            tenant within quota still meets the per-endpoint cost limit.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 5 — Layers of Defence, and What Each One Can See</div>
+            <svg viewBox="0 0 780 350" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridR5" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenR5" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="25" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowR5" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="350" fill="#fefefe" rx="12" />
+                <rect width="780" height="350" fill="url(#dotGridR5)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Each layer knows more than the one before it — and can therefore limit on more
+                </text>
+
+                <!-- lanes -->
+                <rect x="30" y="55" width="170" height="180" rx="9" fill="#fff7ed" stroke="#d97706" stroke-width="1.5"
+                    filter="url(#roughenR5)" />
+                <text x="115" y="78" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">EDGE / CDN</text>
+                <text x="115" y="100" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">knows: IP, path, headers</text>
+                <text x="115" y="122" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">limits on: ip /64, ASN</text>
+                <text x="115" y="140" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">catches: floods, scrapers</text>
+                <text x="115" y="168" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">blind to: identity, plan,</text>
+                <text x="115" y="182" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">request cost</text>
+                <text x="115" y="212" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">cost to reject: ~0</text>
+
+                <rect x="225" y="55" width="170" height="180" rx="9" fill="#eef6ff" stroke="#0066cc" stroke-width="1.5"
+                    filter="url(#roughenR5)" />
+                <text x="310" y="78" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">API GATEWAY</text>
+                <text x="310" y="100" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">knows: api key, tenant, plan</text>
+                <text x="310" y="122" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">limits on: tenant, user</text>
+                <text x="310" y="140" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">catches: noisy neighbours</text>
+                <text x="310" y="168" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">blind to: what the request</text>
+                <text x="310" y="182" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">will actually cost</text>
+                <text x="310" y="212" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">cost to reject: low</text>
+
+                <rect x="420" y="55" width="180" height="180" rx="9" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.5"
+                    filter="url(#roughenR5)" />
+                <text x="510" y="78" fill="#6d28d9" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">SERVICE</text>
+                <text x="510" y="100" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">knows: the domain, the cost</text>
+                <text x="510" y="122" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">limits on: tokens, rows, $</text>
+                <text x="510" y="140" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">catches: expensive calls</text>
+                <text x="510" y="168" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">only layer that can do</text>
+                <text x="510" y="182" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">reserve-then-reconcile</text>
+                <text x="510" y="212" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">cost to reject: high</text>
+
+                <rect x="625" y="55" width="125" height="180" rx="9" fill="#f5f5f7" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughenR5)" />
+                <text x="687" y="130" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">Backend</text>
+                <text x="687" y="150" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">DB, GPU, queue</text>
+                <text x="687" y="172" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">protect with a</text>
+                <text x="687" y="186" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">concurrency limit</text>
+
+                <path d="M 200 145 L 221 145" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowR5)" />
+                <path d="M 395 145 L 416 145" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowR5)" />
+                <path d="M 600 145 L 621 145" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowR5)" />
+
+                <text x="390" y="272" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    The further right a rejection happens, the more you already paid for it.
+                </text>
+                <text x="390" y="296" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    The further left, the less you know about whether it was fair.
+                </text>
+                <text x="390" y="324" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    That tension is why you place counters at every layer instead of choosing one.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Cheap-but-blind on the left, expensive-but-informed on the right. Defence in depth here is not
+                belt-and-braces — each layer is limiting on a dimension the others genuinely cannot see.
+            </p>
+        </div>
+
+        <!-- Section 7 -->
+        <h2 id="distributed">
+            <span class="section-number">07</span>
+            Going Distributed — The Part Everyone Waves At
+        </h2>
+
+        <p>
+            Everything so far assumed one counter. In production you have fifty API servers behind a load balancer,
+            and "the counter" has to mean something coherent across all of them. This is where most rate-limiting
+            articles say "put it in Redis" and stop. There are four real options, and the tradeoff is the same one
+            every distributed system makes: accuracy versus latency versus availability.
+        </p>
+
+        <h3>Option 1 — Local counters, limit divided by N</h3>
+
+        <p>
+            Give each of your N servers a limit of <code>limit / N</code> and never coordinate. Zero latency, zero
+            shared infrastructure, trivially available.
+        </p>
+        <p>
+            It is also wrong nearly all the time. It assumes traffic distributes perfectly evenly across servers,
+            and it doesn't — sticky sessions, connection reuse, keep-alive, and unlucky hashing all mean a
+            given client's requests concentrate on a subset of nodes. A client sending exactly the allowed rate
+            gets rejected because its requests happened to land on three nodes instead of fifty. And the fleet size
+            N changes every time you autoscale, so the effective global limit silently drifts with your capacity.
+        </p>
+
+        <h3>Option 2 — Centralised store (the Redis answer)</h3>
+
+        <p>
+            One shared Redis, every server reads and writes the same counter. Accurate, simple, and what most teams
+            should start with.
+        </p>
+        <p>
+            The costs are real, though. You've added a network round trip to the hot path of every single request —
+            typically sub-millisecond in-datacentre, but it is now in your p99 and it is a hard floor on your
+            latency. You've created a component whose failure affects every request (section 9 is about what you do
+            then). And at very high request rates the limiter itself becomes a throughput problem, since every
+            request in the fleet touches the same small set of keys.
+        </p>
+
+        <h3>Option 3 — Two-tier leases (what large systems actually do)</h3>
+
+        <p>
+            The pattern that resolves the tension: each node keeps a local bucket, and periodically
+            <em>leases</em>
+            a block of capacity from the global pool rather than checking in per request.
+        </p>
+        <p>
+            A node with 200 locally-held tokens serves 200 requests with zero network calls, then goes back for
+            more. The global store sees one round trip per few hundred requests instead of one per request. Common
+            requests take the fast path; the shared store handles bookkeeping, not traffic.
+        </p>
+        <p>
+            The subtleties are worth stating plainly. Leases must
+            <strong>expire</strong>
+            — a node that crashes holding 200 tokens must not remove them from the pool forever. Lease size is a
+            direct accuracy dial: bigger leases mean fewer round trips and looser global enforcement, because up to
+            <code>lease_size × node_count</code>
+            tokens can be held outside the pool at any instant. And nodes should
+            <strong>return unused capacity</strong>
+            when traffic drops, or an idle node hoards allowance that a busy one needs.
+        </p>
+
+        <h3>Option 4 — Asynchronous gossip</h3>
+
+        <p>
+            Each node counts locally and broadcasts its counts periodically; every node sums what it has heard.
+            Nothing blocks on the network. Enforcement is eventually consistent and always slightly behind reality,
+            with the lag bounded by the broadcast interval. Appropriate at edge scale where a centralised store is
+            geographically impossible and approximate enforcement is genuinely fine.
+        </p>
+
+        <div class="table-scroll reveal-element">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Approach</th>
+                        <th>Added Latency</th>
+                        <th>Accuracy</th>
+                        <th>Survives Store Outage?</th>
+                        <th>Fits</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Local, limit/N</td>
+                        <td>None</td>
+                        <td>Poor under uneven load</td>
+                        <td><span class="check-icon">Yes</span></td>
+                        <td>Coarse global caps where precision doesn't matter</td>
+                    </tr>
+                    <tr>
+                        <td>Central store</td>
+                        <td>1 RTT per request</td>
+                        <td>Exact</td>
+                        <td><span class="cross-icon">No</span></td>
+                        <td>The right starting point for most systems</td>
+                    </tr>
+                    <tr>
+                        <td>Two-tier lease</td>
+                        <td>1 RTT per lease</td>
+                        <td>Bounded overshoot</td>
+                        <td>Degrades gracefully</td>
+                        <td>High throughput with tight latency budgets</td>
+                    </tr>
+                    <tr>
+                        <td>Async gossip</td>
+                        <td>None</td>
+                        <td>Eventually consistent</td>
+                        <td><span class="check-icon">Yes</span></td>
+                        <td>Global edge networks; approximate is acceptable</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 6 — Three Coordination Models</div>
+            <svg viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridR6" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenR6" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="26" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowR6" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#666" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="340" fill="#fefefe" rx="12" />
+                <rect width="780" height="340" fill="url(#dotGridR6)" rx="12" />
+
+                <path d="M 260 20 L 260 320" fill="none" stroke="#ddd" stroke-width="1" stroke-dasharray="4,4" />
+                <path d="M 520 20 L 520 320" fill="none" stroke="#ddd" stroke-width="1" stroke-dasharray="4,4" />
+
+                <!-- A: local -->
+                <text x="130" y="40" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">A · LOCAL, limit/N</text>
+                <rect x="35" y="60" width="55" height="38" rx="6" fill="#fff7ed" stroke="#d97706" stroke-width="1.3"
+                    filter="url(#roughenR6)" />
+                <text x="62" y="84" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">node 20/s</text>
+                <rect x="102" y="60" width="55" height="38" rx="6" fill="#fff7ed" stroke="#d97706" stroke-width="1.3"
+                    filter="url(#roughenR6)" />
+                <text x="129" y="84" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">node 20/s</text>
+                <rect x="169" y="60" width="55" height="38" rx="6" fill="#fff7ed" stroke="#d97706" stroke-width="1.3"
+                    filter="url(#roughenR6)" />
+                <text x="196" y="84" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">node 20/s</text>
+                <text x="130" y="128" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">0 ms overhead</text>
+                <text x="130" y="152" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">client hits one node →</text>
+                <text x="130" y="166" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">rejected at 20/s, not 60/s</text>
+                <text x="130" y="188" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">autoscale changes N →</text>
+                <text x="130" y="202" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">global limit silently drifts</text>
+
+                <!-- B: central -->
+                <text x="390" y="40" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">B · CENTRAL STORE</text>
+                <rect x="295" y="60" width="55" height="38" rx="6" fill="#eef6ff" stroke="#0066cc" stroke-width="1.3"
+                    filter="url(#roughenR6)" />
+                <text x="322" y="84" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">node</text>
+                <rect x="362" y="60" width="55" height="38" rx="6" fill="#eef6ff" stroke="#0066cc" stroke-width="1.3"
+                    filter="url(#roughenR6)" />
+                <text x="389" y="84" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">node</text>
+                <rect x="429" y="60" width="55" height="38" rx="6" fill="#eef6ff" stroke="#0066cc" stroke-width="1.3"
+                    filter="url(#roughenR6)" />
+                <text x="456" y="84" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">node</text>
+                <path d="M 322 100 L 375 132" fill="none" stroke="#666" stroke-width="1.2"
+                    marker-end="url(#exArrowR6)" />
+                <path d="M 389 100 L 389 132" fill="none" stroke="#666" stroke-width="1.2"
+                    marker-end="url(#exArrowR6)" />
+                <path d="M 456 100 L 403 132" fill="none" stroke="#666" stroke-width="1.2"
+                    marker-end="url(#exArrowR6)" />
+                <rect x="330" y="140" width="120" height="40" rx="6" fill="#dbeafe" stroke="#0066cc"
+                    stroke-width="1.5" filter="url(#roughenR6)" />
+                <text x="390" y="165" fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">Redis · 60/s</text>
+                <text x="390" y="204" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">exact enforcement</text>
+                <text x="390" y="226" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">1 RTT on every request</text>
+                <text x="390" y="240" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">store down = every request affected</text>
+
+                <!-- C: lease -->
+                <text x="650" y="40" fill="#6d28d9" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">C · TWO-TIER LEASE</text>
+                <rect x="555" y="60" width="55" height="38" rx="6" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.3"
+                    filter="url(#roughenR6)" />
+                <text x="582" y="79" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">node</text>
+                <text x="582" y="91" fill="#6d28d9" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7"
+                    text-anchor="middle">holds 200</text>
+                <rect x="622" y="60" width="55" height="38" rx="6" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.3"
+                    filter="url(#roughenR6)" />
+                <text x="649" y="79" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">node</text>
+                <text x="649" y="91" fill="#6d28d9" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7"
+                    text-anchor="middle">holds 200</text>
+                <rect x="689" y="60" width="55" height="38" rx="6" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.3"
+                    filter="url(#roughenR6)" />
+                <text x="716" y="79" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">node</text>
+                <text x="716" y="91" fill="#6d28d9" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7"
+                    text-anchor="middle">holds 200</text>
+                <path d="M 582 100 L 635 132" fill="none" stroke="#666" stroke-width="1.2" stroke-dasharray="4,3"
+                    marker-end="url(#exArrowR6)" />
+                <path d="M 649 100 L 649 132" fill="none" stroke="#666" stroke-width="1.2" stroke-dasharray="4,3"
+                    marker-end="url(#exArrowR6)" />
+                <path d="M 716 100 L 663 132" fill="none" stroke="#666" stroke-width="1.2" stroke-dasharray="4,3"
+                    marker-end="url(#exArrowR6)" />
+                <rect x="590" y="140" width="120" height="40" rx="6" fill="#ede9fe" stroke="#6d28d9"
+                    stroke-width="1.5" filter="url(#roughenR6)" />
+                <text x="650" y="158" fill="#6d28d9" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">global pool</text>
+                <text x="650" y="172" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7"
+                    text-anchor="middle">leases, with expiry</text>
+                <text x="650" y="204" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">1 RTT per ~200 requests</text>
+                <text x="650" y="226" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">overshoot bounded by</text>
+                <text x="650" y="240" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">lease size × node count</text>
+
+                <text x="390" y="290" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Start at B. Move to C when the round trip starts showing up in your p99.
+                </text>
+                <text x="390" y="314" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Lease size is the dial between "one round trip per request" and "exactly enforced".
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Lease size is the whole tradeoff in one number: larger leases buy latency at the cost of a bounded,
+                predictable overshoot of the global limit.
+            </p>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Whose Clock?</div>
+            <p>
+                Every algorithm here depends on time, and in a distributed system there is no single clock.
+                Application servers drift; two nodes can disagree by seconds. A window computed from a fast node's
+                clock rolls over early and hands out a free window.
+            </p>
+            <p>
+                Take the timestamp from the shared store instead —
+                <code>redis.call('TIME')</code>
+                inside the script — so every node reads the same clock and skew disappears from the problem. The
+                alternative, passing the caller's timestamp in as an argument, keeps scripts deterministic and
+                easily testable but reintroduces skew. Either is defensible; picking without noticing the tradeoff
+                is not.
+            </p>
+        </div>
+
+        <!-- Section 8 -->
+        <h2 id="atomicity">
+            <span class="section-number">08</span>
+            Atomicity — Where Limiters Actually Break
+        </h2>
+
+        <p>
+            Here's the bug that ships in most first implementations. It passes every test, works perfectly in
+            staging, and fails silently under exactly the load it was built to stop.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — The Race Everyone Writes First</span>
+            <pre><code><span class="type">long</span> count = <span class="type">Long</span>.parseLong(redis.get(key));   <span class="comment">// ① READ</span>
+<span class="keyword">if</span> (count &gt;= limit) {
+    <span class="keyword">return</span> REJECT;
+}
+redis.incr(key);                                  <span class="comment">// ② WRITE</span>
+<span class="keyword">return</span> ALLOW;</code></pre>
+        </div>
+
+        <p>
+            Between ① and ② there is a window. Under concurrency, fifty threads across ten servers all read
+            <code>count = 99</code>
+            against a limit of 100, all conclude they're under the limit, and all proceed. The counter ends at 149
+            and 50 requests got through that shouldn't have. The limiter didn't fail loudly — it just quietly
+            stopped being a limiter at precisely the moment it mattered.
+        </p>
+
+        <h3>Why MULTI/EXEC doesn't fix it</h3>
+
+        <p>
+            The instinctive reach is a Redis transaction. It doesn't help, and understanding why is the actual
+            lesson. <code>MULTI</code>/<code>EXEC</code> queues commands and runs them without other clients
+            interleaving — so the
+            <em>write</em>
+            is atomic. What it cannot do is
+            <strong>branch on an intermediate result</strong>
+            . Inside a transaction the replies aren't available until <code>EXEC</code> returns, so there is no way
+            to express "read the count, and only increment if it's below the limit." The read-decide-write cycle,
+            which is the whole algorithm, spans the transaction boundary.
+        </p>
+        <p>
+            <code>WATCH</code>
+            gives you optimistic locking — abort the transaction if the key changed — but that converts the race
+            into a retry loop, and under exactly the contention you care about, those retries are heaviest when
+            you can least afford them.
+        </p>
+
+        <h3>The fix: move the logic to the data</h3>
+
+        <p>
+            A Lua script runs on the Redis server as a single atomic unit. Read, decide, and write all happen with
+            nothing interleaving, and it's one round trip instead of two.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Lua — Atomic Token Bucket (Redis)</span>
+            <pre><code><span class="comment">-- KEYS[1] = bucket key</span>
+<span class="comment">-- ARGV[1] = capacity   ARGV[2] = refill per second   ARGV[3] = cost</span>
+
+<span class="keyword">local</span> capacity = tonumber(ARGV[<span class="number">1</span>])
+<span class="keyword">local</span> rate     = tonumber(ARGV[<span class="number">2</span>])
+<span class="keyword">local</span> cost     = tonumber(ARGV[<span class="number">3</span>])
+
+<span class="comment">-- Server clock: every node agrees, so clock skew cannot open a free window</span>
+<span class="keyword">local</span> t   = redis.call(<span class="string">'TIME'</span>)
+<span class="keyword">local</span> now = tonumber(t[<span class="number">1</span>]) + tonumber(t[<span class="number">2</span>]) / <span class="number">1000000</span>
+
+<span class="keyword">local</span> state  = redis.call(<span class="string">'HMGET'</span>, KEYS[<span class="number">1</span>], <span class="string">'tokens'</span>, <span class="string">'ts'</span>)
+<span class="keyword">local</span> tokens = tonumber(state[<span class="number">1</span>])
+<span class="keyword">local</span> ts     = tonumber(state[<span class="number">2</span>])
+
+<span class="keyword">if</span> tokens == nil <span class="keyword">then</span>            <span class="comment">-- first request for this key</span>
+  tokens = capacity
+  ts     = now
+<span class="keyword">end</span>
+
+tokens = math.min(capacity, tokens + (now - ts) * rate)   <span class="comment">-- lazy refill</span>
+
+<span class="keyword">if</span> tokens &lt; cost <span class="keyword">then</span>
+  <span class="keyword">local</span> waitSec = (cost - tokens) / rate
+  redis.call(<span class="string">'HSET'</span>, KEYS[<span class="number">1</span>], <span class="string">'tokens'</span>, tokens, <span class="string">'ts'</span>, now)
+  redis.call(<span class="string">'EXPIRE'</span>, KEYS[<span class="number">1</span>], math.ceil(capacity / rate) * <span class="number">2</span>)
+  <span class="keyword">return</span> {<span class="number">0</span>, math.floor(tokens), math.ceil(waitSec)}      <span class="comment">-- denied</span>
+<span class="keyword">end</span>
+
+tokens = tokens - cost
+redis.call(<span class="string">'HSET'</span>, KEYS[<span class="number">1</span>], <span class="string">'tokens'</span>, tokens, <span class="string">'ts'</span>, now)
+redis.call(<span class="string">'EXPIRE'</span>, KEYS[<span class="number">1</span>], math.ceil(capacity / rate) * <span class="number">2</span>)
+<span class="keyword">return</span> {<span class="number">1</span>, math.floor(tokens), <span class="number">0</span>}                        <span class="comment">-- allowed</span></code></pre>
+        </div>
+
+        <p>
+            Three things in that script are easy to miss and expensive to omit. The
+            <code>EXPIRE</code>
+            on every path is what stops your limiter from becoming an unbounded memory leak across millions of
+            one-off keys. The script returns the
+            <strong>remaining tokens and the wait time</strong>
+            , not just a boolean, because those are exactly what the response headers in section 10 need — and
+            computing them anywhere else means computing them wrong. And state is written even on the denied path,
+            so the refill clock keeps advancing.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The One-Line Version</div>
+            <p>
+                For a plain fixed window you don't need any of this.
+                <code>INCR</code>
+                is atomic and returns the post-increment value, so
+                <code>INCR key</code>
+                followed by
+                <code>EXPIRE key 60</code>
+                when the result is 1 gives you a correct fixed-window limiter in two commands. It's a genuinely
+                good answer when the boundary burst is acceptable — the complexity above is the price of the other
+                algorithms, not of rate limiting itself.
+            </p>
+        </div>
+
+        <p>
+            One operational note: keep Lua scripts short and non-blocking. Redis is single-threaded, so a slow
+            script stalls every other client on that node. A limiter script should touch a handful of keys and
+            return — never iterate a large collection, never call
+            <code>KEYS</code>
+            .
+        </p>
+
+        <!-- Section 9 -->
+        <h2 id="failure-modes">
+            <span class="section-number">09</span>
+            Failure Modes — When the Limiter Is the Outage
+        </h2>
+
+        <p>
+            You have now added a component that sits in front of every request in your system. It is worth being
+            deliberate about what happens when it breaks, because "the rate limiter caused the outage" is a real
+            and embarrassing postmortem.
+        </p>
+
+        <h3>Fail open or fail closed?</h3>
+
+        <p>
+            Redis is unreachable. Every request now needs an answer to a question you cannot compute. There are
+            exactly two options and no clever third one.
+        </p>
+        <ul>
+            <li>
+                <strong>Fail open</strong>
+                — allow everything. Your API stays up; your protection is gone. If the store went down
+                <em>because</em>
+                of a traffic surge, you have just removed the only thing standing between that surge and your
+                database.
+            </li>
+            <li>
+                <strong>Fail closed</strong>
+                — reject everything. Your protection holds; your API is down. A Redis blip becomes a total
+                outage.
+            </li>
+        </ul>
+        <p>
+            The right choice follows from what the limiter is protecting. If it enforces
+            <strong>fairness</strong>
+            between well-behaved tenants, fail open — a few minutes of unfair-but-functional beats an outage. If it
+            is the control on something with real consequences —
+            <strong>spend, security, or a fragile downstream</strong>
+            — fail closed, because the failure you're preventing is worse than the downtime.
+        </p>
+        <p>
+            The refinement most systems land on is
+            <strong>fail open with a local fallback</strong>
+            : when the shared store is unavailable, fall back to per-node in-memory limits set conservatively. You
+            lose global accuracy and keep a meaningful ceiling. Whichever you choose, make it
+            <em>explicit configuration</em>
+            rather than whatever your exception handler happens to do — and alarm loudly on entering the degraded
+            path, because a limiter silently failing open is indistinguishable from a limiter that works right up
+            until it matters.
+        </p>
+
+        <h3>Retry storms: how a limiter amplifies the problem it solved</h3>
+
+        <p>
+            You reject 10,000 requests with a 429. Every client's retry logic fires. If they all wait exactly one
+            second, all 10,000 come back
+            <em>at the same instant</em>
+            — a tighter, more synchronised spike than the original. Reject again, and the wave repeats, more
+            synchronised each time. Well-behaved clients with naive backoff produce this; it doesn't take an
+            attacker.
+        </p>
+        <p>
+            The fix is jitter, and it belongs in the delay itself rather than being sprinkled on afterwards. The
+            standard formulation is
+            <strong>full jitter</strong>
+            : sleep a random duration between zero and the exponentially growing ceiling.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Full Jitter Backoff</span>
+            <pre><code><span class="comment">// Naive — every client retries in lockstep, re-creating the spike</span>
+<span class="type">long</span> delay = baseMs * (<span class="number">1L</span> &lt;&lt; attempt);
+
+<span class="comment">// Full jitter — spreads retries across the whole window</span>
+<span class="type">long</span> ceiling = <span class="type">Math</span>.min(maxMs, baseMs * (<span class="number">1L</span> &lt;&lt; attempt));
+<span class="type">long</span> delay   = <span class="type">ThreadLocalRandom</span>.current().nextLong(ceiling + <span class="number">1</span>);
+
+<span class="comment">// If the server told you when to come back, that wins — but still jitter it,</span>
+<span class="comment">// or every client that got the same Retry-After returns at the same moment.</span>
+<span class="keyword">if</span> (retryAfterMs &gt; <span class="number">0</span>) {
+    delay = retryAfterMs + <span class="type">ThreadLocalRandom</span>.current().nextLong(<span class="number">1000</span>);
+}</code></pre>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 7 — Retry Storm, With and Without Jitter</div>
+            <svg viewBox="0 0 780 300" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridR7" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenR7" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="27" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="300" fill="#fefefe" rx="12" />
+                <rect width="780" height="300" fill="url(#dotGridR7)" rx="12" />
+
+                <text x="390" y="26" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    10,000 clients get a 429 at t=0. What arrives next?
+                </text>
+
+                <!-- without jitter -->
+                <text x="195" y="54" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">FIXED DELAY — all wait 1s</text>
+                <path d="M 45 180 L 345 180" fill="none" stroke="#999" stroke-width="1.3" />
+                <path d="M 45 180 L 45 80" fill="none" stroke="#999" stroke-width="1.3" />
+                <rect x="182" y="88" width="18" height="92" fill="#fecdd3" stroke="#be123c" stroke-width="1.4"
+                    filter="url(#roughenR7)" />
+                <text x="191" y="80" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">10,000</text>
+                <text x="195" y="198" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">t = 1.0s</text>
+                <text x="195" y="222" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">A spike sharper than the original —</text>
+                <text x="195" y="238" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">rejected again, and re-synchronised.</text>
+
+                <path d="M 390 55 L 390 260" fill="none" stroke="#ddd" stroke-width="1" stroke-dasharray="4,4" />
+
+                <!-- with jitter -->
+                <text x="585" y="54" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">FULL JITTER — random(0, ceiling)</text>
+                <path d="M 435 180 L 735 180" fill="none" stroke="#999" stroke-width="1.3" />
+                <path d="M 435 180 L 435 80" fill="none" stroke="#999" stroke-width="1.3" />
+                <rect x="452" y="152" width="18" height="28" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2" />
+                <rect x="478" y="145" width="18" height="35" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2" />
+                <rect x="504" y="149" width="18" height="31" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2" />
+                <rect x="530" y="143" width="18" height="37" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2" />
+                <rect x="556" y="150" width="18" height="30" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2" />
+                <rect x="582" y="146" width="18" height="34" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2" />
+                <rect x="608" y="152" width="18" height="28" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2" />
+                <rect x="634" y="147" width="18" height="33" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2" />
+                <rect x="660" y="151" width="18" height="29" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2" />
+                <rect x="686" y="148" width="18" height="32" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2" />
+                <text x="585" y="130" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">~1,000 per 100ms slice</text>
+                <text x="585" y="198" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">t = 0 → 1.0s, spread flat</text>
+                <text x="585" y="222" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">Peak load cut by an order of magnitude,</text>
+                <text x="585" y="238" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">and each wave de-synchronises further.</text>
+
+                <text x="390" y="278" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Same number of retries either way. Jitter changes only when they land — which is everything.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Identical retry volume, radically different peak. This is why <code>Retry-After</code> should be
+                jittered by the client rather than obeyed to the millisecond by everyone at once.
+            </p>
+        </div>
+
+        <h3>The queue of doom</h3>
+
+        <p>
+            If you chose the queueing variant of leaky bucket, there's a specific trap. When arrivals exceed the
+            drain rate, the queue grows. Latency grows with it. Requests at the back may wait past the point where
+            the client already gave up and retried — so you're now doing work whose result nobody will read, while
+            the retry sits behind it in the same queue.
+        </p>
+        <p>
+            Google's SRE guidance is blunt about this: under sustained overload, queueing increases latency without
+            increasing throughput. The mitigations are to
+            <strong>bound the queue</strong>
+            (shed on overflow rather than growing), attach a
+            <strong>deadline</strong>
+            to each entry and drop anything already past it, and consider
+            <strong>LIFO</strong>
+            ordering — under overload, the newest request is the one most likely to still have a caller waiting for
+            it.
+        </p>
+
+        <h3>The limiter's own hot key</h3>
+
+        <p>
+            One tenant generating 80% of your traffic means one Redis key taking 80% of your limiter's writes.
+            Redis is single-threaded per shard, so that key's shard becomes the bottleneck for the whole fleet, and
+            since hashing sends a key to exactly one shard, adding shards doesn't help.
+        </p>
+        <p>
+            The fix mirrors any hot-key problem: split the key into
+            <code>N</code>
+            sub-keys, give each
+            <code>limit / N</code>
+            , and hash the request onto one. You trade a little accuracy — the same uneven-distribution problem as
+            local counters, but at a much smaller scale — for horizontal headroom. Alternatively, put the biggest
+            tenants on the two-tier lease path so their traffic stops touching the shared key at all.
+        </p>
+
+        <div class="deep-dive">
+            <div class="deep-dive-header" onclick="toggleDeepDive('adaptive-throttling')">
+                <h4>Deep Dive: Client-Side Adaptive Throttling — Rate Limiting From the Other End</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content" id="adaptive-throttling">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Everything above assumes the server does the limiting. Google's SRE book describes the
+                        complement: clients that limit
+                        <em>themselves</em>
+                        based on observed rejection rates, so an overloaded server stops receiving requests it will
+                        only reject.
+                    </p>
+                    <p>
+                        Each client tracks two rolling counters over a window — <code>requests</code> (everything
+                        attempted) and <code>accepts</code> (everything the server actually served) — and drops
+                        requests locally with probability:
+                    </p>
+                    <div class="code-block" style="margin-top: 1rem;">
+                        <span class="code-block-label">Adaptive Throttling</span>
+                        <pre><code>p(drop) = max(<span class="number">0</span>, (requests - K * accepts) / (requests + <span class="number">1</span>))
+<span class="comment">// K = 2 is the usual starting point</span></code></pre>
+                    </div>
+                    <p>
+                        While the server accepts everything, <code>requests ≈ accepts</code>, the numerator goes
+                        negative, and the client drops nothing. As rejections climb, <code>accepts</code> falls
+                        behind, and the drop probability rises smoothly — the client throttles itself in proportion
+                        to how unwelcome its traffic has become, with no coordination and no configuration.
+                    </p>
+                    <p>
+                        This matters most for internal service-to-service traffic, where you control both ends. It
+                        turns the rejection signal into something that reduces load rather than merely
+                        redistributing it, and it's the missing half of most rate-limiting designs.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 10 -->
+        <h2 id="client-contract">
+            <span class="section-number">10</span>
+            The Client's Half of the Contract
+        </h2>
+
+        <p>
+            A rate limiter that only says "no" is a bad API. The client cannot behave well without knowing how
+            close it is to the limit, when it may retry, and which limit it hit. Every one of those is a header.
+        </p>
+
+        <h3>Tell them where they stand</h3>
+
+        <p>
+            The
+            <code>X-RateLimit-*</code>
+            family is the long-standing de-facto convention, and the IETF's HTTP API working group has been
+            standardising an unprefixed
+            <code>RateLimit-*</code>
+            form. Either way the semantics are what matter:
+        </p>
+
+        <div class="table-scroll reveal-element">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Header</th>
+                        <th>Meaning</th>
+                        <th>Send It</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>RateLimit-Limit</code></td>
+                        <td>The ceiling for the current window</td>
+                        <td>On every response</td>
+                    </tr>
+                    <tr>
+                        <td><code>RateLimit-Remaining</code></td>
+                        <td>How much is left before rejection</td>
+                        <td>On every response</td>
+                    </tr>
+                    <tr>
+                        <td><code>RateLimit-Reset</code></td>
+                        <td>When the allowance refills</td>
+                        <td>On every response</td>
+                    </tr>
+                    <tr>
+                        <td><code>Retry-After</code></td>
+                        <td>Seconds (or a date) to wait before retrying</td>
+                        <td>On 429 and 503</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p>
+            Send them on
+            <em>successful</em>
+            responses, not just rejections. A client that only learns about the limit by hitting it can never slow
+            down before it does — which is precisely the behaviour you wanted. And when you enforce multiple
+            dimensions, report them separately: a client near its token limit but nowhere near its request limit
+            needs to know which one to back off on. The major LLM APIs do exactly this, exposing distinct
+            remaining-and-reset triples per dimension.
+        </p>
+
+        <h3>429 or 503?</h3>
+
+        <p>
+            They mean different things and clients treat them differently.
+            <strong>429 Too Many Requests</strong>
+            says "you exceeded your allowance" — the caller is responsible, and backing off will help.
+            <strong>503 Service Unavailable</strong>
+            says "the service is overloaded" — nothing about this caller was wrong, and every caller is getting the
+            same answer. Sending 503 for a per-tenant quota breach makes a well-behaved tenant think you're broken;
+            sending 429 for global overload makes every caller think they personally did something wrong.
+        </p>
+        <p>
+            Include a machine-readable body alongside the status. Which limit fired, and what scope it was on, is
+            not something a client should have to infer:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">HTTP — A 429 a Client Can Act On</span>
+            <pre><code>HTTP/1.1 429 Too Many Requests
+RateLimit-Limit:      600
+RateLimit-Remaining:  0
+RateLimit-Reset:      12
+Retry-After:          12
+Content-Type:         application/json
+
+{
+  <span class="string">"error"</span>: {
+    <span class="string">"type"</span>:    <span class="string">"rate_limit_error"</span>,
+    <span class="string">"scope"</span>:   <span class="string">"user"</span>,          <span class="comment">// not "tenant" — tells them who to fix</span>
+    <span class="string">"limit"</span>:   <span class="string">"requests_per_minute"</span>,
+    <span class="string">"message"</span>: <span class="string">"600 requests/minute exceeded for user u_8812. Retry in 12s."</span>
+  }
+}</code></pre>
+        </div>
+
+        <h3>What a good client does</h3>
+
+        <p>
+            Three behaviours, in order of importance. <strong>Honour <code>Retry-After</code>, plus jitter</strong>
+            — the server knows exactly when capacity returns, and adding a random fraction of a second stops every
+            client from returning simultaneously. <strong>Back off exponentially with full jitter</strong> when
+            there's no <code>Retry-After</code>, and cap both the delay and the attempt count. And
+            <strong>open a circuit breaker</strong> after sustained rejection: past some threshold, stop sending
+            entirely for a cooling-off period rather than continuing to probe. Half-open it with a single trial
+            request rather than resuming full traffic, or you've just rebuilt the retry storm.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Worth Knowing</div>
+            <p>
+                Most official SDKs already do this. The Anthropic SDKs, for instance, retry 429 and 5xx responses
+                with exponential backoff automatically and expose the retry count as configuration. Before writing
+                your own retry loop around a vendor SDK, check whether you're about to build a second one on top of
+                theirs — nested retry layers multiply, and a "3 retries" policy wrapping a "2 retries" client is
+                actually nine requests.
+            </p>
+        </div>
+
+        <!-- Section 11 -->
+        <h2 id="budgets">
+            <span class="section-number">11</span>
+            Budget Enforcement — The Problem Uber Actually Had
+        </h2>
+
+        <p>
+            We now have a properly engineered rate limiter: the right key, a cost-weighted token bucket, atomic
+            evaluation, layered placement, a defined failure mode, and a client contract. Deploy all of it at Uber
+            in December 2025 and the budget still burns in four months.
+        </p>
+        <p>
+            Nothing was going too fast. Five thousand engineers each making a few hundred well-shaped requests a
+            day is a healthy rate by any measure. The failure was
+            <strong>cumulative</strong>
+            , not
+            <strong>instantaneous</strong>
+            , and no per-second control can see it. Rate limiting bounds the derivative; budgets bound the
+            integral.
+        </p>
+
+        <h3>A spend ledger, not a counter</h3>
+
+        <p>
+            The mechanism is different in kind. A rate limiter forgets — that's the point of a window. A budget
+            must
+            <em>accumulate</em>
+            over the period and never forget until the period rolls. In practice that means an append-only ledger
+            of charges plus a running total, keyed by whoever owns the money.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Budget Enforcement — The Shape</span>
+            <pre><code><span class="comment">// Same reserve-then-reconcile as section 5, different time horizon</span>
+<span class="keyword">record</span> Charge(String subject, <span class="type">Instant</span> at, <span class="type">long</span> micros, String reason) {}
+
+<span class="keyword">class</span> BudgetGate {
+
+    <span class="keyword">boolean</span> admit(String subject, <span class="type">long</span> estimatedMicros) {
+        Budget b = budgets.forPeriod(subject, currentPeriod());
+        <span class="type">long</span> projected = b.spentMicros() + estimatedMicros;
+
+        <span class="keyword">if</span> (projected &gt; b.hardCapMicros()) {
+            alerts.hardCapReached(subject, b);
+            <span class="keyword">return false</span>;                <span class="comment">// stop — this is the only true block</span>
+        }
+        <span class="keyword">if</span> (projected &gt; b.softCapMicros() &amp;&amp; !b.softCapNotified()) {
+            alerts.softCapReached(subject, b);   <span class="comment">// warn, do not block</span>
+            b.markSoftCapNotified();
+        }
+        <span class="keyword">return true</span>;
+    }
+
+    <span class="keyword">void</span> settle(String subject, <span class="type">long</span> actualMicros, String reason) {
+        ledger.append(<span class="keyword">new</span> Charge(subject, <span class="type">Instant</span>.now(), actualMicros, reason));
+    }
+}</code></pre>
+        </div>
+
+        <p>
+            Four properties separate a budget that works from one that just produces a monthly surprise:
+        </p>
+        <ul>
+            <li>
+                <strong>Two caps, not one.</strong>
+                A soft cap warns and keeps serving; a hard cap blocks. A single cap is either so low it interrupts
+                legitimate work or so high it never fires before the money is gone.
+            </li>
+            <li>
+                <strong>Burn rate, not just the total.</strong>
+                This is the borrowed idea from SRE error budgets, and it's the one that would actually have caught
+                Uber. Don't alert at 80% consumed — alert when the current burn rate projects exhaustion before the
+                period ends. Four months into a twelve-month budget at 100% spent is a fire; at week three, a burn
+                rate implying month four is a
+                <em>question</em>
+                , and there's still time to answer it.
+            </li>
+            <li>
+                <strong>Attribution down to the actor.</strong>
+                A budget you can only see in aggregate tells you that you overspent, not who or what did. Every
+                charge needs a subject and a reason, so "one script, every 30 minutes, overnight" is a query rather
+                than a forensic exercise.
+            </li>
+            <li>
+                <strong>Per-actor sub-budgets with a shared pool.</strong>
+                Give each engineer a monthly ceiling well below the total, so no single runaway can consume the
+                organisation's allowance — and let unused allowance flow back to a shared pool so the ceiling
+                doesn't punish heavy legitimate users.
+            </li>
+        </ul>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 8 — Burn Rate Is the Signal, Not the Total</div>
+            <svg viewBox="0 0 780 330" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridR8" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenR8" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="28" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="330" fill="#fefefe" rx="12" />
+                <rect width="780" height="330" fill="url(#dotGridR8)" rx="12" />
+
+                <text x="390" y="26" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Annual AI budget, consumed over time
+                </text>
+
+                <!-- axes -->
+                <path d="M 70 260 L 730 260" fill="none" stroke="#999" stroke-width="1.4" />
+                <path d="M 70 260 L 70 55" fill="none" stroke="#999" stroke-width="1.4" />
+                <text x="52" y="62" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="end">100%</text>
+                <text x="52" y="264" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="end">0%</text>
+
+                <!-- month labels -->
+                <text x="125" y="280" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">Dec</text>
+                <text x="235" y="280" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">Jan</text>
+                <text x="345" y="280" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">Feb</text>
+                <text x="455" y="280" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">Mar</text>
+                <text x="565" y="280" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">Apr</text>
+                <text x="690" y="280" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">… Nov</text>
+
+                <!-- planned burn line -->
+                <path d="M 70 260 L 730 65" fill="none" stroke="#16a34a" stroke-width="1.6" stroke-dasharray="6,4" />
+                <text x="640" y="118" fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    planned burn (12 months)
+                </text>
+
+                <!-- actual burn -->
+                <path d="M 70 260 L 125 232 L 235 186 L 345 138 L 455 100 L 565 65" fill="none" stroke="#be123c"
+                    stroke-width="2.4" />
+                <circle cx="235" cy="186" r="4" fill="#be123c" />
+                <circle cx="565" cy="65" r="5" fill="#be123c" />
+                <text x="500" y="52" fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    font-weight="700">actual — exhausted</text>
+
+                <!-- soft cap line -->
+                <path d="M 70 143 L 730 143" fill="none" stroke="#d97706" stroke-width="1.3" stroke-dasharray="3,3" />
+                <text x="76" y="138" fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    soft cap 60% — warn, keep serving
+                </text>
+
+                <!-- the alert moment -->
+                <path d="M 235 186 L 235 300" fill="none" stroke="#6d28d9" stroke-width="1.4" stroke-dasharray="4,3" />
+                <rect x="128" y="298" width="215" height="24" rx="5" fill="#f5f3ff" stroke="#6d28d9"
+                    stroke-width="1.3" filter="url(#roughenR8)" />
+                <text x="235" y="314" fill="#6d28d9" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">
+                    burn-rate alert fires here — week 6
+                </text>
+
+                <rect x="390" y="196" width="330" height="58" rx="7" fill="#fdf2f8" stroke="#db2777" stroke-width="1.4"
+                    filter="url(#roughenR8)" />
+                <text x="555" y="216" fill="#db2777" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">
+                    A total-based alert at 80% fires in March.
+                </text>
+                <text x="555" y="234" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    A burn-rate alert fires in January, when the
+                </text>
+                <text x="555" y="248" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    slope first diverges — while you can still act.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                The consumed total only becomes alarming once it's nearly too late. The slope diverges from plan
+                within weeks — which is why burn rate, not percentage consumed, is the number worth paging on.
+            </p>
+        </div>
+
+        <h3>And the part no control fixes</h3>
+
+        <p>
+            One detail from the Uber story deserves to be said plainly, because it's the root cause and it isn't
+            technical: engineers were ranked on leaderboards by how much they used the tool.
+        </p>
+        <p>
+            That is Goodhart's Law in its natural habitat — when a measure becomes a target, it ceases to be a good
+            measure. Usage was chosen as a proxy for adoption, adoption became the thing people optimised, and
+            usage stopped carrying information about value. No budget, no quota, and no rate limiter fixes that. A
+            hard cap would have bounded the blast radius and turned a four-month burn into a series of
+            conversations; it would not have made the incentive sane.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ The Honest Version</div>
+            <p>
+                Rate limiting protects your system from your users. Budget enforcement protects your users from
+                themselves. Neither protects an organisation from a metric that rewards the behaviour it's trying
+                to control. When you design the limits, look at what the surrounding system is incentivising —
+                because that's what will show up at your limiter, at scale, every time.
+            </p>
+        </div>
+
+        <!-- Section 12 -->
+        <h2 id="back-of-envelope">
+            <span class="section-number">12</span>
+            Back-of-Envelope: Sizing a Rate Limiter
+        </h2>
+
+        <p>
+            "How much does this cost to run?" is the follow-up that separates people who've deployed a rate limiter
+            from people who've read about one. The answer comes from three inputs: key cardinality, per-key memory,
+            and operations per second.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Estimate — API Rate Limiter at Scale</span>
+            <pre><code><span class="comment">// Inputs</span>
+Peak traffic:              50,000 req/s
+Distinct active users:     10,000,000
+Limits enforced per req:   3  (global, tenant, user)
+Limit:                     600 req/min per user
+
+<span class="comment">// Redis operations — one Lua call per limit, per request</span>
+50,000 req/s × 3 limits  = 150,000 ops/s
+<span class="comment">// A single Redis node handles ~100K ops/s comfortably → shard, or</span>
+<span class="comment">// move the global counter in-process (it needs no cross-node accuracy)</span>
+50,000 req/s × 2 limits  = 100,000 ops/s   <span class="comment">// after that one change</span>
+
+<span class="comment">// Memory — this is where algorithm choice shows up in the bill</span>
+Token bucket:     ~100 bytes/key  (2 fields + Redis hash overhead)
+  10,000,000 × 100 B   ≈ 1.0 GB
+Sliding counter:  ~150 bytes/key  (2 counters + key overhead)
+  10,000,000 × 150 B   ≈ 1.5 GB
+Sliding log:      ~600 entries/key × ~50 B
+  10,000,000 × 30 KB   ≈ 300 GB      <span class="comment">// ← the reason nobody defaults to this</span>
+
+<span class="comment">// Working set is smaller than the key space: TTL evicts idle users.</span>
+<span class="comment">// If only 15% are active within any TTL window:</span>
+1.0 GB × 15%  ≈ 150 MB resident   <span class="comment">// token bucket, realistically</span>
+
+<span class="comment">// Latency budget</span>
+Redis round trip (same AZ):  0.2 – 0.5 ms
+2 sequential limit checks:   0.4 – 1.0 ms added to p50
+<span class="comment">// Pipeline the independent checks → back to ~1 RTT</span>
+<span class="comment">// Still too much? Two-tier leases: 1 RTT per ~200 requests</span></code></pre>
+        </div>
+
+        <p>
+            Two things fall out of that arithmetic that are worth internalising. First, the
+            <strong>300 GB line</strong>
+            is the entire practical argument against the sliding window log — it's not that the algorithm is bad,
+            it's that its memory scales with the limit
+            <em>and</em>
+            the key count, and either one alone is fine. Second,
+            <strong>the number of limits you evaluate is a latency multiplier</strong>
+            . Three networked checks per request is three round trips unless you pipeline them or push the cheap
+            ones in-process. That's a design decision, not an implementation detail.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>
+                When asked to size a limiter, state the four inputs before computing anything: peak RPS, distinct
+                keys, limits per request, and TTL. The number matters less than showing you know that key
+                cardinality — not traffic — is what drives memory, and that TTL is what makes the difference
+                between the key space and the working set.
+            </p>
+        </div>
+
+        <!-- Section 13 -->
+        <h2 id="rollout">
+            <span class="section-number">13</span>
+            Rollout, Tuning &amp; Observability
+        </h2>
+
+        <p>
+            The most common way to cause an outage with a rate limiter is to turn it on. You picked a number from
+            intuition, it was 10× too low, and you rejected a third of production traffic in the first minute.
+        </p>
+
+        <h3>Never ship straight to enforce</h3>
+
+        <p>
+            Run the limiter in three stages, and let real traffic pick the number for you.
+        </p>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method get">STAGE 1</span>
+                <span class="api-url">shadow / dry-run</span>
+            </div>
+            <p class="api-desc">
+                Evaluate every limit and emit a metric on what
+                <em>would</em>
+                have been rejected — but allow everything. Run for at least a full weekly cycle so you see Monday
+                morning and the batch job that runs at 3am Sunday. If your proposed limit would have rejected real
+                customers, you learn it here, for free.
+            </p>
+        </div>
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method get">STAGE 2</span>
+                <span class="api-url">warn</span>
+            </div>
+            <p class="api-desc">
+                Still allow, but send the
+                <code>RateLimit-*</code>
+                headers and notify the owners of any key that's crossing. Clients get a chance to fix themselves
+                before anything breaks, and you find out which integrations ignore headers entirely.
+            </p>
+        </div>
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method post">STAGE 3</span>
+                <span class="api-url">enforce</span>
+            </div>
+            <p class="api-desc">
+                Turn on rejection, ramped by percentage of traffic or by tenant cohort, with the kill switch
+                already tested. Keep the shadow metric running so you can see the gap between what you're
+                rejecting and what you would reject at a tighter limit.
+            </p>
+        </div>
+
+        <h3>Picking the actual number</h3>
+
+        <p>
+            Don't guess, and don't ask what feels reasonable. Measure the current per-key request rate over a
+            representative period, take a high percentile — p99 or p99.9 of
+            <em>legitimate</em>
+            traffic — and set the limit at a multiple of it. Starting at 3–5× p99 and tightening once you've seen a
+            few weeks of real distribution is far safer than starting tight and discovering your assumptions in
+            production.
+        </p>
+        <p>
+            Two adjustments worth making before you commit. Trim the obvious abuse out of your sample first, or
+            you'll size the limit around the thing you're trying to stop. And check the distribution's shape — if a
+            handful of legitimate integrations sit an order of magnitude above everyone else, you want a tier or an
+            override for them, not a global limit generous enough to cover them.
+        </p>
+
+        <h3>What to emit</h3>
+
+        <p>
+            A limiter you can't observe is a limiter you can't tune. The minimum useful set:
+        </p>
+        <ul>
+            <li>
+                <strong>Decisions, by scope and outcome</strong>
+                — allowed and throttled counts labelled with which limit fired. Without the scope label, "throttle
+                rate is up" is a fact you can do nothing with.
+            </li>
+            <li>
+                <strong>Top-N keys approaching their limit</strong>
+                — the leading indicator. A tenant at 85% for three days is a conversation now instead of a support
+                ticket on Friday.
+            </li>
+            <li>
+                <strong>Limiter latency, separately from request latency</strong>
+                — the check is on the hot path, and when Redis degrades you want to see it in the limiter's own
+                p99 rather than inferring it from everything getting slower.
+            </li>
+            <li>
+                <strong>Degraded-mode duration</strong>
+                — how long you've been failing open. This is the metric people forget, and it's the one that turns
+                "the limiter was down for six hours and nobody noticed" into an alert.
+            </li>
+        </ul>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Cardinality Warning</div>
+            <p>
+                Do not label metrics with the rate-limit key itself. A per-user label on a ten-million-user system
+                is ten million time series, and you will take down your metrics backend faster than any traffic
+                spike would have taken down your API. Label with the
+                <em>scope</em>
+                (user, tenant, ip) and the outcome; put the specific keys in a separate top-N structure with
+                bounded size, or in logs.
+            </p>
+        </div>
+
+        <!-- Section 14 -->
+        <h2 id="interview-essentials">
+            <span class="section-number">14</span>
+            Interview Essentials &amp; Level Expectations
+        </h2>
+
+        <p>
+            "Design a rate limiter" is one of the most common system design prompts, and one of the easiest to
+            answer shallowly — reciting five algorithms takes ninety seconds and demonstrates almost nothing. Here's
+            what's typically expected at each level.
+        </p>
+
+        <div class="level-grid reveal-element">
+            <div class="level-card mid">
+                <div class="level-label">Mid-Level (E4)</div>
+                <h4>Know the Mechanisms</h4>
+                <p>
+                    Explain why rate limiting exists. Describe fixed window, sliding window, and token bucket, and
+                    name the boundary problem. Know that the counter has to be shared across servers and that
+                    Redis is the usual answer.
+                </p>
+                <span class="level-focus">80% Concepts · 20% Ops</span>
+            </div>
+            <div class="level-card senior">
+                <div class="level-label">Senior (E5)</div>
+                <h4>Own the Trade-offs</h4>
+                <p>
+                    Choose the key before the algorithm, and justify it. Spot the read-then-write race and reach
+                    for Lua. Decide fail-open vs fail-closed from what's being protected. Size memory from key
+                    cardinality. Explain retry storms and specify jitter.
+                </p>
+                <span class="level-focus">50% Design · 50% Depth</span>
+            </div>
+            <div class="level-card staff">
+                <div class="level-label">Staff+ (E6)</div>
+                <h4>Design the Control System</h4>
+                <p>
+                    Separate rate limiting from concurrency limiting from quota, and pick per problem. Design
+                    cost-aware limiting with reserve-then-reconcile. Choose a coordination model against a latency
+                    budget. Own the rollout path, the tuning method, and the org-wide policy.
+                </p>
+                <span class="level-focus">30% Design · 70% Depth</span>
+            </div>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Senior Signal</div>
+            <p>
+                The strongest opening move is a question, not an algorithm: "What are we protecting, and what does
+                exceeding it actually cost?" A limiter defending a fragile database wants smoothing and fails
+                closed. A limiter enforcing a paid plan wants bursts and fails open. A limiter guarding spend isn't
+                a rate limiter at all. Choosing the control before the algorithm is the whole difference between
+                answering the question asked and answering the one that was meant.
+            </p>
+        </div>
+
+        <!-- Section 15 -->
+        <h2 id="summary">
+            <span class="section-number">15</span>
+            Summary
+        </h2>
+
+        <p>
+            Rate limiting looks like a single well-defined problem with five textbook solutions, and it isn't. It's
+            a family of controls operating on different units over different horizons, and almost every interesting
+            failure comes from applying the wrong member of the family — counting requests when cost was the scarce
+            thing, bounding rate when the constraint was concurrency, watching seconds when the budget was blowing
+            up over months.
+        </p>
+        <p>
+            The algorithm is the easy part, and it's the part everyone writes about. What you count, where the
+            counter lives, how it behaves when it can't be reached, and what the client is told: those are where
+            the design actually lives.
+        </p>
+
+        <div class="table-scroll reveal-element">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Concept</th>
+                        <th>One-Line Recall</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Choose the control first</td>
+                        <td>Rate ≠ concurrency ≠ quota — different units, different horizons, different mechanisms
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Key before algorithm</td>
+                        <td>The key decides what you protect and who you hurt; IP keys need /64 aggregation and
+                            trusted-proxy parsing</td>
+                    </tr>
+                    <tr>
+                        <td>Fixed window</td>
+                        <td>One counter, 2× burst at the boundary — fine when that's harmless</td>
+                    </tr>
+                    <tr>
+                        <td>Sliding window counter</td>
+                        <td>Two counters, weighted estimate; the memory-cheap default for smooth enforcement</td>
+                    </tr>
+                    <tr>
+                        <td>Token bucket</td>
+                        <td>Bursts up to capacity, average bounded by refill; the natural home for cost weighting
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>GCRA</td>
+                        <td>Token-bucket behaviour from a single stored timestamp, with Retry-After for free</td>
+                    </tr>
+                    <tr>
+                        <td>Cost-aware limiting</td>
+                        <td>Debit by tokens/bytes, not calls; reserve worst case, reconcile after completion</td>
+                    </tr>
+                    <tr>
+                        <td>Atomicity</td>
+                        <td>Read-then-write races under load; MULTI/EXEC can't branch — use Lua, or plain INCR</td>
+                    </tr>
+                    <tr>
+                        <td>Fail open vs closed</td>
+                        <td>Fairness fails open, spend and security fail closed — decide explicitly and alarm on it
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Retry storms</td>
+                        <td>Fixed backoff re-synchronises the spike; full jitter is the fix, including on
+                            Retry-After</td>
+                    </tr>
+                    <tr>
+                        <td>Budget enforcement</td>
+                        <td>Ledger + soft/hard caps + burn-rate alerting — the control rate limiting cannot provide
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Rollout</td>
+                        <td>Shadow → warn → enforce; set the limit from measured p99, never from intuition</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Final Thought</div>
+            <p>
+                Uber's five thousand engineers weren't abusing anything. The developer whose script cost $6,000
+                overnight wasn't attacking anyone. Both were doing exactly what the system asked of them, and the
+                system had no way to notice until the money was gone.
+            </p>
+            <p>
+                That's the real lesson, and it generalises well past AI budgets: unconstrained consumption at scale
+                is a system design problem, and the constraint you install has to match the dimension that actually
+                runs out. Pick the wrong dimension and you'll have beautifully engineered limits, comprehensive
+                dashboards, and no idea anything is wrong until someone in finance asks a question.
+            </p>
+        </div>
+
+        <div class="callout" style="margin-top: 2rem;">
+            <div class="callout-label">Source</div>
+            <p>
+                This is an expanded, diagram-illustrated edition of a shorter piece originally published on
+                <a href="https://medium.com/@ajay.kotnalajpr/uber-burned-its-entire-ai-budget-in-4-months-f87b5eba0099"
+                    target="_blank" style="color: var(--rl-violet); font-weight: 600;">Medium</a>
+                — this version adds the control taxonomy, key selection, cost-aware limiting with
+                reserve-then-reconcile, distributed coordination models, fail-open/fail-closed, retry storms, GCRA,
+                budget enforcement, sizing, rollout, and the level-expectation breakdown.
+            </p>
+        </div>
+    </article>
+
+    <!-- Author Footer -->
+    <div class="article-footer">
+        <div class="author-card reveal-element">
+            <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar" />
+            <div class="author-info">
+                <h4>Ajay Kotnala</h4>
+                <div class="author-role">Senior Solution Architect</div>
+                <p>
+                    15+ years designing cloud-native, event-driven architectures at enterprise scale. Passionate
+                    about system design, API-first thinking, and making complex systems feel simple.
+                </p>
+            </div>
+        </div>
+        <div class="back-links-row">
+            <a href="../index.html" class="back-link">← Back to Portfolio</a>
+            <a href="./index.html" class="back-link">Back to Deep Dive Articles →</a>
+        </div>
+    </div>
+
+    <!-- Global Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-bottom">
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank">LinkedIn</a>
+                    <a href="https://github.com/ajaykotnala" target="_blank">GitHub</a>
+                    <a href="https://medium.com/@ajay.kotnalajpr" target="_blank">Medium</a>
+                </div>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll Progress Bar
+        window.addEventListener("scroll", () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrollTop / docHeight) * 100;
+            document.getElementById("progressBar").style.width = progress + "%";
+        });
+
+        // Intersection Observer for scroll-reveal animations
+        document.addEventListener("DOMContentLoaded", () => {
+            const observerOptions = {
+                threshold: 0.12,
+                rootMargin: "0px 0px -40px 0px",
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("active");
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll(".reveal-element").forEach((el) => {
+                observer.observe(el);
+            });
+        });
+
+        // Deep Dive Accordion — the .open class drives CSS on the panel, not the content
+        function toggleDeepDive(id) {
+            const content = document.getElementById(id);
+            if (!content) return;
+            const panel = content.closest(".deep-dive");
+            if (panel) panel.classList.toggle("open");
+        }
+
+        // Smooth scroll for TOC and anchor links
+        document.querySelectorAll('.toc a, a[href^="#"]').forEach((anchor) => {
+            anchor.addEventListener("click", function (e) {
+                const targetId = this.getAttribute("href");
+                if (targetId.startsWith("#")) {
+                    e.preventDefault();
+                    const target = document.querySelector(targetId);
+                    if (target) {
+                        const offset = 110;
+                        const targetPosition = target.getBoundingClientRect().top + window.scrollY - offset;
+                        window.scrollTo({ top: targetPosition, behavior: "smooth" });
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
