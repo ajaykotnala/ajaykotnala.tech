@@ -2418,12 +2418,12 @@ String getWithCoalescing(String key) {
 }</code></pre>
         </div>
 
-        <div class="deep-dive">
+        <div class="deep-dive" id="bloom-filter">
             <div class="deep-dive-header" onclick="toggleDeepDive('bloom-filter')">
                 <h4>Deep Dive: Bloom Filters — Negative Caching Without Storing Every Key</h4>
                 <div class="deep-dive-toggle">+</div>
             </div>
-            <div class="deep-dive-content" id="bloom-filter">
+            <div class="deep-dive-content">
                 <div class="deep-dive-content-inner">
                     <p>
                         Negative caching one key at a time works, but a wide enough attack (millions of distinct

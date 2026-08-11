@@ -1808,7 +1808,7 @@ bookedSeats.incrementAndGet();   <span class="comment">// thread-safe, no lock r
                 <h4>Deep Dive: What Does AtomicInteger Actually Do Under the Hood?</h4>
                 <div class="deep-dive-toggle">+</div>
             </div>
-            <div class="deep-dive-content" id="cas-deep-dive">
+            <div class="deep-dive-content">
                 <div class="deep-dive-content-inner">
                     <p>
                         <code>AtomicInteger</code> doesn't use a lock at all — it uses a CPU instruction called
@@ -2165,7 +2165,7 @@ pool.submit(() -&gt; handleRequest(req));  <span class="comment">// submit work,
                 <h4>Deep Dive: Semaphore vs. Mutex — What's Actually Different?</h4>
                 <div class="deep-dive-toggle">+</div>
             </div>
-            <div class="deep-dive-content" id="sem-vs-mutex">
+            <div class="deep-dive-content">
                 <div class="deep-dive-content-inner">
                     <p>
                         A mutex (what <code>synchronized</code> gives you) allows exactly
@@ -2632,12 +2632,12 @@ atomic.AddInt64(&amp;booked, <span class="number">1</span>)</code></pre>
             </li>
         </ul>
 
-        <div class="deep-dive" id ="virtual-threads">
+        <div class="deep-dive" id="virtual-threads">
             <div class="deep-dive-header" onclick="toggleDeepDive('virtual-threads')">
                 <h4>Deep Dive: Do Virtual Threads Make Thread Pools Obsolete?</h4>
                 <div class="deep-dive-toggle">+</div>
             </div>
-            <div class="deep-dive-content" id="virtual-threads">
+            <div class="deep-dive-content">
                 <div class="deep-dive-content-inner">
                     <p>
                         Java's virtual threads (stable since JDK 21) make blocking I/O cheap — you can spin up
