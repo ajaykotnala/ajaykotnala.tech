@@ -1,0 +1,3613 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Performance vs Scalability — System Design Primer | Ajay Kotnala</title>
+    <meta name="description"
+        content="A system design primer on performance and scalability — the two complaints that look identical on a dashboard, the scalability curve and why it bends down, Amdahl vs Gustafson, vertical vs horizontal scaling, the AKF scale cube, and how to measure scaling efficiency honestly. Written by Ajay Kotnala, Senior Solution Architect." />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+        rel="stylesheet" />
+    <style>
+        /* ===== Apple Design Tokens (matching index.html) ===== */
+        :root {
+            /* Color System */
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-pearl: #fafafc;
+            --color-on-primary: #ffffff;
+
+            /* Performance/Scalability brand accents (article identity) */
+            --ps-fuchsia: #c026d3;
+            --ps-cyan: #0891b2;
+            --ps-rose: #e11d48;
+            --ps-gradient: linear-gradient(135deg, #c026d3, #0891b2);
+
+            /* Typography */
+            --font-headline:
+                system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+                sans-serif;
+            --font-body: "Lora", Georgia, "Times New Roman", serif;
+            --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+
+            /* Border Radii */
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            /* Shadows */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06);
+
+            /* Article */
+            --article-width: 680px;
+        }
+
+        /* ===== Reset ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* ===== 1. Global Navigation Bar ===== */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            font-family: var(--font-ui);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .global-nav-logo .logo-icon {
+            font-size: 16px;
+            color: var(--color-primary-on-dark);
+        }
+
+        .global-nav-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .global-nav-actions a {
+            color: #cccccc;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .global-nav-actions a:hover {
+            color: #ffffff;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ===== 2. Sub Navigation Bar (Frosted Sticky) ===== */
+        .sub-nav-frosted {
+            position: sticky;
+            top: 44px;
+            left: 0;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 999;
+            border-bottom: 1px solid var(--color-divider-soft);
+        }
+
+        .sub-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .sub-nav-title {
+            font-family: var(--font-headline);
+            font-size: 21px;
+            font-weight: 600;
+            color: var(--color-ink);
+            text-decoration: none;
+            letter-spacing: 0.231px;
+        }
+
+        .sub-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sub-nav-link {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink);
+            text-decoration: none;
+            opacity: 0.8;
+            transition:
+                color 0.2s ease,
+                opacity 0.2s ease;
+        }
+
+        .sub-nav-link:hover {
+            color: var(--color-primary);
+            opacity: 1;
+        }
+
+        .sub-nav-button {
+            background: var(--color-primary);
+            color: var(--color-on-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            border-radius: var(--rounded-pill);
+            text-decoration: none;
+            transition:
+                background 0.2s ease,
+                transform 0.1s ease;
+        }
+
+        .sub-nav-button:hover {
+            background: var(--color-primary-focus);
+        }
+
+        .sub-nav-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== Scroll Progress Bar ===== */
+        .progress-bar {
+            position: fixed;
+            top: 44px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--ps-gradient);
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        /* ===== Article Hero ===== */
+        .article-hero {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(96px + 4rem) 2rem 4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .article-hero-inner {
+            max-width: var(--article-width);
+            width: 100%;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .article-category {
+            display: inline-block;
+            padding: 4px 14px;
+            background: var(--ps-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .article-date {
+            color: var(--color-body-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .article-read-time {
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 13px;
+        }
+
+        .article-read-time::before {
+            content: "·";
+            margin-right: 0.5rem;
+            color: var(--color-body-muted);
+        }
+
+        .article-hero h1 {
+            font-family: var(--font-headline);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+        }
+
+        .article-hero h1 .gradient-text {
+            background: var(--ps-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .article-hero-desc {
+            font-family: var(--font-body);
+            font-size: 20px;
+            color: var(--color-body-muted);
+            line-height: 1.7;
+            max-width: 600px;
+        }
+
+        .article-hero-desc em {
+            font-style: italic;
+            color: var(--color-ink-muted-80);
+        }
+
+        /* ===== Author Bar ===== */
+        .author-bar {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--color-divider-soft);
+            margin-bottom: 2.5rem;
+        }
+
+        .author-bar-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-bar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .author-bar-name {
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-ink);
+        }
+
+        .author-bar-meta {
+            font-family: var(--font-ui);
+            font-size: 13px;
+            color: var(--color-body-muted);
+        }
+
+        /* ===== Table of Contents ===== */
+        .toc-wrapper {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .toc {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem 2.5rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--ps-gradient);
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toc h3 {
+            font-size: 12px;
+            margin-bottom: 1.2rem;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            padding: 0.35rem 0;
+        }
+
+        .toc li a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 15px;
+            transition:
+                color 0.2s ease,
+                padding-left 0.2s ease;
+            display: inline-block;
+        }
+
+        .toc li a::before {
+            content: counter(toc-counter, decimal-leading-zero) ".";
+            color: var(--ps-fuchsia);
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-right: 0.8rem;
+            font-size: 13px;
+        }
+
+        .toc li a:hover {
+            color: var(--color-primary);
+            padding-left: 4px;
+        }
+
+        /* ===== Article Body ===== */
+        .article-body {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .article-body h2 {
+            font-family: var(--font-headline);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-top: 3.5rem;
+            margin-bottom: 1.2rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .article-body h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .article-body h2 .section-number {
+            color: var(--ps-fuchsia);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .article-body h3 {
+            font-family: var(--font-headline);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-top: 2.5rem;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .article-body p {
+            font-family: var(--font-body);
+            font-size: 19px;
+            line-height: 1.85;
+            color: var(--color-ink-muted-80);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.003em;
+        }
+
+        .article-body ul,
+        .article-body ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .article-body li {
+            font-family: var(--font-body);
+            color: var(--color-ink-muted-80);
+            margin-bottom: 0.6rem;
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .article-body strong {
+            color: var(--color-ink);
+            font-weight: 600;
+        }
+
+        .article-body em {
+            color: var(--color-ink-muted-80);
+            font-style: italic;
+        }
+
+        .article-body code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--color-canvas-parchment);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--ps-fuchsia);
+        }
+
+        /* ===== Callout Boxes ===== */
+        .callout {
+            background: var(--color-canvas-parchment);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 0 var(--rounded-sm) var(--rounded-sm) 0;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .callout.callout-warning {
+            border-left-color: var(--ps-rose);
+            background: #fff1f2;
+        }
+
+        .callout.callout-insight {
+            border-left-color: var(--ps-fuchsia);
+            background: #fdf4ff;
+        }
+
+        .callout.callout-scale {
+            border-left-color: var(--ps-cyan);
+            background: #ecfeff;
+        }
+
+        .callout .callout-label {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.6rem;
+            color: var(--color-primary);
+        }
+
+        .callout.callout-warning .callout-label {
+            color: var(--ps-rose);
+        }
+
+        .callout.callout-insight .callout-label {
+            color: var(--ps-fuchsia);
+        }
+
+        .callout.callout-scale .callout-label {
+            color: var(--ps-cyan);
+        }
+
+        .callout p {
+            margin-bottom: 0;
+            font-size: 16px !important;
+            line-height: 1.7 !important;
+        }
+
+        .callout p + p {
+            margin-top: 0.8rem;
+        }
+
+        /* ===== Code Blocks ===== */
+        .code-block {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-hairline);
+            border-radius: var(--rounded-sm);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0 2rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--color-hairline);
+            color: var(--color-body-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 0 var(--rounded-sm) 0 var(--rounded-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--color-ink);
+            line-height: 1.7;
+            white-space: pre;
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .code-block .keyword {
+            color: #cf222e;
+        }
+
+        .code-block .string {
+            color: #0a3069;
+        }
+
+        .code-block .comment {
+            color: #6e7781;
+            font-style: italic;
+        }
+
+        .code-block .type {
+            color: #953800;
+        }
+
+        .code-block .number {
+            color: #0550ae;
+        }
+
+        /* ===== Entity Cards ===== */
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .entity-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 1.8rem;
+            text-align: center;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .entity-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .entity-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .entity-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .entity-card p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ===== Excalidraw-Style SVG Diagrams ===== */
+        .diagram-container {
+            margin: 3rem -2rem;
+            padding: 2rem;
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            overflow-x: auto;
+        }
+
+        .diagram-title {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-body-muted);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .diagram-caption {
+            text-align: center;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            margin-top: 1rem;
+            font-style: italic;
+        }
+
+        .diagram-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== Comparison Table ===== */
+        .comparison-table-wrapper {
+            overflow-x: auto;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 2rem 0;
+            border-radius: var(--rounded-md);
+            overflow: hidden;
+            border: 1px solid var(--color-divider-soft);
+            font-family: var(--font-ui);
+        }
+
+        .comparison-table th {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            background: var(--color-canvas);
+            color: var(--color-ink-muted-80);
+            font-size: 15px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--color-divider-soft);
+            line-height: 1.5;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--color-canvas-parchment);
+        }
+
+        .comparison-table td code,
+        .comparison-table th code {
+            font-size: 13px;
+        }
+
+        .perf-cell {
+            color: var(--ps-fuchsia);
+            font-weight: 600;
+        }
+
+        .scale-cell {
+            color: var(--ps-cyan);
+            font-weight: 600;
+        }
+
+        /* ===== Scale Numbers ===== */
+        .scale-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .scale-stat {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 1.2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition:
+                box-shadow 0.3s ease,
+                transform 0.3s ease;
+        }
+
+        .scale-stat:hover {
+            box-shadow: var(--shadow-card);
+            transform: translateY(-2px);
+        }
+
+        .scale-stat::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--ps-gradient);
+        }
+
+        .scale-stat .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            background: var(--ps-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-headline);
+        }
+
+        .scale-stat .stat-desc {
+            color: var(--color-body-muted);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ===== Deep Dive Accordion ===== */
+        .deep-dive {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            margin: 1.5rem 0;
+            overflow: hidden;
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .deep-dive:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .deep-dive-header {
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            transition: background 0.2s ease;
+        }
+
+        .deep-dive-header:hover {
+            background: var(--color-canvas-parchment);
+        }
+
+        .deep-dive-header h4 {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--color-ink);
+        }
+
+        .deep-dive-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-canvas-parchment);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            transition:
+                transform 0.3s ease,
+                background 0.3s ease;
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        .deep-dive.open .deep-dive-toggle {
+            transform: rotate(45deg);
+            background: #fdf4ff;
+            color: var(--ps-fuchsia);
+        }
+
+        .deep-dive-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .deep-dive.open .deep-dive-content {
+            max-height: 3000px;
+        }
+
+        .deep-dive-content-inner {
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .deep-dive-content-inner p,
+        .deep-dive-content-inner li {
+            font-size: 16px !important;
+        }
+
+        /* ===== Level Expectation Cards ===== */
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .level-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .level-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .level-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .level-card.mid::before {
+            background: var(--color-primary);
+        }
+
+        .level-card.senior::before {
+            background: var(--ps-fuchsia);
+        }
+
+        .level-card.staff::before {
+            background: var(--ps-cyan);
+        }
+
+        .level-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .level-card.mid .level-label {
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-label {
+            color: var(--ps-fuchsia);
+        }
+
+        .level-card.staff .level-label {
+            color: var(--ps-cyan);
+        }
+
+        .level-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .level-card p {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .level-focus {
+            display: inline-block;
+            margin-top: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .level-card.mid .level-focus {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-focus {
+            background: #fdf4ff;
+            color: var(--ps-fuchsia);
+        }
+
+        .level-card.staff .level-focus {
+            background: #ecfeff;
+            color: var(--ps-cyan);
+        }
+
+        /* ===== Author Footer Card ===== */
+        .article-footer {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+        }
+
+        .author-card {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-canvas);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            flex-shrink: 0;
+        }
+
+        .author-info h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: var(--color-ink);
+        }
+
+        .author-info .author-role {
+            color: var(--color-primary);
+            font-size: 14px;
+            font-family: var(--font-ui);
+            margin-bottom: 0.6rem;
+        }
+
+        .author-info p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+        }
+
+        .back-links-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-weight: 500;
+            font-size: 15px;
+            transition: gap 0.2s ease;
+        }
+
+        .back-link:hover {
+            gap: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* ===== Global Footer ===== */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .footer-container {
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .social-links a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        .fine-print {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink-muted-48);
+            letter-spacing: -0.12px;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 833px) {
+            .sub-nav-container {
+                padding: 0 16px;
+            }
+
+            .article-hero {
+                padding: calc(96px + 2rem) 1.5rem 3rem;
+            }
+
+            .article-body {
+                padding: 0 1.5rem 4rem;
+            }
+
+            .toc-wrapper {
+                padding: 0 1.5rem;
+            }
+
+            .entity-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .scale-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .level-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .author-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .diagram-container {
+                margin: 2rem -1rem;
+                padding: 1.5rem 1rem;
+            }
+
+            .comparison-table {
+                font-size: 14px;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 8px 10px;
+            }
+
+            .author-bar {
+                padding: 0 1.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .scale-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        /* ===== Animations ===== */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(24px);
+            transition:
+                opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1),
+                transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .reveal-element.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- 1. Global Navigation Bar -->
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="index.html" class="global-nav-logo">
+                <span class="logo-icon">[AK]</span>
+                Ajay Kotnala
+            </a>
+            <div class="global-nav-actions">
+                <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
+                    </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" aria-label="LinkedIn">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. Sticky Sub Navigation Bar -->
+    <nav class="sub-nav-frosted">
+        <div class="sub-nav-container">
+            <a href="#" class="sub-nav-title">Performance vs Scalability</a>
+            <div class="sub-nav-right">
+                <a href="./index.html" class="sub-nav-link">Primer Articles</a>
+                <a href="../index.html" class="sub-nav-link">Portfolio</a>
+                <a href="../index.html#contact" class="sub-nav-button">Get in Touch</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Article Hero -->
+    <section class="article-hero">
+        <div class="article-hero-inner reveal-element active">
+            <div class="article-meta">
+                <span class="article-category">Fundamentals</span>
+                <span class="article-date">August 2026</span>
+                <span class="article-read-time">30 min read</span>
+            </div>
+            <h1>
+                Performance vs Scalability
+                <span class="gradient-text">— Slow for One, or Slow for Many?</span>
+            </h1>
+            <p class="article-hero-desc">
+                Two teams report the same symptom: <em>the app is slow</em>. One has a performance problem — it's
+                slow even when a single person uses it. The other has a scalability problem — it's fast for one
+                person and falls apart at a thousand. Same complaint, opposite fixes, and picking the wrong one
+                costs a quarter.
+            </p>
+        </div>
+    </section>
+
+    <!-- Author Bar -->
+    <div class="author-bar reveal-element active">
+        <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar" />
+        <div class="author-bar-info">
+            <div class="author-bar-name">Ajay Kotnala</div>
+            <div class="author-bar-meta">Senior Solution Architect · August 2026 · 30 min read</div>
+        </div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc-wrapper">
+        <div class="toc reveal-element">
+            <h3>In This Article</h3>
+            <ol>
+                <li><a href="#introduction">Two Complaints That Sound Identical</a></li>
+                <li><a href="#definitions">Defining Both Precisely</a></li>
+                <li><a href="#curve">The Scalability Curve — and Why It Bends Down</a></li>
+                <li><a href="#vertical-horizontal">Vertical vs Horizontal Scaling</a></li>
+                <li><a href="#amdahl">Amdahl and Gustafson — Two Laws That Disagree</a></li>
+                <li><a href="#bottleneck">What Actually Limits Scaling: The Shared Thing</a></li>
+                <li><a href="#stateless">Statelessness — The Price of Admission</a></li>
+                <li><a href="#cube">Three Axes of Scale — The AKF Cube</a></li>
+                <li><a href="#conflict">When Performance Work Hurts Scalability</a></li>
+                <li><a href="#measuring">Measuring Scalability: Efficiency, Not Anecdotes</a></li>
+                <li><a href="#cost">Cost Per Unit of Work — The Honest Metric</a></li>
+                <li><a href="#playbook">The Playbook — Fix Performance First</a></li>
+                <li><a href="#failures">Five Ways This Goes Wrong in Production</a></li>
+                <li><a href="#interview">Interview Essentials &amp; Level Expectations</a></li>
+                <li><a href="#summary">Summary</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Article Body -->
+    <article class="article-body">
+        <!-- Section 1: Introduction -->
+        <h2 id="introduction">
+            <span class="section-number">01</span>
+            Two Complaints That Sound Identical
+        </h2>
+
+        <p>
+            Two tickets land in the same sprint. Both say "the app is slow." Both have screenshots of a spinner.
+            Both are from people who are genuinely annoyed.
+        </p>
+        <p>
+            One of them is a performance problem. The other is a scalability problem. They have almost nothing in
+            common, and the single question that separates them takes four seconds to ask:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">The Four-Second Diagnostic</span>
+            <pre><code>Is it slow when ONE person uses it, on an idle system?
+
+  YES  →  performance problem
+          The work itself is too slow. More machines change nothing.
+
+  NO   →  scalability problem
+          The work is fine. Something breaks when work arrives in volume.</code></pre>
+        </div>
+
+        <p>
+            That's the cleanest framing of the distinction I know, and it survives every whiteboard I've drawn it
+            on. A performance problem lives in the code path. A scalability problem lives in the
+            <em>architecture</em> — in whatever resource gets contended when the second, hundredth, or ten
+            thousandth request shows up.
+        </p>
+        <p>
+            The cost of confusing them is enormous and it goes in both directions. Teams spend a quarter migrating
+            to Kubernetes to fix a query that needed an index. Other teams spend a quarter micro-optimizing a
+            handler that is already fast, while the single shared database quietly caps them at 400 requests per
+            second regardless.
+        </p>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">1×</div>
+                <div class="stat-desc">Performance — Speed at One User</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">N×</div>
+                <div class="stat-desc">Scalability — Speed as N Grows</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">Δ</div>
+                <div class="stat-desc">Scalability Is a Slope, Not a Value</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">₹/req</div>
+                <div class="stat-desc">The Metric That Settles Arguments</div>
+            </div>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 1 — Same Symptom, Two Different Shapes</div>
+            <svg viewBox="0 0 780 380" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridP1" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenP1" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="51" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.3" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="380" fill="#fefefe" rx="12" />
+                <rect width="780" height="380" fill="url(#dotGridP1)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Both tickets say "it's slow." Plot latency against load and they stop looking alike.
+                </text>
+
+                <!-- LEFT: performance problem -->
+                <text x="195" y="58" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">PERFORMANCE PROBLEM</text>
+                <text x="195" y="74" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">slow at one user, and stays slow</text>
+
+                <path d="M 60 260 L 340 260" fill="none" stroke="#333" stroke-width="1.4" />
+                <path d="M 60 260 L 60 95" fill="none" stroke="#333" stroke-width="1.4" />
+                <text x="200" y="282" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">concurrent users →</text>
+                <text x="38" y="180" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle" transform="rotate(-90 38 180)">latency</text>
+
+                <!-- flat high line -->
+                <path d="M 62 130 L 150 133 L 240 131 L 335 136" fill="none" stroke="#c026d3" stroke-width="2.5"
+                    filter="url(#roughenP1)" stroke-linecap="round" />
+                <circle cx="62" cy="130" r="5" fill="#c026d3" />
+                <text x="95" y="118" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    already 3.2s at user #1
+                </text>
+
+                <!-- reference good line -->
+                <path d="M 62 245 L 335 245" fill="none" stroke="#bbb" stroke-width="1.4" stroke-dasharray="4,3" />
+                <text x="300" y="240" fill="#bbb" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="end">target</text>
+
+                <text x="195" y="308" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">Fix: profile the code path</text>
+                <text x="195" y="326" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">missing index · N+1 query · needless</text>
+                <text x="195" y="340" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">round trips · bad algorithm · huge payload</text>
+                <text x="195" y="362" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">Adding servers changes nothing.</text>
+
+                <!-- divider -->
+                <path d="M 390 45 L 390 350" fill="none" stroke="#ccc" stroke-width="1" stroke-dasharray="4,4" />
+
+                <!-- RIGHT: scalability problem -->
+                <text x="585" y="58" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">SCALABILITY PROBLEM</text>
+                <text x="585" y="74" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">fast at one user, collapses under load</text>
+
+                <path d="M 450 260 L 730 260" fill="none" stroke="#333" stroke-width="1.4" />
+                <path d="M 450 260 L 450 95" fill="none" stroke="#333" stroke-width="1.4" />
+                <text x="590" y="282" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">concurrent users →</text>
+                <text x="428" y="180" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle" transform="rotate(-90 428 180)">latency</text>
+
+                <!-- hockey stick -->
+                <path d="M 452 248 L 530 246 L 590 240 L 640 222 L 675 180 L 700 120 L 712 100" fill="none"
+                    stroke="#0891b2" stroke-width="2.5" filter="url(#roughenP1)" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                <circle cx="452" cy="248" r="5" fill="#0891b2" />
+                <text x="470" y="238" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    80ms at user #1 ✓
+                </text>
+                <text x="640" y="112" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">…9s at user #900</text>
+
+                <path d="M 452 245 L 725 245" fill="none" stroke="#bbb" stroke-width="1.4" stroke-dasharray="4,3" />
+
+                <text x="585" y="308" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">Fix: find the contended resource</text>
+                <text x="585" y="326" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">connection pool · single writer · a lock ·</text>
+                <text x="585" y="340" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">shared cache · one hot shard</text>
+                <text x="585" y="362" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">Profiling one request shows nothing wrong.</text>
+            </svg>
+            <p class="diagram-caption">
+                The single most useful test costs nothing: run one request against an idle system. Where the curve
+                starts tells you which problem you have, and therefore which half of your toolbox to open.
+            </p>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The One-Line Version</div>
+            <p>
+                Performance is how fast the system is <em>now</em>. Scalability is what happens to that number
+                when you add load and add resources. One is a measurement; the other is the shape of a curve —
+                which is why you can't answer "are we scalable?" with a single number.
+            </p>
+        </div>
+
+        <!-- Section 2: Definitions -->
+        <h2 id="definitions">
+            <span class="section-number">02</span>
+            Defining Both Precisely
+        </h2>
+
+        <h3>Performance</h3>
+
+        <p>
+            Performance is how much work the system does per unit of time, or equivalently, how long one unit of
+            work takes — <em>at a given load</em>. That last qualifier is doing a lot of work and gets dropped
+            constantly. "Our p99 is 40ms" is not a fact until you say at what throughput, because the same system
+            has a different p99 at 100 req/s and at 10,000.
+        </p>
+        <p>
+            Everything in the
+            <a href="latency-vs-throughput.html" style="color: var(--ps-fuchsia); font-weight: 600;">latency and
+                throughput primer</a>
+            is the vocabulary for this half: latency, throughput, percentiles, the queueing curve. Performance is
+            that whole topic, measured at one point on the load axis.
+        </p>
+
+        <h3>Scalability</h3>
+
+        <p>
+            Scalability is the relationship between resources added and capability gained. A system is scalable if
+            adding resources produces a proportional increase in what it can handle. If you double the machines and
+            capacity goes up 6%, you are not scalable — you have a scalability problem that no amount of
+            spending will fix.
+        </p>
+        <p>
+            Note what that definition implies: <strong>scalability is not a property you have, it's a
+            slope you measure</strong>. Nothing is "scalable" in the abstract. A system scales linearly to 20
+            nodes and falls apart at 24. It scales beautifully with more users and terribly with more data per
+            user. The honest statement always has a range and a dimension attached.
+        </p>
+
+        <div class="callout callout-scale">
+            <div class="callout-label">⚡ "Increased Capability" Means More Than Traffic</div>
+            <p>
+                Usually scaling means handling more units of work — more users, more requests. But it can equally
+                mean handling <em>larger</em> units: the same thousand users, each with a dataset that has grown
+                a hundredfold. A report that took 2 seconds over 10,000 rows and takes 4 minutes over 10 million
+                is a scalability failure even though the user count never changed.
+            </p>
+            <p>
+                Whenever someone says "we need to scale," the useful follow-up is: <em>along which axis?</em>
+                Traffic, data volume, tenant count, geography, and team size all scale independently and break
+                differently.
+            </p>
+        </div>
+
+        <div class="comparison-table-wrapper">
+            <table class="comparison-table reveal-element">
+                <thead>
+                    <tr>
+                        <th>Dimension</th>
+                        <th>Performance</th>
+                        <th>Scalability</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>What it is</td>
+                        <td class="perf-cell">Speed at a given load</td>
+                        <td class="scale-cell">How speed and capacity respond to added resources</td>
+                    </tr>
+                    <tr>
+                        <td>Expressed as</td>
+                        <td class="perf-cell">A number — 40ms p99, 2,000 req/s</td>
+                        <td class="scale-cell">A curve — throughput vs nodes, latency vs load</td>
+                    </tr>
+                    <tr>
+                        <td>Symptom</td>
+                        <td class="perf-cell">Slow for a single user on an idle system</td>
+                        <td class="scale-cell">Fast for one user, slow under concurrency</td>
+                    </tr>
+                    <tr>
+                        <td>Found by</td>
+                        <td class="perf-cell">Profiler, flame graph, query plan, trace</td>
+                        <td class="scale-cell">Load sweep, saturation metrics, contention analysis</td>
+                    </tr>
+                    <tr>
+                        <td>Fixed by</td>
+                        <td class="perf-cell">Better algorithms, fewer hops, indexes, caching</td>
+                        <td class="scale-cell">Removing shared state, partitioning, adding capacity</td>
+                    </tr>
+                    <tr>
+                        <td>Limited by</td>
+                        <td class="perf-cell">Physics and the work itself</td>
+                        <td class="scale-cell">The serial fraction and coordination overhead</td>
+                    </tr>
+                    <tr>
+                        <td>Buying servers…</td>
+                        <td class="perf-cell">…does nothing</td>
+                        <td class="scale-cell">…is the whole point, if the slope is good</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Section 3: The curve -->
+        <h2 id="curve">
+            <span class="section-number">03</span>
+            The Scalability Curve — and Why It Bends Down
+        </h2>
+
+        <p>
+            Draw throughput against the number of nodes and you get one of three shapes. Knowing which one you're
+            on is most of the skill.
+        </p>
+
+        <p>
+            <strong>Linear</strong> is the fantasy: double the nodes, double the capacity, forever. It exists only
+            for genuinely independent work — image transcoding, hash cracking, anything embarrassingly parallel
+            with no shared state.
+        </p>
+        <p>
+            <strong>Sublinear</strong> is the normal case. Each added node contributes a bit less than the one
+            before, because some fraction of every request is serial: a shared counter, a lock, a leader, a single
+            write path. The curve flattens toward a ceiling.
+        </p>
+        <p>
+            <strong>Retrograde</strong> is the one that surprises people. Past a certain point, adding nodes makes
+            total throughput <em>go down</em>. Not level off — decrease. This is real, it's common, and it has a
+            name.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">The Universal Scalability Law</span>
+            <pre><code>              N
+C(N) = ─────────────────────────────
+       1 + α(N−1) + βN(N−1)
+
+N = number of nodes (or threads, or cores)
+α = CONTENTION   — the serial fraction; queueing for a shared resource
+β = COHERENCY    — the crosstalk cost; nodes keeping each other in sync
+
+α flattens the curve.  β bends it back DOWN.
+Peak throughput is at   N* = √((1 − α) / β)</code></pre>
+        </div>
+
+        <p>
+            The β term is the important one and the one that's missing from Amdahl's Law. Contention is nodes
+            waiting in line for something. Coherency is nodes talking to <em>each other</em> — cache-line
+            invalidation between cores, replica synchronisation between machines, gossip between cluster members,
+            distributed lock chatter. Contention grows linearly with N. Coherency grows with N², because every node
+            potentially has to agree with every other node.
+        </p>
+        <p>
+            That quadratic term always wins eventually. Which means every real system has a node count beyond
+            which it gets worse, and the only question is whether you'll ever reach it.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 2 — Three Curves: Linear, Sublinear, and the One That Comes Back Down</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridP2" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenP2" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="52" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGridP2)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Throughput vs node count · α = 0.03 contention, β = 0.0005 coherency
+                </text>
+
+                <!-- Axes -->
+                <path d="M 80 320 L 720 320" fill="none" stroke="#333" stroke-width="1.5" />
+                <path d="M 80 320 L 80 55" fill="none" stroke="#333" stroke-width="1.5" />
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#86868b"
+                    text-anchor="middle">
+                    <text x="80" y="338">0</text>
+                    <text x="200" y="338">8</text>
+                    <text x="320" y="338">16</text>
+                    <text x="440" y="338">32</text>
+                    <text x="530" y="338">44</text>
+                    <text x="620" y="338">64</text>
+                    <text x="710" y="338">96</text>
+                    <text x="400" y="360" font-size="10" fill="#333">nodes added →</text>
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#86868b" text-anchor="end">
+                    <text x="74" y="323">0</text>
+                    <text x="74" y="273">5×</text>
+                    <text x="74" y="223">10×</text>
+                    <text x="74" y="173">15×</text>
+                    <text x="74" y="123">20×</text>
+                    <text x="74" y="73">25×</text>
+                </g>
+                <text x="40" y="190" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" transform="rotate(-90 40 190)">throughput (× one node)</text>
+
+                <!-- Linear ideal (clipped at the top of the chart) -->
+                <path d="M 80 320 L 200 240 L 320 160 L 395 110" fill="none" stroke="#bbb" stroke-width="1.8"
+                    stroke-dasharray="6,4" />
+                <text x="404" y="108" fill="#999" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5">
+                    LINEAR — the pitch deck
+                </text>
+
+                <!-- Contention only: C(N) = N / (1 + α(N−1)) -->
+                <path d="M 80 320 L 200 254 L 320 210 L 440 154 L 530 128 L 620 98 L 710 71" fill="none"
+                    stroke="#0891b2" stroke-width="2.5" filter="url(#roughenP2)" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                <text x="600" y="60" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">SUBLINEAR — contention only (α)</text>
+
+                <!-- Full USL: contention + coherency -->
+                <path d="M 80 320 L 200 255 L 320 218 L 440 188 L 530 184 L 620 190 L 710 206" fill="none"
+                    stroke="#c026d3" stroke-width="2.8" filter="url(#roughenP2)" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                <circle cx="530" cy="184" r="5.5" fill="#c026d3" />
+                <text x="512" y="172" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">peak: 44 nodes, 13.6×</text>
+
+                <circle cx="620" cy="190" r="4.5" fill="#e11d48" />
+                <circle cx="710" cy="206" r="4.5" fill="#e11d48" />
+                <text x="668" y="248" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">64 nodes → 13.0×</text>
+                <text x="668" y="262" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">96 nodes → 11.4×</text>
+                <path d="M 668 240 L 700 212" fill="none" stroke="#e11d48" stroke-width="1" stroke-dasharray="3,3" />
+
+                <text x="235" y="292" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    RETROGRADE — contention + coherency (α + β)
+                </text>
+
+                <text x="390" y="386" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    You paid for 96 machines and got less work done than with 44. That's coherency cost, not a bug.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Three percent contention and half a tenth of a percent coherency — modest-sounding numbers — cap
+                this system at about 13.6× no matter how much hardware you buy, and punish you for overshooting.
+            </p>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Small Coefficients, Brutal Consequences</div>
+            <p>
+                In the curve above, α is 3% and β is 0.05%. Both sound negligible. Together they mean 96 machines
+                do less work than 44, and that the theoretical ceiling is around 13.6× regardless of budget.
+            </p>
+            <p>
+                This is why "we'll just add more instances" is not a scaling strategy. It's a scaling strategy
+                only if you've measured α and β and know where your peak is — otherwise you're spending money to
+                move rightward along a curve that may already be falling.
+            </p>
+        </div>
+
+        <div class="deep-dive">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-usl-fit')">
+                <h4>Fitting the curve to your own system — you need four data points, not a PhD</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content" id="dd-usl-fit">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Run the same load test at 1, 2, 4, 8, and 16 nodes and record maximum sustained
+                        throughput at each. Divide each result by the single-node number to get relative capacity.
+                        Fit those points to the USL formula — a spreadsheet's solver or twenty lines of Python
+                        will do it — and you get α and β for <em>your</em> system.
+                    </p>
+                    <p>
+                        What comes out is immediately actionable. A large α says you have a serialization point:
+                        go find the lock, the single writer, the shared counter. A large β says your nodes are
+                        talking to each other too much: look at chatty cache invalidation, distributed locks,
+                        cross-node joins, or a gossip protocol that scales badly. And N* tells you the largest
+                        cluster worth provisioning.
+                    </p>
+                    <p>
+                        The measurement takes an afternoon and it converts "we think we can scale" into a number
+                        with error bars. Very few teams do it, which is precisely why so many are surprised by
+                        their own ceiling.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 4: Vertical vs horizontal -->
+        <h2 id="vertical-horizontal">
+            <span class="section-number">04</span>
+            Vertical vs Horizontal Scaling
+        </h2>
+
+        <p>
+            There are exactly two ways to add capacity: make the machine bigger, or add more machines. The industry
+            has spent fifteen years treating the second as obviously correct, which has produced a lot of
+            distributed systems solving problems that one large server would have handled comfortably.
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">⬆️</div>
+                <h4>Vertical (Scale Up)</h4>
+                <p>Bigger box. No code changes, no distribution. Hard ceiling, superlinear cost, one failure domain.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">➡️</div>
+                <h4>Horizontal (Scale Out)</h4>
+                <p>More boxes. No ceiling, linear-ish cost, survives node loss. Demands statelessness and adds hops.</p>
+            </div>
+        </div>
+
+        <h3>The Case for Scaling Up, Which Nobody Makes Anymore</h3>
+
+        <p>
+            Modern hardware is absurd and most engineers' intuitions haven't updated. A single cloud instance today
+            can have hundreds of vCPUs and multiple terabytes of RAM. A well-indexed Postgres on serious hardware
+            will serve tens of thousands of transactions per second. Enormous numbers of production workloads fit
+            on one machine with room to spare.
+        </p>
+        <p>
+            Scaling up costs nothing in engineering time. No partitioning strategy, no distributed transactions, no
+            eventual consistency, no service mesh, no rebalancing. You change an instance type and reboot. For a
+            team of six, that difference is worth more than the hardware premium several times over.
+        </p>
+        <p>
+            The limits are real though, and they arrive abruptly:
+        </p>
+
+        <ul>
+            <li><strong>A hard ceiling.</strong> There is a largest instance, and when you reach it there is
+                nowhere to go — usually discovered under deadline.</li>
+            <li><strong>Superlinear pricing.</strong> The top of the range costs disproportionately more per unit
+                of compute. The last doubling is the expensive one.</li>
+            <li><strong>One failure domain.</strong> A big machine is still one machine. When it dies, everything
+                is down.</li>
+            <li><strong>Downtime to resize.</strong> Usually a reboot, sometimes a migration.</li>
+            <li><strong>Diminishing returns inside the box.</strong> More cores don't help if you have a global
+                lock, and NUMA effects mean a 128-core machine is not two 64-core machines.</li>
+        </ul>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 3 — Up vs Out: What Each One Actually Costs You</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridP3" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenP3" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="53" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowP3" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGridP3)" rx="12" />
+
+                <!-- Vertical side -->
+                <text x="195" y="32" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">VERTICAL — one box, bigger</text>
+
+                <g filter="url(#roughenP3)">
+                    <rect x="70" y="180" width="50" height="45" rx="6" fill="#fdf4ff" stroke="#c026d3"
+                        stroke-width="1.4" />
+                    <rect x="140" y="140" width="60" height="85" rx="6" fill="#fae8ff" stroke="#c026d3"
+                        stroke-width="1.6" />
+                    <rect x="220" y="75" width="75" height="150" rx="6" fill="#f5d0fe" stroke="#c026d3"
+                        stroke-width="2" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" fill="#333">
+                    <text x="95" y="207">4 vCPU</text>
+                    <text x="170" y="187">16 vCPU</text>
+                    <text x="257" y="155">96 vCPU</text>
+                    <text x="257" y="170">768 GB</text>
+                </g>
+                <path d="M 122 200 L 136 200" fill="none" stroke="#333" stroke-width="1.2"
+                    marker-end="url(#exArrowP3)" />
+                <path d="M 202 185 L 216 185" fill="none" stroke="#333" stroke-width="1.2"
+                    marker-end="url(#exArrowP3)" />
+
+                <path d="M 310 75 L 340 75" fill="none" stroke="#e11d48" stroke-width="2.5" />
+                <text x="345" y="70" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    ceiling
+                </text>
+                <text x="345" y="84" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    (nothing bigger)
+                </text>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="60" y="258">✓ zero code changes</text>
+                    <text x="60" y="277">✓ no distribution, no consistency tax</text>
+                    <text x="60" y="296" fill="#e11d48">✕ hard ceiling, hit without warning</text>
+                    <text x="60" y="315" fill="#e11d48">✕ price per vCPU rises at the top</text>
+                    <text x="60" y="334" fill="#e11d48">✕ one machine = one failure domain</text>
+                    <text x="60" y="353" fill="#e11d48">✕ resizing usually means a reboot</text>
+                </g>
+
+                <!-- divider -->
+                <path d="M 390 25 L 390 370" fill="none" stroke="#ccc" stroke-width="1" stroke-dasharray="4,4" />
+
+                <!-- Horizontal side -->
+                <text x="585" y="32" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">HORIZONTAL — more boxes</text>
+
+                <rect x="530" y="60" width="110" height="28" rx="6" fill="#f5f5f7" stroke="#333" stroke-width="1.3"
+                    filter="url(#roughenP3)" />
+                <text x="585" y="79" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">load balancer</text>
+
+                <g filter="url(#roughenP3)">
+                    <rect x="440" y="130" width="60" height="45" rx="6" fill="#ecfeff" stroke="#0891b2"
+                        stroke-width="1.5" />
+                    <rect x="510" y="130" width="60" height="45" rx="6" fill="#ecfeff" stroke="#0891b2"
+                        stroke-width="1.5" />
+                    <rect x="580" y="130" width="60" height="45" rx="6" fill="#ecfeff" stroke="#0891b2"
+                        stroke-width="1.5" />
+                    <rect x="650" y="130" width="60" height="45" rx="6" fill="#ecfeff" stroke="#0891b2"
+                        stroke-width="1.5" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" fill="#0891b2">
+                    <text x="470" y="157">4 vCPU</text>
+                    <text x="540" y="157">4 vCPU</text>
+                    <text x="610" y="157">4 vCPU</text>
+                    <text x="680" y="157">4 vCPU</text>
+                </g>
+                <path d="M 560 90 L 480 126" fill="none" stroke="#0891b2" stroke-width="1.2"
+                    marker-end="url(#exArrowP3)" />
+                <path d="M 575 90 L 545 126" fill="none" stroke="#0891b2" stroke-width="1.2"
+                    marker-end="url(#exArrowP3)" />
+                <path d="M 595 90 L 620 126" fill="none" stroke="#0891b2" stroke-width="1.2"
+                    marker-end="url(#exArrowP3)" />
+                <path d="M 610 90 L 675 126" fill="none" stroke="#0891b2" stroke-width="1.2"
+                    marker-end="url(#exArrowP3)" />
+                <text x="725" y="155" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="16">…</text>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="440" y="200">✓ no theoretical ceiling</text>
+                    <text x="440" y="219">✓ commodity pricing, roughly linear</text>
+                    <text x="440" y="238">✓ node loss ≠ outage</text>
+                    <text x="440" y="257">✓ scale down when the peak passes</text>
+                    <text x="440" y="278" fill="#e11d48">✕ requires stateless request handling</text>
+                    <text x="440" y="297" fill="#e11d48">✕ network hops on the critical path</text>
+                    <text x="440" y="316" fill="#e11d48">✕ coordination cost — the β term</text>
+                    <text x="440" y="335" fill="#e11d48">✕ ops complexity grows with the fleet</text>
+                </g>
+
+                <text x="390" y="388" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Scale up until it hurts, then scale out. Doing it in the other order buys complexity you
+                    didn't need yet.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Both are legitimate. Vertical buys time cheaply and has a wall at the end; horizontal has no wall
+                but charges an engineering tax on day one and every day after.
+            </p>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The Sequence That Works</div>
+            <p>
+                Scale up first. It's the cheapest capacity you will ever buy, and it buys you the runway to build
+                horizontal scaling properly instead of at 2 a.m. during a launch. Move to scaling out when you're
+                approaching the instance ceiling, when a single failure domain becomes unacceptable, or when your
+                traffic is spiky enough that elasticity pays for itself.
+            </p>
+            <p>
+                What you should <em>not</em> do is skip the design work. Even while running on one box, keep
+                request handling stateless and keep session state external. That way the eventual move out is a
+                configuration change rather than a rewrite.
+            </p>
+        </div>
+
+        <!-- Section 5: Amdahl -->
+        <h2 id="amdahl">
+            <span class="section-number">05</span>
+            Amdahl and Gustafson — Two Laws That Disagree
+        </h2>
+
+        <p>
+            Two famous results describe what parallelism buys you, and they reach opposite conclusions. Both are
+            correct. They're answering different questions, and knowing which question you're asking is the
+            entire point.
+        </p>
+
+        <h3>Amdahl's Law — Fixed Work, More Workers</h3>
+
+        <div class="code-block">
+            <span class="code-block-label">Amdahl</span>
+            <pre><code>              1
+speedup = ─────────────
+          s + (1 − s)/N
+
+s = the fraction that CANNOT be parallelized
+N = number of workers
+
+As N → ∞,  speedup → 1/s
+
+s = 0.05  (5% serial)  →  maximum speedup EVER is 20×
+s = 0.10  (10% serial) →  maximum speedup EVER is 10×</code></pre>
+        </div>
+
+        <p>
+            Read those last two lines again, because they're brutal. If a tenth of your request is inherently
+            serial — one lock, one write to a shared row, one call to a service that can't be parallelized — then
+            a thousand machines get you a 10× speedup. Not 100×. Not 1000×. Ten.
+        </p>
+        <p>
+            The serial fraction in real systems is almost always larger than people estimate, because it includes
+            things that don't look like code: acquiring a connection from a pool, waiting on a single primary for
+            a write, incrementing a shared counter, hitting a rate limiter backed by one Redis key.
+        </p>
+
+        <h3>Gustafson's Law — More Workers, More Work</h3>
+
+        <div class="code-block">
+            <span class="code-block-label">Gustafson</span>
+            <pre><code>scaled speedup = N − s(N − 1)
+
+Same s. Same N. Completely different answer —
+because the problem size grows with the resources.
+
+s = 0.05, N = 100  →  Amdahl says   17.4×  (and caps at 20×)
+                   →  Gustafson says 95.1×  (and keeps growing)</code></pre>
+        </div>
+
+        <p>
+            Gustafson's insight is that in practice nobody buys a hundred machines to run yesterday's workload
+            faster. They buy them to run a bigger workload in the same time — index more documents, train on more
+            data, serve more users. When the problem grows with the resources, the serial portion stays roughly
+            constant while the parallel portion expands, and the ceiling disappears.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 4 — Same 5% Serial Fraction, Two Very Different Futures</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridP4" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenP4" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="54" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGridP4)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    The difference isn't the maths — it's the question you asked
+                </text>
+
+                <!-- AMDAHL -->
+                <text x="195" y="58" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">AMDAHL — "same job, finish sooner"</text>
+
+                <text x="40" y="90" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5">
+                    1 worker:
+                </text>
+                <rect x="110" y="80" width="14" height="16" fill="#f5d0fe" stroke="#c026d3" stroke-width="1.2" />
+                <rect x="124" y="80" width="220" height="16" fill="#ecfeff" stroke="#0891b2" stroke-width="1.2" />
+                <text x="352" y="93" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">1.0</text>
+
+                <text x="40" y="122" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5">
+                    4 workers:
+                </text>
+                <rect x="110" y="112" width="14" height="16" fill="#f5d0fe" stroke="#c026d3" stroke-width="1.2" />
+                <rect x="124" y="112" width="55" height="16" fill="#ecfeff" stroke="#0891b2" stroke-width="1.2" />
+                <text x="188" y="125" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">3.5×</text>
+
+                <text x="40" y="154" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5">
+                    32 workers:
+                </text>
+                <rect x="110" y="144" width="14" height="16" fill="#f5d0fe" stroke="#c026d3" stroke-width="1.2" />
+                <rect x="124" y="144" width="7" height="16" fill="#ecfeff" stroke="#0891b2" stroke-width="1.2" />
+                <text x="140" y="157" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">12.5×</text>
+
+                <text x="40" y="186" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5">
+                    ∞ workers:
+                </text>
+                <rect x="110" y="176" width="14" height="16" fill="#f5d0fe" stroke="#c026d3" stroke-width="1.6" />
+                <text x="133" y="189" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">20× — and never more</text>
+
+                <text x="195" y="222" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">The pink block never shrinks.</text>
+                <text x="195" y="240" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">It becomes 100% of your runtime.</text>
+
+                <!-- divider -->
+                <path d="M 390 45 L 390 360" fill="none" stroke="#ccc" stroke-width="1" stroke-dasharray="4,4" />
+
+                <!-- GUSTAFSON -->
+                <text x="585" y="58" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">GUSTAFSON — "same hour, do more"</text>
+
+                <text x="425" y="90" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5">
+                    1 worker:
+                </text>
+                <rect x="500" y="80" width="14" height="16" fill="#f5d0fe" stroke="#c026d3" stroke-width="1.2" />
+                <rect x="514" y="80" width="60" height="16" fill="#ecfeff" stroke="#0891b2" stroke-width="1.2" />
+                <text x="582" y="93" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">1 unit
+                    of work</text>
+
+                <text x="425" y="122" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5">
+                    4 workers:
+                </text>
+                <rect x="500" y="112" width="14" height="16" fill="#f5d0fe" stroke="#c026d3" stroke-width="1.2" />
+                <rect x="514" y="112" width="60" height="16" fill="#ecfeff" stroke="#0891b2" stroke-width="1.2" />
+                <rect x="574" y="112" width="60" height="16" fill="#ecfeff" stroke="#0891b2" stroke-width="1.2" />
+                <rect x="634" y="112" width="60" height="16" fill="#ecfeff" stroke="#0891b2" stroke-width="1.2" />
+                <text x="702" y="125" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">3.9×</text>
+
+                <text x="425" y="154" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5">
+                    32 workers:
+                </text>
+                <rect x="500" y="144" width="14" height="16" fill="#f5d0fe" stroke="#c026d3" stroke-width="1.2" />
+                <rect x="514" y="144" width="196" height="16" fill="#ecfeff" stroke="#0891b2" stroke-width="1.2" />
+                <text x="716" y="157" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">30.5×</text>
+
+                <text x="425" y="186" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5">
+                    100 workers:
+                </text>
+                <rect x="500" y="176" width="14" height="16" fill="#f5d0fe" stroke="#c026d3" stroke-width="1.2" />
+                <rect x="514" y="176" width="210" height="16" fill="#ecfeff" stroke="#0891b2" stroke-width="1.2"
+                    stroke-dasharray="3,2" />
+                <text x="640" y="205" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">95.1× — still climbing</text>
+
+                <text x="585" y="222" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">The pink block stays the same size…</text>
+                <text x="585" y="240" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">…while the blue work expands around it.</text>
+
+                <!-- Bottom guidance -->
+                <rect x="60" y="270" width="660" height="100" rx="9" fill="#ffffff" stroke="#333" stroke-width="1.3"
+                    stroke-dasharray="4,3" filter="url(#roughenP4)" />
+                <text x="390" y="293" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">Which law applies to you?</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="90" y="318" fill="#c026d3" font-weight="700">Amdahl:</text>
+                    <text x="180" y="318">latency of ONE request · a nightly job that must finish faster · a fixed
+                        dataset</text>
+                    <text x="90" y="342" fill="#0891b2" font-weight="700">Gustafson:</text>
+                    <text x="180" y="342">serving MORE users · indexing MORE documents · a growing workload</text>
+                    <text x="180" y="360" fill="#86868b" font-size="8.5">Most web services live here — which is why
+                        scaling out works at all.</text>
+                </g>
+            </svg>
+            <p class="diagram-caption">
+                Amdahl governs how fast a single thing can get. Gustafson governs how much you can get through.
+                Web services are usually a Gustafson problem, which is the quiet reason horizontal scaling is
+                viable at all.
+            </p>
+        </div>
+
+        <!-- Section 6: The bottleneck -->
+        <h2 id="bottleneck">
+            <span class="section-number">06</span>
+            What Actually Limits Scaling: The Shared Thing
+        </h2>
+
+        <p>
+            Strip away the mathematics and every scalability limit reduces to one sentence:
+            <strong>something is shared, and everyone has to take turns.</strong>
+        </p>
+        <p>
+            That shared thing is your serial fraction. Find it and you've found your ceiling. The usual suspects,
+            roughly in the order I encounter them:
+        </p>
+
+        <ul>
+            <li>
+                <strong>One database primary.</strong> Every write in the system funnels through a single node. You
+                can add fifty app servers and the write ceiling doesn't move a millimetre.
+            </li>
+            <li>
+                <strong>A connection pool.</strong> Twenty connections × 20ms of database time caps you at 1,000
+                requests per second by Little's Law, regardless of CPU headroom anywhere.
+            </li>
+            <li>
+                <strong>A lock — local or distributed.</strong> A single mutex around a hot map serialises every
+                thread that touches it. A distributed lock does the same thing across the fleet, plus network
+                latency.
+            </li>
+            <li>
+                <strong>A hot row or a hot key.</strong> One counter, one inventory record, one celebrity user.
+                Everything else partitions beautifully; this doesn't.
+            </li>
+            <li>
+                <strong>A shared queue with one consumer group leader</strong>, or a partition count that caps
+                consumer parallelism.
+            </li>
+            <li>
+                <strong>Sequence generators.</strong> A single auto-increment source is a serialization point most
+                people never think of as one.
+            </li>
+            <li>
+                <strong>The team.</strong> One deploy pipeline, one on-call, one person who understands the
+                billing service. Organizational contention is real contention.
+            </li>
+        </ul>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 5 — Scaling the Tier That Wasn't the Problem</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridP5" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenP5" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="55" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowP5" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#888" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGridP5)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Twenty app servers. One primary. Guess which number sets capacity.
+                </text>
+
+                <!-- app tier -->
+                <text x="390" y="58" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">app tier — scaled from 4 → 20 instances ✓</text>
+
+                <g filter="url(#roughenP5)">
+                    <rect x="60" y="75" width="58" height="34" rx="6" fill="#ecfeff" stroke="#0891b2" stroke-width="1.3" />
+                    <rect x="128" y="75" width="58" height="34" rx="6" fill="#ecfeff" stroke="#0891b2" stroke-width="1.3" />
+                    <rect x="196" y="75" width="58" height="34" rx="6" fill="#ecfeff" stroke="#0891b2" stroke-width="1.3" />
+                    <rect x="264" y="75" width="58" height="34" rx="6" fill="#ecfeff" stroke="#0891b2" stroke-width="1.3" />
+                    <rect x="332" y="75" width="58" height="34" rx="6" fill="#ecfeff" stroke="#0891b2" stroke-width="1.3" />
+                    <rect x="400" y="75" width="58" height="34" rx="6" fill="#ecfeff" stroke="#0891b2" stroke-width="1.3" />
+                    <rect x="468" y="75" width="58" height="34" rx="6" fill="#ecfeff" stroke="#0891b2" stroke-width="1.3" />
+                    <rect x="536" y="75" width="58" height="34" rx="6" fill="#ecfeff" stroke="#0891b2" stroke-width="1.3" />
+                    <rect x="604" y="75" width="58" height="34" rx="6" fill="#ecfeff" stroke="#0891b2" stroke-width="1.3" />
+                    <rect x="672" y="75" width="48" height="34" rx="6" fill="#ecfeff" stroke="#0891b2" stroke-width="1.3" />
+                </g>
+                <text x="696" y="97" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">×20</text>
+                <text x="240" y="97" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">18% CPU</text>
+                <text x="104" y="97" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">17% CPU</text>
+                <text x="376" y="97" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">19% CPU</text>
+                <text x="512" y="97" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">16% CPU</text>
+
+                <!-- funnel arrows -->
+                <path d="M 90 112 L 355 175" fill="none" stroke="#888" stroke-width="1.1" marker-end="url(#exArrowP5)" />
+                <path d="M 225 112 L 370 175" fill="none" stroke="#888" stroke-width="1.1" marker-end="url(#exArrowP5)" />
+                <path d="M 360 112 L 385 175" fill="none" stroke="#888" stroke-width="1.1" marker-end="url(#exArrowP5)" />
+                <path d="M 500 112 L 400 175" fill="none" stroke="#888" stroke-width="1.1" marker-end="url(#exArrowP5)" />
+                <path d="M 640 112 L 415 175" fill="none" stroke="#888" stroke-width="1.1" marker-end="url(#exArrowP5)" />
+
+                <!-- pool -->
+                <rect x="285" y="180" width="210" height="34" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.8"
+                    filter="url(#roughenP5)" />
+                <text x="390" y="202" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">connection pool — 20 slots total</text>
+
+                <path d="M 390 218 L 390 248" fill="none" stroke="#e11d48" stroke-width="1.6"
+                    marker-end="url(#exArrowP5)" />
+
+                <!-- DB -->
+                <rect x="290" y="252" width="200" height="62" rx="9" fill="#fff1f2" stroke="#e11d48" stroke-width="2.5"
+                    filter="url(#roughenP5)" />
+                <text x="390" y="276" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">ONE PRIMARY · 94% CPU</text>
+                <text x="390" y="296" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">every write in the system passes here</text>
+
+                <!-- math -->
+                <rect x="130" y="332" width="520" height="50" rx="8" fill="#fdf4ff" stroke="#c026d3" stroke-width="1.6"
+                    filter="url(#roughenP5)" />
+                <text x="390" y="352" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    Little's Law: 20 connections ÷ 20ms of DB time = 1,000 req/s. Full stop.
+                </text>
+                <text x="390" y="371" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Going from 20 app servers to 40 gives exactly zero extra capacity — and doubles the bill.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                The tier with the alarming CPU graph is rarely the tier that's limiting you. Capacity is set by the
+                narrowest point on the path, and that point is usually shared, singular, and quiet.
+            </p>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Scaling a Non-Bottleneck Is Worse Than Doing Nothing</div>
+            <p>
+                Adding capacity in front of a bottleneck doesn't just fail to help — it actively hurts. More app
+                servers means more concurrent requests arriving at the same constrained database, which pushes it
+                further up the queueing curve, which raises latency for everyone. You've spent money to make the
+                system slower.
+            </p>
+            <p>
+                Before scaling any tier, prove it's the constraint: check saturation (queue depth, pool waits,
+                connection counts), not just utilization. A tier at 18% CPU that's waiting on something else will
+                never show you the problem in a CPU graph.
+            </p>
+        </div>
+
+        <!-- Section 7: Stateless -->
+        <h2 id="stateless">
+            <span class="section-number">07</span>
+            Statelessness — The Price of Admission
+        </h2>
+
+        <p>
+            Horizontal scaling has one prerequisite, and everything else is detail: <strong>any node must be able
+            to serve any request.</strong> The moment a particular request can only be handled by a particular
+            machine, you've stopped scaling out and started doing manual placement.
+        </p>
+        <p>
+            The usual culprit is session state living in a server's memory. User logs in, session lands on
+            instance 7, and now every subsequent request from that user must return to instance 7. The load
+            balancer needs sticky sessions to make it work, and the consequences pile up fast.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 6 — Sticky State vs Externalised State</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridP6" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenP6" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="56" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowP6" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGridP6)" rx="12" />
+
+                <!-- LEFT: sticky -->
+                <text x="195" y="32" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">STATE IN THE PROCESS</text>
+
+                <rect x="140" y="50" width="110" height="26" rx="6" fill="#f5f5f7" stroke="#333" stroke-width="1.2"
+                    filter="url(#roughenP6)" />
+                <text x="195" y="68" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">load balancer (sticky)</text>
+
+                <g filter="url(#roughenP6)">
+                    <rect x="45" y="115" width="86" height="70" rx="8" fill="#fff1f2" stroke="#e11d48"
+                        stroke-width="1.8" />
+                    <rect x="150" y="115" width="86" height="70" rx="8" fill="#ffffff" stroke="#999"
+                        stroke-width="1.3" />
+                    <rect x="255" y="115" width="86" height="70" rx="8" fill="#ffffff" stroke="#999"
+                        stroke-width="1.3" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle">
+                    <text x="88" y="135" fill="#e11d48" font-weight="700">node 1</text>
+                    <text x="88" y="152" fill="#333">sessions: 900</text>
+                    <text x="88" y="168" fill="#e11d48">92% CPU</text>
+                    <text x="193" y="135" fill="#86868b" font-weight="700">node 2</text>
+                    <text x="193" y="152" fill="#86868b">sessions: 40</text>
+                    <text x="193" y="168" fill="#86868b">11% CPU</text>
+                    <text x="298" y="135" fill="#86868b" font-weight="700">node 3</text>
+                    <text x="298" y="152" fill="#86868b">sessions: 60</text>
+                    <text x="298" y="168" fill="#86868b">14% CPU</text>
+                </g>
+                <path d="M 170 79 L 100 111" fill="none" stroke="#e11d48" stroke-width="2"
+                    marker-end="url(#exArrowP6)" />
+                <text x="120" y="100" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    pinned
+                </text>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="45" y="215" fill="#e11d48">✕ load is lopsided and can't be rebalanced</text>
+                    <text x="45" y="234" fill="#e11d48">✕ node dies → those users lose their session</text>
+                    <text x="45" y="253" fill="#e11d48">✕ a deploy logs everybody out</text>
+                    <text x="45" y="272" fill="#e11d48">✕ autoscaling adds idle nodes nobody reaches</text>
+                    <text x="45" y="291" fill="#86868b">✓ fastest possible session lookup (it's local)</text>
+                </g>
+
+                <!-- divider -->
+                <path d="M 390 25 L 390 370" fill="none" stroke="#ccc" stroke-width="1" stroke-dasharray="4,4" />
+
+                <!-- RIGHT: externalised -->
+                <text x="585" y="32" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">STATE OUTSIDE THE PROCESS</text>
+
+                <rect x="530" y="50" width="110" height="26" rx="6" fill="#f5f5f7" stroke="#333" stroke-width="1.2"
+                    filter="url(#roughenP6)" />
+                <text x="585" y="68" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">load balancer (any node)</text>
+
+                <g filter="url(#roughenP6)">
+                    <rect x="435" y="115" width="86" height="70" rx="8" fill="#ecfeff" stroke="#0891b2"
+                        stroke-width="1.5" />
+                    <rect x="540" y="115" width="86" height="70" rx="8" fill="#ecfeff" stroke="#0891b2"
+                        stroke-width="1.5" />
+                    <rect x="645" y="115" width="86" height="70" rx="8" fill="#ecfeff" stroke="#0891b2"
+                        stroke-width="1.5" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle">
+                    <text x="478" y="135" fill="#0891b2" font-weight="700">node 1</text>
+                    <text x="478" y="152" fill="#333">stateless</text>
+                    <text x="478" y="168" fill="#0891b2">39% CPU</text>
+                    <text x="583" y="135" fill="#0891b2" font-weight="700">node 2</text>
+                    <text x="583" y="152" fill="#333">stateless</text>
+                    <text x="583" y="168" fill="#0891b2">41% CPU</text>
+                    <text x="688" y="135" fill="#0891b2" font-weight="700">node 3</text>
+                    <text x="688" y="152" fill="#333">stateless</text>
+                    <text x="688" y="168" fill="#0891b2">38% CPU</text>
+                </g>
+                <path d="M 560 79 L 490 111" fill="none" stroke="#0891b2" stroke-width="1.3"
+                    marker-end="url(#exArrowP6)" />
+                <path d="M 585 79 L 585 111" fill="none" stroke="#0891b2" stroke-width="1.3"
+                    marker-end="url(#exArrowP6)" />
+                <path d="M 610 79 L 680 111" fill="none" stroke="#0891b2" stroke-width="1.3"
+                    marker-end="url(#exArrowP6)" />
+
+                <path d="M 478 189 L 545 215" fill="none" stroke="#0891b2" stroke-width="1.2"
+                    stroke-dasharray="3,2" />
+                <path d="M 583 189 L 585 215" fill="none" stroke="#0891b2" stroke-width="1.2"
+                    stroke-dasharray="3,2" />
+                <path d="M 688 189 L 625 215" fill="none" stroke="#0891b2" stroke-width="1.2"
+                    stroke-dasharray="3,2" />
+                <rect x="500" y="218" width="170" height="34" rx="7" fill="#fdf4ff" stroke="#c026d3" stroke-width="1.6"
+                    filter="url(#roughenP6)" />
+                <text x="585" y="239" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">shared session store</text>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="435" y="278" fill="#0891b2">✓ even load, rebalances instantly</text>
+                    <text x="435" y="297" fill="#0891b2">✓ node loss is invisible to users</text>
+                    <text x="435" y="316" fill="#0891b2">✓ deploys and autoscaling are boring</text>
+                    <text x="435" y="335" fill="#e11d48">✕ one network hop per session lookup</text>
+                    <text x="435" y="354" fill="#e11d48">✕ the store is now a shared dependency</text>
+                </g>
+
+                <text x="390" y="390" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    You traded a millisecond of latency for the ability to add and remove nodes freely. Usually
+                    correct.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Note the trade in the fine print: externalising state costs a round trip on every request. It's a
+                small, deliberate performance loss bought in exchange for scalability — the cleanest example of
+                the tension in this whole article.
+            </p>
+        </div>
+
+        <p>
+            The options for getting state out of the process, roughly in order of preference:
+        </p>
+
+        <ul>
+            <li>
+                <strong>Put it in the request.</strong> A signed token (JWT or similar) carries identity and claims
+                with every call. Zero lookups, perfectly stateless — at the cost of revocation being hard and the
+                token growing with the claims you stuff into it.
+            </li>
+            <li>
+                <strong>Put it in a shared store.</strong> Redis or similar. One fast hop, easy revocation, and
+                the store becomes a dependency you must now make highly available.
+            </li>
+            <li>
+                <strong>Put it in the client.</strong> Cart contents, UI preferences, draft text. Works well when
+                the data is genuinely the user's own and loss is survivable.
+            </li>
+            <li>
+                <strong>Put it in the database.</strong> Fine when you're already hitting the database on that
+                request anyway.
+            </li>
+        </ul>
+
+        <div class="callout callout-scale">
+            <div class="callout-label">⚡ Statelessness Is a Lie You Tell About Location</div>
+            <p>
+                A "stateless service" still has state — it just doesn't own it. What you're really saying is
+                <em>this process holds nothing that can't be reconstructed from a request plus a shared store.</em>
+                The state moved; it didn't vanish. And wherever it moved to is now a scalability question of its
+                own, which is why the session store's own capacity plan matters as much as the app tier's.
+            </p>
+        </div>
+
+        <!-- Section 8: AKF cube -->
+        <h2 id="cube">
+            <span class="section-number">08</span>
+            Three Axes of Scale — The AKF Cube
+        </h2>
+
+        <p>
+            "Scale it" usually means one of three genuinely different moves, and mixing them up produces
+            architectures that add complexity without adding capacity. The AKF scale cube names all three.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 7 — X, Y, Z: Three Independent Ways to Split the Work</div>
+            <svg viewBox="0 0 780 420" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridP7" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenP7" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="57" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.3" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowP7" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="420" fill="#fefefe" rx="12" />
+                <rect width="780" height="420" fill="url(#dotGridP7)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Three axes — you can move along all three at once, and big systems do
+                </text>
+
+                <!-- X axis: clone -->
+                <rect x="35" y="50" width="230" height="175" rx="10" fill="#ecfeff" stroke="#0891b2" stroke-width="1.8"
+                    filter="url(#roughenP7)" />
+                <text x="150" y="74" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">X — CLONE</text>
+                <text x="150" y="90" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">identical copies behind a balancer</text>
+
+                <g filter="url(#roughenP7)">
+                    <rect x="60" y="105" width="52" height="34" rx="5" fill="#ffffff" stroke="#0891b2"
+                        stroke-width="1.2" />
+                    <rect x="124" y="105" width="52" height="34" rx="5" fill="#ffffff" stroke="#0891b2"
+                        stroke-width="1.2" />
+                    <rect x="188" y="105" width="52" height="34" rx="5" fill="#ffffff" stroke="#0891b2"
+                        stroke-width="1.2" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5" text-anchor="middle" fill="#0891b2">
+                    <text x="86" y="126">full app</text>
+                    <text x="150" y="126">full app</text>
+                    <text x="214" y="126">full app</text>
+                </g>
+                <text x="150" y="163" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">Easiest. Scales stateless compute.</text>
+                <text x="150" y="180" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">Does nothing for a shared database.</text>
+                <text x="150" y="204" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">read replicas · app instances · CDN edges</text>
+
+                <!-- Y axis: split by function -->
+                <rect x="275" y="50" width="230" height="175" rx="10" fill="#fdf4ff" stroke="#c026d3" stroke-width="1.8"
+                    filter="url(#roughenP7)" />
+                <text x="390" y="74" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">Y — SPLIT BY FUNCTION</text>
+                <text x="390" y="90" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">different services do different things</text>
+
+                <g filter="url(#roughenP7)">
+                    <rect x="300" y="105" width="52" height="34" rx="5" fill="#ffffff" stroke="#c026d3"
+                        stroke-width="1.2" />
+                    <rect x="364" y="105" width="52" height="34" rx="5" fill="#ffffff" stroke="#c026d3"
+                        stroke-width="1.2" />
+                    <rect x="428" y="105" width="52" height="34" rx="5" fill="#ffffff" stroke="#c026d3"
+                        stroke-width="1.2" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5" text-anchor="middle" fill="#c026d3">
+                    <text x="326" y="126">orders</text>
+                    <text x="390" y="126">search</text>
+                    <text x="454" y="126">billing</text>
+                </g>
+                <text x="390" y="163" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">Scale each part to its own demand.</text>
+                <text x="390" y="180" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">Buys team autonomy, costs network hops.</text>
+                <text x="390" y="204" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">microservices · read/write split · async workers</text>
+
+                <!-- Z axis: split by data -->
+                <rect x="515" y="50" width="230" height="175" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="1.8"
+                    filter="url(#roughenP7)" />
+                <text x="630" y="74" fill="#ea580c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">Z — SPLIT BY DATA</text>
+                <text x="630" y="90" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">same code, each shard owns a slice</text>
+
+                <g filter="url(#roughenP7)">
+                    <rect x="540" y="105" width="52" height="34" rx="5" fill="#ffffff" stroke="#ea580c"
+                        stroke-width="1.2" />
+                    <rect x="604" y="105" width="52" height="34" rx="5" fill="#ffffff" stroke="#ea580c"
+                        stroke-width="1.2" />
+                    <rect x="668" y="105" width="52" height="34" rx="5" fill="#ffffff" stroke="#ea580c"
+                        stroke-width="1.2" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5" text-anchor="middle" fill="#ea580c">
+                    <text x="566" y="126">users A–H</text>
+                    <text x="630" y="126">users I–P</text>
+                    <text x="694" y="126">users Q–Z</text>
+                </g>
+                <text x="630" y="163" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">The only axis that scales WRITES.</text>
+                <text x="630" y="180" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">Hardest to undo. Cross-shard queries hurt.</text>
+                <text x="630" y="204" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">sharding · partitioning · per-tenant cells</text>
+
+                <!-- ordering guidance -->
+                <rect x="60" y="250" width="660" height="145" rx="9" fill="#ffffff" stroke="#333" stroke-width="1.3"
+                    stroke-dasharray="4,3" filter="url(#roughenP7)" />
+                <text x="390" y="273" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">The order almost everyone should follow</text>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5" fill="#333">
+                    <text x="95" y="302" fill="#0891b2" font-weight="700">1 · X</text>
+                    <text x="150" y="302">Clone the stateless tier. Cheap, reversible, buys immediate headroom.</text>
+                    <text x="95" y="328" fill="#c026d3" font-weight="700">2 · Y</text>
+                    <text x="150" y="328">Peel off the parts with different scaling profiles or different owners.</text>
+                    <text x="95" y="354" fill="#ea580c" font-weight="700">3 · Z</text>
+                    <text x="150" y="354">Shard the data, last — when one dataset genuinely won't fit or won't keep
+                        up.</text>
+                    <text x="150" y="378" fill="#e11d48" font-size="9">Reaching for Z first is the most expensive
+                        mistake on this page.</text>
+                </g>
+            </svg>
+            <p class="diagram-caption">
+                X is a config change. Y is a project. Z is a migration you will live with for years. The axes are
+                independent, but the difficulty is not — go left to right.
+            </p>
+        </div>
+
+        <p>
+            One clarification that saves a lot of confusion: <strong>read replicas (X) do not scale writes.</strong>
+            Add twenty replicas and every write still lands on one primary. Only Z — partitioning the data itself —
+            increases write capacity. Teams routinely add replicas to a write-bound system and are puzzled when
+            nothing improves.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ The Shard Key Is a One-Way Door</div>
+            <p>
+                Choosing the wrong shard key is the most expensive reversible-in-theory decision in this whole
+                topic. Shard by <code>created_date</code> and every write goes to today's shard while the rest sit
+                idle. Shard by <code>tenant_id</code> and one enormous customer melts one node while the others
+                coast. Shard by something you later need to query across, and every read becomes a scatter-gather.
+            </p>
+            <p>
+                Pick a key with high cardinality, even distribution, and — critically — one that appears in the
+                majority of your queries. Then plan for resharding anyway, because you will be wrong about
+                something.
+            </p>
+        </div>
+
+        <!-- Section 9: Conflict -->
+        <h2 id="conflict">
+            <span class="section-number">09</span>
+            When Performance Work Hurts Scalability
+        </h2>
+
+        <p>
+            Most of the time these two goals are friends. Make a query faster and you both reduce latency and free
+            up capacity — one fix, two wins. But there's a specific and recognisable family of optimizations that
+            make a single machine faster while making the <em>fleet</em> harder to grow, and they're worth knowing
+            because they're all things a well-meaning engineer would do.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 8 — The Quadrant: Which Optimizations Help Which Goal</div>
+            <svg viewBox="0 0 780 430" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridP8" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenP8" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="58" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.3" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowP8" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="430" fill="#fefefe" rx="12" />
+                <rect width="780" height="430" fill="url(#dotGridP8)" rx="12" />
+
+                <!-- axes -->
+                <path d="M 90 380 L 720 380" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowP8)" />
+                <path d="M 405 400 L 405 45" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowP8)" />
+                <text x="640" y="400" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">helps PERFORMANCE →</text>
+                <text x="425" y="58" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    font-weight="700">↑ helps SCALABILITY</text>
+
+                <!-- Quadrant: both good (top right) -->
+                <rect x="415" y="70" width="300" height="140" rx="9" fill="#ecfeff" stroke="#0891b2" stroke-width="1.5"
+                    filter="url(#roughenP8)" />
+                <text x="565" y="92" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">BOTH — do these first</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5" fill="#333">
+                    <text x="435" y="114">· add the missing index</text>
+                    <text x="435" y="132">· kill the N+1 query</text>
+                    <text x="435" y="150">· shrink the payload</text>
+                    <text x="435" y="168">· shared cache in front of the origin</text>
+                    <text x="435" y="186">· better algorithm / data structure</text>
+                    <text x="435" y="204">· parallelise independent calls</text>
+                </g>
+
+                <!-- Quadrant: scalability only (top left) -->
+                <rect x="95" y="70" width="290" height="140" rx="9" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"
+                    filter="url(#roughenP8)" />
+                <text x="240" y="92" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">SCALES BETTER, RUNS SLOWER</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5" fill="#333">
+                    <text x="115" y="114">· move session state out of process</text>
+                    <text x="115" y="132">· split a monolith into services</text>
+                    <text x="115" y="150">· replace a local lock with a queue</text>
+                    <text x="115" y="168">· shard the database</text>
+                    <text x="115" y="186">· idempotency + retries everywhere</text>
+                </g>
+                <text x="240" y="204" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">each adds a hop — and buys you a ceiling you didn't have</text>
+
+                <!-- Quadrant: performance only (bottom right) -->
+                <rect x="415" y="230" width="300" height="140" rx="9" fill="#fdf4ff" stroke="#c026d3" stroke-width="1.5"
+                    filter="url(#roughenP8)" />
+                <text x="565" y="252" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">FASTER NOW, HARDER TO GROW</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5" fill="#333">
+                    <text x="435" y="274">· in-process cache (hit rate ÷ N nodes)</text>
+                    <text x="435" y="292">· sticky sessions</text>
+                    <text x="435" y="310">· in-memory state for speed</text>
+                    <text x="435" y="328">· long-lived local transactions</text>
+                    <text x="435" y="346">· scale-up-only tuning (NUMA, huge heaps)</text>
+                </g>
+                <text x="565" y="364" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">fine on one box — each one blocks horizontal scale</text>
+
+                <!-- Quadrant: neither (bottom left) -->
+                <rect x="95" y="230" width="290" height="140" rx="9" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"
+                    filter="url(#roughenP8)" />
+                <text x="240" y="252" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">NEITHER — pure cost</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5" fill="#333">
+                    <text x="115" y="274">· distributed system for a 1-node workload</text>
+                    <text x="115" y="292">· premature microservices</text>
+                    <text x="115" y="310">· caching data nobody re-reads</text>
+                    <text x="115" y="328">· autoscaling around a memory leak</text>
+                    <text x="115" y="346">· chatty sync calls between services</text>
+                </g>
+            </svg>
+            <p class="diagram-caption">
+                Start in the top-right quadrant and exhaust it before touching anything else. Almost every system
+                has unclaimed wins sitting there, and they cost nothing architecturally.
+            </p>
+        </div>
+
+        <h3>The In-Process Cache Trap</h3>
+
+        <p>
+            This one deserves its own paragraph because it's so common and so counterintuitive. An in-process cache
+            is the fastest cache possible — no network, no serialization, nanoseconds. On one server it's an
+            obvious win.
+        </p>
+        <p>
+            Now scale to 50 servers. Each one has its own private copy, warmed independently. A user's request
+            lands on a random node, so the effective hit rate for any given key drops roughly by a factor of the
+            fleet size. Worse, <em>the origin load goes up as you scale out</em> — 50 cold caches each need to
+            fetch the same hot key. You added servers and increased load on the database.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">The Arithmetic That Surprises People</span>
+            <pre><code>1 node,  in-process cache, 10k hot keys cached  →  hit rate 92%
+50 nodes, same cache size EACH, requests spread evenly
+
+  Each node now sees 1/50th of the traffic for any key,
+  so each node's cache warms 50× more slowly and evicts
+  before the next hit arrives.
+
+  → effective hit rate collapses toward 30–50%
+  → origin QPS goes UP even though total traffic didn't change
+
+Fix: a SHARED cache tier (one hop, one copy, one hit rate),
+     or in-process only for data that is small, static, and
+     read by literally every request — config, feature flags.</code></pre>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The Tell</div>
+            <p>
+                Any optimization that makes a node <em>special</em> — it holds something, it remembers something,
+                it's the only one that can do something — is a performance win that costs you scalability. That's
+                not automatically wrong. It's wrong when you make the trade without noticing you made it.
+            </p>
+        </div>
+
+        <!-- Section 10: Measuring -->
+        <h2 id="measuring">
+            <span class="section-number">10</span>
+            Measuring Scalability: Efficiency, Not Anecdotes
+        </h2>
+
+        <p>
+            "We scaled to 40 nodes" is not a measurement. It's a purchase order. The measurement is
+            <strong>scaling efficiency</strong>: how much of each added node actually turned into capacity.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Scaling Efficiency</span>
+            <pre><code>speedup(N)    =  throughput(N) ÷ throughput(1)
+efficiency(N) =  speedup(N) ÷ N
+
+efficiency = 1.00  →  perfect linear scaling
+efficiency = 0.70  →  30% of every new machine is wasted
+efficiency = 0.40  →  you are buying overhead, not capacity</code></pre>
+        </div>
+
+        <p>
+            Run the same load test at increasing node counts and the table writes itself. Here's a real-shaped
+            example — note that nothing looks wrong until you compute the last column.
+        </p>
+
+        <div class="comparison-table-wrapper">
+            <table class="comparison-table reveal-element">
+                <thead>
+                    <tr>
+                        <th>Nodes</th>
+                        <th>Max sustained throughput</th>
+                        <th>Speedup</th>
+                        <th>Efficiency</th>
+                        <th>Verdict</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>1</code></td>
+                        <td>1,000 req/s</td>
+                        <td>1.0×</td>
+                        <td class="scale-cell">100%</td>
+                        <td>baseline</td>
+                    </tr>
+                    <tr>
+                        <td><code>2</code></td>
+                        <td>1,900 req/s</td>
+                        <td>1.9×</td>
+                        <td class="scale-cell">95%</td>
+                        <td>healthy</td>
+                    </tr>
+                    <tr>
+                        <td><code>4</code></td>
+                        <td>3,400 req/s</td>
+                        <td>3.4×</td>
+                        <td class="scale-cell">85%</td>
+                        <td>fine</td>
+                    </tr>
+                    <tr>
+                        <td><code>8</code></td>
+                        <td>5,600 req/s</td>
+                        <td>5.6×</td>
+                        <td>70%</td>
+                        <td>contention showing</td>
+                    </tr>
+                    <tr>
+                        <td><code>16</code></td>
+                        <td>7,200 req/s</td>
+                        <td>7.2×</td>
+                        <td class="perf-cell">45%</td>
+                        <td>half your spend is waste</td>
+                    </tr>
+                    <tr>
+                        <td><code>32</code></td>
+                        <td>7,400 req/s</td>
+                        <td>7.4×</td>
+                        <td class="perf-cell">23%</td>
+                        <td>ceiling reached — stop buying</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p>
+            Read the story in that table. Between 16 and 32 nodes you doubled the fleet and gained 200 req/s —
+            about 3%. Whatever is shared has become the entire system. Adding node 33 is pure cost, and the fix
+            isn't more hardware, it's finding the serialization point.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 9 — The Load Sweep: The Only Test That Answers the Question</div>
+            <svg viewBox="0 0 780 410" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridP9" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenP9" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="59" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="410" fill="#fefefe" rx="12" />
+                <rect width="780" height="410" fill="url(#dotGridP9)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Sweep offered load from 10% to 130% of expected peak. Plot both lines together.
+                </text>
+
+                <!-- zones -->
+                <rect x="90" y="50" width="330" height="255" fill="#ecfeff" opacity="0.55" />
+                <rect x="420" y="50" width="120" height="255" fill="#fdf4ff" opacity="0.6" />
+                <rect x="540" y="50" width="160" height="255" fill="#fff1f2" opacity="0.6" />
+                <text x="255" y="68" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">usable capacity</text>
+                <text x="480" y="68" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">the knee</text>
+                <text x="620" y="68" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">saturated / collapsing</text>
+
+                <!-- axes -->
+                <path d="M 90 305 L 720 305" fill="none" stroke="#333" stroke-width="1.5" />
+                <path d="M 90 305 L 90 50" fill="none" stroke="#333" stroke-width="1.5" />
+                <text x="245" y="330" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">offered load (requests sent per second) →</text>
+
+                <!-- achieved throughput: rises then flattens then dips -->
+                <path d="M 92 292 L 180 250 L 270 205 L 360 165 L 420 148 L 480 142 L 540 144 L 620 156 L 700 178"
+                    fill="none" stroke="#0891b2" stroke-width="2.8" filter="url(#roughenP9)" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                <text x="215" y="222" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    font-weight="700">ACHIEVED THROUGHPUT</text>
+
+                <!-- p99 latency: flat then hockey stick -->
+                <path d="M 92 296 L 180 294 L 270 290 L 360 283 L 420 268 L 480 228 L 540 165 L 600 108 L 660 72"
+                    fill="none" stroke="#c026d3" stroke-width="2.8" filter="url(#roughenP9)" stroke-dasharray="8,4"
+                    stroke-linecap="round" stroke-linejoin="round" />
+                <text x="560" y="100" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="end" font-weight="700">p99 LATENCY</text>
+
+                <!-- markers -->
+                <path d="M 480 45 L 480 310" fill="none" stroke="#c026d3" stroke-width="1.3" stroke-dasharray="4,3" />
+                <circle cx="480" cy="142" r="5" fill="#0891b2" />
+                <circle cx="480" cy="228" r="5" fill="#c026d3" />
+                <text x="562" y="326" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">↑ this is your real capacity</text>
+
+                <!-- readout box -->
+                <rect x="60" y="345" width="660" height="52" rx="8" fill="#ffffff" stroke="#333" stroke-width="1.2"
+                    stroke-dasharray="4,3" filter="url(#roughenP9)" />
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="85" y="366">Capacity is NOT where throughput peaks — it's the last point where p99 still
+                        meets your SLO.</text>
+                    <text x="85" y="385" fill="#e11d48">Past the knee, throughput can keep rising while every single
+                        user has a terrible time.</text>
+                </g>
+            </svg>
+            <p class="diagram-caption">
+                Two lines, one chart, and it answers capacity planning, autoscaler thresholds, and concurrency
+                limits simultaneously. It's a far stronger artifact for a design review than any single number.
+            </p>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Test the Whole Path, Not the Service</div>
+            <p>
+                A load test that hits a service with a mocked database measures the service. It tells you nothing
+                about your system, because the shared database is almost always the thing that breaks. Similarly,
+                a test against a fresh dataset with 1,000 rows tells you nothing about behaviour at 100 million
+                rows, where the query planner may choose an entirely different plan.
+            </p>
+            <p>
+                And use an open-model load generator — one that maintains an arrival rate regardless of how the
+                system responds. A closed-loop generator backs off exactly when the system struggles, deleting
+                the evidence you ran the test to find.
+            </p>
+        </div>
+
+        <!-- Section 11: Cost -->
+        <h2 id="cost">
+            <span class="section-number">11</span>
+            Cost Per Unit of Work — The Honest Metric
+        </h2>
+
+        <p>
+            There's a sentence that ends most scalability debates, and engineers reach for it far less often than
+            they should: <strong>what does one request cost?</strong>
+        </p>
+        <p>
+            Any system "scales" if you're allowed to spend without limit. The interesting question is whether cost
+            per unit of work stays flat, falls, or climbs as you grow. That single ratio turns an architectural
+            argument into a business one, and business arguments get resolved.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Unit Economics</span>
+            <pre><code>cost per request = total infrastructure spend ÷ requests served
+
+FALLING  → you have economies of scale. Growth improves margins.
+           (fixed costs amortise; caches get warmer; bin-packing improves)
+
+FLAT     → healthy and normal. Growth is neutral to margin.
+
+RISING   → diseconomies of scale. Every new customer costs more
+           than the last. Growth is now a liability.</code></pre>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 10 — Three Cost Curves, Only One of Which Survives Growth</div>
+            <svg viewBox="0 0 780 390" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridP10" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenP10" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="60" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="390" fill="#fefefe" rx="12" />
+                <rect width="780" height="390" fill="url(#dotGridP10)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Cost per 1,000 requests as traffic grows 100×
+                </text>
+
+                <!-- axes -->
+                <path d="M 95 300 L 715 300" fill="none" stroke="#333" stroke-width="1.5" />
+                <path d="M 95 300 L 95 55" fill="none" stroke="#333" stroke-width="1.5" />
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#86868b"
+                    text-anchor="middle">
+                    <text x="95" y="318">1×</text>
+                    <text x="250" y="318">10×</text>
+                    <text x="405" y="318">30×</text>
+                    <text x="560" y="318">60×</text>
+                    <text x="705" y="318">100×</text>
+                    <text x="400" y="340" font-size="10" fill="#333">traffic growth →</text>
+                </g>
+                <text x="55" y="180" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" transform="rotate(-90 55 180)">cost per 1k requests</text>
+
+                <!-- rising -->
+                <path d="M 97 230 L 250 222 L 405 200 L 560 150 L 700 78" fill="none" stroke="#e11d48"
+                    stroke-width="2.6" filter="url(#roughenP10)" stroke-linecap="round" stroke-linejoin="round" />
+                <text x="600" y="70" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    font-weight="700">RISING — diseconomies</text>
+                <text x="500" y="112" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">cross-node chatter, resharding,</text>
+                <text x="500" y="124" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">retries, ops headcount</text>
+
+                <!-- flat -->
+                <path d="M 97 232 L 250 231 L 405 229 L 560 231 L 700 230" fill="none" stroke="#c026d3"
+                    stroke-width="2.6" filter="url(#roughenP10)" stroke-linecap="round" />
+                <text x="600" y="222" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    font-weight="700">FLAT — fine</text>
+
+                <!-- falling -->
+                <path d="M 97 233 L 250 250 L 405 265 L 560 274 L 700 279" fill="none" stroke="#0891b2"
+                    stroke-width="2.6" filter="url(#roughenP10)" stroke-linecap="round" stroke-linejoin="round" />
+                <text x="580" y="295" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    font-weight="700">FALLING — economies of scale</text>
+                <text x="255" y="278" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    fixed costs amortise · caches warm · bin-packing improves
+                </text>
+
+                <text x="390" y="368" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    "It scales" means the red line never happens. Nobody tracks this, and it is the number that
+                    decides.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                An architecture with a rising unit cost is not scalable in any sense the business recognises,
+                however elegant the load-balancing story is.
+            </p>
+        </div>
+
+        <p>
+            Rising unit cost usually comes from a small set of causes: coherency overhead growing with the fleet
+            (that β term, showing up on the invoice), cross-availability-zone data transfer charges, retry
+            amplification, ops headcount growing with node count, or a sharded system where rebalancing consumes a
+            permanent slice of capacity.
+        </p>
+
+        <div class="callout callout-scale">
+            <div class="callout-label">⚡ Put It on the Dashboard</div>
+            <p>
+                Cost per thousand requests, cost per active user, cost per tenant — pick whichever unit matches
+                your business and chart it monthly alongside latency and throughput. It is the single most
+                effective way to catch a scalability problem before it becomes a margin problem, and it makes the
+                case for performance work in a language finance already speaks: a 30% CPU reduction is a 30%
+                infrastructure line-item reduction, forever.
+            </p>
+        </div>
+
+        <!-- Section 12: Playbook -->
+        <h2 id="playbook">
+            <span class="section-number">12</span>
+            The Playbook — Fix Performance First
+        </h2>
+
+        <p>
+            There's a correct order of operations here, and it's almost the opposite of what most teams do under
+            pressure.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 11 — The Order of Operations</div>
+            <svg viewBox="0 0 780 430" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridP11" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenP11" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="61" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowP11" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="430" fill="#fefefe" rx="12" />
+                <rect width="780" height="430" fill="url(#dotGridP11)" rx="12" />
+
+                <rect x="255" y="25" width="270" height="46" rx="9" fill="#f5f5f7" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughenP11)" />
+                <text x="390" y="45" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10.5"
+                    text-anchor="middle" font-weight="700">Run ONE request on an idle system.</text>
+                <text x="390" y="62" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10.5"
+                    text-anchor="middle">Is it already too slow?</text>
+
+                <path d="M 310 74 L 200 112" fill="none" stroke="#c026d3" stroke-width="1.4"
+                    marker-end="url(#exArrowP11)" />
+                <text x="215" y="98" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    font-weight="700">YES</text>
+                <path d="M 470 74 L 580 112" fill="none" stroke="#0891b2" stroke-width="1.4"
+                    marker-end="url(#exArrowP11)" />
+                <text x="555" y="98" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    font-weight="700">NO</text>
+
+                <!-- Performance branch -->
+                <rect x="35" y="118" width="330" height="180" rx="10" fill="#fdf4ff" stroke="#c026d3" stroke-width="1.8"
+                    filter="url(#roughenP11)" />
+                <text x="200" y="142" fill="#c026d3" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">PERFORMANCE TRACK</text>
+                <text x="200" y="158" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">more machines will not help — don't buy any</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5" fill="#333">
+                    <text x="55" y="182">1 · trace the request end to end</text>
+                    <text x="55" y="203">2 · count the round trips — that's usually it</text>
+                    <text x="55" y="224">3 · read the query plan, add the index</text>
+                    <text x="55" y="245">4 · parallelise what's needlessly sequential</text>
+                    <text x="55" y="266">5 · cache what's expensive and re-read</text>
+                    <text x="55" y="287">6 · shrink the payload</text>
+                </g>
+
+                <!-- Scalability branch -->
+                <rect x="415" y="118" width="330" height="180" rx="10" fill="#ecfeff" stroke="#0891b2" stroke-width="1.8"
+                    filter="url(#roughenP11)" />
+                <text x="580" y="142" fill="#0891b2" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">SCALABILITY TRACK</text>
+                <text x="580" y="158" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">the code is fine — find what everyone shares</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5" fill="#333">
+                    <text x="435" y="182">1 · load sweep — find the knee</text>
+                    <text x="435" y="203">2 · check SATURATION, not utilization</text>
+                    <text x="435" y="224">3 · name the shared resource (there is one)</text>
+                    <text x="435" y="245">4 · remove it, or partition it (X → Y → Z)</text>
+                    <text x="435" y="266">5 · re-sweep, compute efficiency</text>
+                    <text x="435" y="287">6 · only now add nodes</text>
+                </g>
+
+                <!-- loop back -->
+                <path d="M 200 302 L 200 330 L 390 330 L 390 355" fill="none" stroke="#333" stroke-width="1.3"
+                    marker-end="url(#exArrowP11)" />
+                <path d="M 580 302 L 580 330 L 392 330" fill="none" stroke="#333" stroke-width="1.3" />
+
+                <rect x="180" y="358" width="420" height="48" rx="9" fill="#fff7ed" stroke="#ea580c" stroke-width="1.6"
+                    filter="url(#roughenP11)" />
+                <text x="390" y="378" fill="#b45309" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">Then measure again — the bottleneck has moved.</text>
+                <text x="390" y="396" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">It always moves. That's not failure, that's the process working.</text>
+            </svg>
+            <p class="diagram-caption">
+                Performance work first is not just good hygiene — it's cheaper. Halving the work per request halves
+                the fleet you'll eventually need, permanently.
+            </p>
+        </div>
+
+        <h3>Why Performance First, Every Time</h3>
+
+        <ul>
+            <li>
+                <strong>It multiplies through everything downstream.</strong> Cut per-request CPU in half and you
+                need half the machines at every future traffic level. That's a permanent structural saving,
+                compounding for the life of the system.
+            </li>
+            <li>
+                <strong>It's cheaper than distribution.</strong> An index costs an afternoon. Sharding costs a
+                quarter and adds permanent operational weight.
+            </li>
+            <li>
+                <strong>Scaling out amplifies inefficiency.</strong> Distributing wasteful code means you now run
+                wasteful code on forty machines and pay forty times for it.
+            </li>
+            <li>
+                <strong>A slow request holds resources longer.</strong> By Little's Law, higher latency means
+                higher concurrency for the same throughput — more threads, more connections, more memory. Fixing
+                latency reduces the resources needed to serve the same load.
+            </li>
+            <li>
+                <strong>Simple systems reveal their bottlenecks.</strong> A distributed system hides them behind
+                three layers of indirection, so the diagnosis you'd have made in an hour takes a week.
+            </li>
+        </ul>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The Question to Ask Before Any Scaling Project</div>
+            <p>
+                "If we deleted the work rather than distributing it, would we still need this?" A remarkable
+                number of scaling projects are answers to load the system was generating on itself — polling that
+                could be push, a dashboard recomputing the same aggregate a thousand times a minute, a retry loop
+                with no backoff, a health check doing a full table scan.
+            </p>
+            <p>
+                Deleted work scales perfectly and costs nothing to operate.
+            </p>
+        </div>
+
+        <!-- Section 13: Failure gallery -->
+        <h2 id="failures">
+            <span class="section-number">13</span>
+            Five Ways This Goes Wrong in Production
+        </h2>
+
+        <p>
+            The same material as incidents. Every one of these is a team doing something reasonable and getting
+            punished for a distinction they hadn't drawn.
+        </p>
+
+        <h3>1. Scaled the App Tier, the Database Was the Bottleneck</h3>
+        <p>
+            Traffic grows, latency climbs, the autoscaler adds instances. Latency doesn't improve. Someone raises
+            the maximum and adds twenty more. Latency gets <em>worse</em>, because forty app servers are now
+            queueing against the same primary, pushing it further up the queueing curve. The app tier sits at 18%
+            CPU throughout, which is why nobody suspects it. The tell is always the same: check saturation
+            metrics — connection pool waits, lock waits, queue depth — not utilization. A tier that's waiting will
+            never look busy.
+        </p>
+
+        <h3>2. Adding Nodes Made It Slower</h3>
+        <p>
+            A cluster runs beautifully at 30 nodes. At 50 it's measurably worse — lower total throughput, higher
+            latency, no obvious culprit. This is the retrograde region of the USL curve, and the cause is
+            coherency: chatty cache invalidation broadcast to every node, a distributed lock with more contenders,
+            a gossip protocol whose message count grows quadratically, or cross-node queries that fan out further
+            with every node added. The fix is never "add more nodes." It's reducing what the nodes have to tell
+            each other.
+        </p>
+
+        <h3>3. Autoscaling Papered Over a Leak</h3>
+        <p>
+            Instances get slow, the autoscaler adds more, the new ones are fast for a while and then get slow too.
+            The fleet grows week over week; the cloud bill quadruples; latency stays roughly constant, so no alarm
+            fires. Six weeks later someone notices the fleet is 4× larger for the same traffic. There was a memory
+            leak — or a cache with no eviction, or an unbounded queue. Autoscaling is a load-absorption mechanism,
+            not a bug-fixing mechanism, and it's very good at hiding the difference. Alert on
+            <em>instances per unit of traffic</em>, not just on instance count.
+        </p>
+
+        <h3>4. Sharded on the Wrong Key</h3>
+        <p>
+            The team shards by <code>tenant_id</code>, which distributes beautifully across a few thousand
+            customers — until one enterprise customer arrives with 40% of the total data. That shard is now
+            permanently hot, and no amount of adding shards helps, because the unit of distribution is
+            indivisible. Meanwhile the analytics queries that used to be a simple join have become scatter-gather
+            across every shard. Resharding a live system is one of the most painful migrations in this business,
+            which is why the key deserves a week of thought before it gets a day of implementation.
+        </p>
+
+        <h3>5. The Cache That Got Worse As You Grew</h3>
+        <p>
+            An in-process cache with a 92% hit rate on four nodes. The team scales to fifty for a launch, and the
+            database load goes <em>up</em> — dramatically. Each node holds its own private, independently-warmed
+            copy, so any given key is now cached in a fiftieth of the fleet and evicted before the next hit
+            arrives. They added capacity and increased origin load in the same change. The fix is a shared cache
+            tier: one hop slower per lookup, one hit rate for the whole fleet, and load on the origin that falls
+            as you grow instead of rising.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ The Common Thread</div>
+            <p>
+                In four of these five, the team added resources <em>before</em> identifying what was actually
+                constrained. That's the single most expensive habit in this topic, and it's encouraged by
+                tooling — adding capacity is one slider, and finding a bottleneck is an investigation.
+            </p>
+            <p>
+                The discipline that prevents all of them fits in one sentence: <strong>never add capacity to a
+                tier you haven't proven is the constraint.</strong>
+            </p>
+        </div>
+
+        <!-- Section 14: Interview -->
+        <h2 id="interview">
+            <span class="section-number">14</span>
+            Interview Essentials &amp; Level Expectations
+        </h2>
+
+        <p>
+            This distinction is rarely asked directly. It shows up as a trap inside another question — usually
+            some version of "traffic is growing 10×, what do you do?" — where the tempting answer is to start
+            adding boxes.
+        </p>
+
+        <div class="level-grid reveal-element">
+            <div class="level-card mid">
+                <div class="level-label">Mid-Level (E4)</div>
+                <h4>Tell Them Apart</h4>
+                <p>
+                    State the distinction with the single-user test. Explain why more servers don't fix a slow
+                    query. Know vertical vs horizontal scaling and the main trade-offs. Recognise that stateless
+                    request handling is the prerequisite for scaling out.
+                </p>
+                <span class="level-focus">80% Concepts · 20% Trade-offs</span>
+            </div>
+            <div class="level-card senior">
+                <div class="level-label">Senior (E5)</div>
+                <h4>Find the Constraint</h4>
+                <p>
+                    Identify the bottleneck before proposing capacity. Use Little's Law on connection pools. Know
+                    that read replicas don't scale writes. Talk about the serial fraction and why it caps speedup.
+                    Order the work: performance first, then X, then Y, then Z.
+                </p>
+                <span class="level-focus">50% Design · 50% Depth</span>
+            </div>
+            <div class="level-card staff">
+                <div class="level-label">Staff+ (E6)</div>
+                <h4>Own the Curve and the Cost</h4>
+                <p>
+                    Reason about coherency cost and retrograde scaling. Measure scaling efficiency rather than
+                    citing node counts. Defend a shard key against hot-partition and cross-shard-query scenarios.
+                    Track cost per unit of work and make the margin argument. Know when scaling up is the correct
+                    senior answer.
+                </p>
+                <span class="level-focus">30% Design · 70% Depth</span>
+            </div>
+        </div>
+
+        <h3>Questions Worth Rehearsing</h3>
+
+        <ul>
+            <li>
+                <em>"The app is slow. What do you check first?"</em> — Whether it's slow for one user on an idle
+                system. That one question splits the entire problem space.
+            </li>
+            <li>
+                <em>"Traffic is going up 10×. What do you do?"</em> — Find the current bottleneck first. Then
+                scale up if there's headroom, then out. Don't start with a migration.
+            </li>
+            <li>
+                <em>"We added servers and it didn't help. Why?"</em> — You scaled a tier that wasn't the
+                constraint. The bottleneck is shared and singular — a primary, a pool, a lock, a hot key.
+            </li>
+            <li>
+                <em>"Is your system scalable?"</em> — Along which axis, and to what point? Give the efficiency
+                curve, not a yes.
+            </li>
+            <li>
+                <em>"Would you shard this?"</em> — Not until X and Y are exhausted, and not until I can defend the
+                key against a hot tenant and my top five queries.
+            </li>
+            <li>
+                <em>"When is one big server the right answer?"</em> — More often than the industry admits. If the
+                workload fits with headroom and you can tolerate the failure domain, it's the cheapest capacity
+                and the simplest operations you will ever have.
+            </li>
+        </ul>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Senior Signal</div>
+            <p>
+                Resist the reflex to distribute. When an interviewer describes a growth problem, the answer that
+                lands is: "Before I add anything, I'd want to know where the bottleneck is — because if it's the
+                database primary, more app servers make it worse. Let me find the constraint first, then pick the
+                axis."
+            </p>
+            <p>
+                Everyone can draw a load balancer with six boxes behind it. Far fewer will say "we might not need
+                any of this yet, and here's how I'd check."
+            </p>
+        </div>
+
+        <!-- Section 15: Summary -->
+        <h2 id="summary">
+            <span class="section-number">15</span>
+            Summary
+        </h2>
+
+        <p>
+            Performance and scalability get filed under the same word — "speed" — and they are not the same
+            problem, don't have the same causes, and don't respond to the same fixes.
+        </p>
+        <p>
+            The compressed version: performance is speed at a given load; scalability is the shape of the curve as
+            you add resources. One question separates them — is it slow for a single user on an idle system?
+            Every scalability limit is something shared that everyone has to take turns using, and the maths is
+            unforgiving: a small serial fraction caps your speedup hard, and coherency cost eventually bends the
+            curve back down. Scale up before out, X before Y before Z, and fix performance before you distribute
+            anything — because distributing waste means paying for waste on every machine you own.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Concept</th>
+                    <th>One-Line Recall</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>The diagnostic</td>
+                    <td>Slow for one user on an idle system? Performance. Otherwise, scalability</td>
+                </tr>
+                <tr>
+                    <td>Performance</td>
+                    <td>Speed at a given load — a number, meaningless without the load</td>
+                </tr>
+                <tr>
+                    <td>Scalability</td>
+                    <td>Capability gained per resource added — a slope, not a value</td>
+                </tr>
+                <tr>
+                    <td>Universal Scalability Law</td>
+                    <td>α contention flattens the curve; β coherency bends it back down</td>
+                </tr>
+                <tr>
+                    <td>Amdahl</td>
+                    <td>Fixed work: 5% serial caps you at 20× no matter what you spend</td>
+                </tr>
+                <tr>
+                    <td>Gustafson</td>
+                    <td>Growing work: the serial part stays fixed while the parallel part expands</td>
+                </tr>
+                <tr>
+                    <td>Vertical scaling</td>
+                    <td>Cheapest capacity, zero code change, hard ceiling, one failure domain</td>
+                </tr>
+                <tr>
+                    <td>Horizontal scaling</td>
+                    <td>No ceiling, but demands statelessness and charges coordination tax</td>
+                </tr>
+                <tr>
+                    <td>The shared thing</td>
+                    <td>Every scalability limit is a resource everyone queues for. Name it</td>
+                </tr>
+                <tr>
+                    <td>AKF cube</td>
+                    <td>X clone · Y split by function · Z split by data. Do them in that order</td>
+                </tr>
+                <tr>
+                    <td>Read replicas</td>
+                    <td>Scale reads only. Writes still go through one primary</td>
+                </tr>
+                <tr>
+                    <td>Scaling efficiency</td>
+                    <td>speedup ÷ N. Below ~70% you're buying overhead, not capacity</td>
+                </tr>
+                <tr>
+                    <td>In-process cache</td>
+                    <td>Fastest on one node; hit rate divides by fleet size as you grow</td>
+                </tr>
+                <tr>
+                    <td>Cost per request</td>
+                    <td>Flat or falling is scalable. Rising is a business problem wearing a tech costume</td>
+                </tr>
+                <tr>
+                    <td>Order of work</td>
+                    <td>Performance → scale up → clone → decompose → shard. Never backwards</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Final Thought</div>
+            <p>
+                The most valuable engineer in a scaling conversation is usually the one slowing it down. Not out
+                of caution — out of arithmetic. They want to know what one request costs, where the queue is
+                forming, and what happens to the curve at node 50 before anyone signs off on a migration. That
+                person saves quarters, and they do it with a load test and a spreadsheet.
+            </p>
+        </div>
+
+        <div class="callout" style="margin-top: 2rem;">
+            <div class="callout-label">Related Reading</div>
+            <p>
+                <a href="sql-or-nosql.html" style="color: var(--ps-fuchsia); font-weight: 600;">SQL or NoSQL</a>
+                applies this whole ladder to the tier that is almost always the real constraint — including the
+                one move that genuinely raises write capacity. The
+                <a href="latency-vs-throughput.html" style="color: var(--ps-fuchsia); font-weight: 600;">latency vs
+                    throughput</a>
+                primer is the vocabulary for the performance half — Little's Law, percentiles, and the queueing
+                curve that explains why the last 20% of utilization costs more than the first 70%.
+                <a href="availability-vs-consistency.html" style="color: var(--ps-fuchsia); font-weight: 600;">Availability
+                    vs consistency</a>
+                covers what happens to all of this when the network between your newly-distributed nodes breaks.
+            </p>
+        </div>
+    </article>
+
+    <!-- Author Footer -->
+    <div class="article-footer">
+        <div class="author-card reveal-element">
+            <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar" />
+            <div class="author-info">
+                <h4>Ajay Kotnala</h4>
+                <div class="author-role">Senior Solution Architect</div>
+                <p>
+                    15+ years designing cloud-native, event-driven architectures at enterprise scale. Passionate
+                    about system design, API-first thinking, and making complex systems feel simple.
+                </p>
+            </div>
+        </div>
+        <div class="back-links-row">
+            <a href="../index.html" class="back-link">← Back to Portfolio</a>
+            <a href="./index.html" class="back-link">Back to Primer Articles →</a>
+        </div>
+    </div>
+
+    <!-- Global Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-bottom">
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank">LinkedIn</a>
+                    <a href="https://github.com/ajaykotnala" target="_blank">GitHub</a>
+                    <a href="https://medium.com/@ajay.kotnalajpr" target="_blank">Medium</a>
+                </div>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll Progress Bar
+        window.addEventListener("scroll", () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrollTop / docHeight) * 100;
+            document.getElementById("progressBar").style.width = progress + "%";
+        });
+
+        // Intersection Observer for scroll-reveal animations
+        document.addEventListener("DOMContentLoaded", () => {
+            const observerOptions = {
+                threshold: 0.12,
+                rootMargin: "0px 0px -40px 0px",
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("active");
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll(".reveal-element").forEach((el) => {
+                observer.observe(el);
+            });
+        });
+
+        // Deep Dive Accordion
+        function toggleDeepDive(id) {
+            const content = document.getElementById(id);
+            if (!content) return;
+            const panel = content.closest(".deep-dive");
+            if (panel) panel.classList.toggle("open");
+        }
+
+        // Smooth scroll for TOC and anchor links
+        document.querySelectorAll('.toc a, a[href^="#"]').forEach((anchor) => {
+            anchor.addEventListener("click", function (e) {
+                const targetId = this.getAttribute("href");
+                if (targetId.startsWith("#")) {
+                    e.preventDefault();
+                    const target = document.querySelector(targetId);
+                    if (target) {
+                        const offset = 110;
+                        const targetPosition = target.getBoundingClientRect().top + window.scrollY - offset;
+                        window.scrollTo({ top: targetPosition, behavior: "smooth" });
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

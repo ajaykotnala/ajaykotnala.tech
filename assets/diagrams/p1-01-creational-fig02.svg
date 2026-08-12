@@ -1,0 +1,63 @@
+<svg font-family="'Instrument Sans',sans-serif" viewbox="0 0 620 272" xmlns="http://www.w3.org/2000/svg">
+<rect fill="#ede7d9" height="272" width="620"></rect>
+<defs>
+<marker id="p1-01-creational-fig02-fc" markerheight="8" markerwidth="8" orient="auto" refx="6" refy="3">
+<path d="M0,0 L0,6 L8,3z" fill="#b5451b"></path>
+</marker>
+<marker id="p1-01-creational-fig02-fm" markerheight="8" markerwidth="8" orient="auto" refx="6" refy="3">
+<path d="M0,0 L0,6 L8,3z" fill="#8a8070"></path>
+</marker>
+</defs>
+<!-- Creator (abstract) -->
+<rect fill="#f5f0e8" height="98" rx="1" stroke="#3a3628" stroke-width="1.5" width="185" x="30" y="24"></rect>
+<rect fill="#1c1a14" height="30" rx="1" width="185" x="30" y="24"></rect>
+<rect fill="#1c1a14" height="14" width="185" x="30" y="40"></rect>
+<text fill="#d4c9b5" font-family="'Instrument Sans',sans-serif" font-size="8.5" letter-spacing="1" text-anchor="middle" x="122" y="36">«abstract»</text>
+<text fill="#f5f0e8" font-family="'Fraunces',serif" font-size="12" font-style="italic" font-weight="700" text-anchor="middle" x="122" y="50">Creator</text>
+<line stroke="#d4c9b5" stroke-width="0.8" x1="30" x2="215" y1="54" y2="54"></line>
+<text fill="#c8971a" font-family="'Fira Code',monospace" font-size="9" x="44" y="72">factory_method() →
+                    Product</text>
+<text fill="#8a8070" font-family="'Fira Code',monospace" font-size="9" x="44" y="87"> [abstract]</text>
+<text fill="#2a6e3f" font-family="'Fira Code',monospace" font-size="9" x="44" y="104">do_something()</text>
+<!-- ConcreteCreator -->
+<rect fill="#f5f0e8" height="68" rx="1" stroke="#3a3628" stroke-width="1.5" width="185" x="30" y="182"></rect>
+<rect fill="#3a3628" height="26" rx="1" width="185" x="30" y="182"></rect>
+<rect fill="#3a3628" height="14" width="185" x="30" y="194"></rect>
+<text fill="#f5f0e8" font-family="'Fraunces',serif" font-size="12" font-style="italic" text-anchor="middle" x="122" y="198">ConcreteCreator</text>
+<line stroke="#d4c9b5" stroke-width="0.8" x1="30" x2="215" y1="208" y2="208"></line>
+<text fill="#c8971a" font-family="'Fira Code',monospace" font-size="9" x="44" y="226">factory_method()</text>
+<text fill="#8a8070" font-family="'Fira Code',monospace" font-size="9" x="44" y="241"> →
+                    ConcreteProduct</text>
+<!-- Extends arrow -->
+<line stroke="#3a3628" stroke-width="1.5" x1="122" x2="122" y1="122" y2="182"></line>
+<polygon fill="#f5f0e8" points="122,122 116,134 128,134" stroke="#3a3628" stroke-width="1.5"></polygon>
+<text fill="#8a8070" font-size="8.5" font-style="italic" x="130" y="155">extends</text>
+<!-- Product (interface) -->
+<rect fill="#f5f0e8" height="72" rx="1" stroke="#3a3628" stroke-width="1.5" width="185" x="405" y="24"></rect>
+<rect fill="#1c1a14" height="30" rx="1" width="185" x="405" y="24"></rect>
+<rect fill="#1c1a14" height="14" width="185" x="405" y="40"></rect>
+<text fill="#d4c9b5" font-size="8.5" letter-spacing="1" text-anchor="middle" x="497" y="36">«interface»</text>
+<text fill="#f5f0e8" font-family="'Fraunces',serif" font-size="12" font-style="italic" font-weight="700" text-anchor="middle" x="497" y="50">Product</text>
+<line stroke="#d4c9b5" stroke-width="0.8" x1="405" x2="590" y1="54" y2="54"></line>
+<text fill="#c8971a" font-family="'Fira Code',monospace" font-size="9" x="420" y="72">operate()</text>
+<text fill="#8a8070" font-family="'Fira Code',monospace" font-size="9" x="420" y="87"> [abstract]</text>
+<!-- ConcreteProduct -->
+<rect fill="#f5f0e8" height="68" rx="1" stroke="#3a3628" stroke-width="1.5" width="185" x="405" y="182"></rect>
+<rect fill="#3a3628" height="26" rx="1" width="185" x="405" y="182"></rect>
+<rect fill="#3a3628" height="14" width="185" x="405" y="194"></rect>
+<text fill="#f5f0e8" font-family="'Fraunces',serif" font-size="12" font-style="italic" text-anchor="middle" x="497" y="198">ConcreteProduct</text>
+<line stroke="#d4c9b5" stroke-width="0.8" x1="405" x2="590" y1="208" y2="208"></line>
+<text fill="#2a6e3f" font-family="'Fira Code',monospace" font-size="9" x="420" y="226">operate()</text>
+<text fill="#8a8070" font-family="'Fira Code',monospace" font-size="9" x="420" y="241"> prints
+                    result</text>
+<!-- Product implements arrow -->
+<line stroke="#3a3628" stroke-width="1.5" x1="497" x2="497" y1="96" y2="182"></line>
+<polygon fill="#f5f0e8" points="497,96 491,108 503,108" stroke="#3a3628" stroke-width="1.5"></polygon>
+<text fill="#8a8070" font-size="8.5" font-style="italic" x="505" y="142">implements</text>
+<!-- Creates dashed -->
+<line marker-end="url(#p1-01-creational-fig02-fc)" stroke="#b5451b" stroke-dasharray="5,3" stroke-width="1.5" x1="215" x2="405" y1="218" y2="218"></line>
+<text fill="#b5451b" font-size="8.5" font-style="italic" x="278" y="211">«creates»</text>
+<!-- Uses dashed -->
+<line marker-end="url(#p1-01-creational-fig02-fm)" stroke="#8a8070" stroke-dasharray="4,3" stroke-width="1" x1="215" x2="405" y1="72" y2="60"></line>
+<text fill="#8a8070" font-size="8.5" font-style="italic" x="284" y="58">«uses»</text>
+</svg>

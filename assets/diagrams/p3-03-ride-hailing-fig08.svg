@@ -1,0 +1,65 @@
+<svg style="max-width: 760px" viewbox="0 0 760 360" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p3-03-ride-hailing-fig08-dotGrid" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p3-03-ride-hailing-fig08-roughen" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="2" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<filter height="102%" id="p3-03-ride-hailing-fig08-roughenLight" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="5" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p3-03-ride-hailing-fig08-exArrow" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p3-03-ride-hailing-fig08-exArrowGreen" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0ba360" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p3-03-ride-hailing-fig08-exArrowBlue" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="360" rx="12" width="760"></rect>
+<rect fill="url(#p3-03-ride-hailing-fig08-dotGrid)" height="360" rx="12" width="760"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="12" font-weight="700" x="25" y="70">
+                    Matching
+                </text>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="12" font-weight="700" x="25" y="170">
+                    Redis lock
+                </text>
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="12" font-weight="700" x="25" y="270">
+                    Driver
+                </text>
+<line stroke="#e0e0e0" x1="115" x2="115" y1="45" y2="330"></line>
+<path d="M 135 30 L 720 30" fill="none" marker-end="url(#p3-03-ride-hailing-fig08-exArrow)" stroke="#ccc"></path>
+<rect fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig08-roughen)" height="24" rx="6" stroke="#0ba360" width="150" x="150" y="58"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="225" y="74">
+                    GEOSEARCH nearby drivers
+                </text>
+<rect fill="#f0faf5" filter="url(#p3-03-ride-hailing-fig08-roughen)" height="24" rx="6" stroke="#0ba360" width="120" x="320" y="58"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="380" y="74">
+                    Pick driver D1
+                </text>
+<rect fill="#ffebee" filter="url(#p3-03-ride-hailing-fig08-roughen)" height="28" rx="6" stroke="#c62828" stroke-width="2" width="180" x="460" y="155"></rect>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="550" y="173">
+                    SET lock:D1 TTL=10s
+                </text>
+<rect fill="#eef6ff" filter="url(#p3-03-ride-hailing-fig08-roughen)" height="24" rx="6" stroke="#0066cc" width="140" x="460" y="255"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="530" y="271">
+                    Push: new ride
+                </text>
+<rect fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig08-roughen)" height="24" rx="6" stroke="#0ba360" width="100" x="620" y="255"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="670" y="271">
+                    PATCH accept
+                </text>
+<rect fill="#f5f5f7" filter="url(#p3-03-ride-hailing-fig08-roughen)" height="28" rx="6" stroke="#ccc" width="100" x="620" y="155"></rect>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="670" y="173">
+                    DEL lock
+                </text>
+<rect fill="#fff3e0" filter="url(#p3-03-ride-hailing-fig08-roughen)" height="30" rx="8" stroke="#3cba92" stroke-dasharray="4,2" width="200" x="150" y="300"></rect>
+<text fill="#3cba92" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="250" y="320">
+                    If TTL expires → next driver D2
+                </text>
+</svg>

@@ -1,0 +1,80 @@
+<svg style="max-width: 780px" viewbox="0 0 780 380" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p3-03-ride-hailing-fig05-dotGridGeo" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p3-03-ride-hailing-fig05-roughenGeo" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="2" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<filter height="102%" id="p3-03-ride-hailing-fig05-roughenLightGeo" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="5" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+</defs>
+<rect fill="#fefefe" height="380" rx="12" width="780"></rect>
+<rect fill="url(#p3-03-ride-hailing-fig05-dotGridGeo)" height="380" rx="12" width="780"></rect>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="13" font-weight="600" text-anchor="middle" x="390" y="30">
+                    GEOHASH / QUAD-TREE SPATIAL INDEX
+                </text>
+<!-- Left panel: B-tree fail -->
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="12" font-weight="700" text-anchor="middle" x="195" y="58">
+                    ❌ B-tree lat/long index
+                </text>
+<rect fill="#ffebee" filter="url(#p3-03-ride-hailing-fig05-roughenGeo)" height="260" rx="10" stroke="#c62828" stroke-width="1.5" width="330" x="30" y="70"></rect>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="180" rx="6" stroke="#ccc" width="280" x="55" y="95"></rect>
+<!-- Scattered driver dots -->
+<circle cx="90" cy="130" fill="#86868b" r="4"></circle>
+<circle cx="130" cy="110" fill="#86868b" r="4"></circle>
+<circle cx="180" cy="150" fill="#86868b" r="4"></circle>
+<circle cx="220" cy="120" fill="#86868b" r="4"></circle>
+<circle cx="270" cy="170" fill="#86868b" r="4"></circle>
+<circle cx="110" cy="200" fill="#86868b" r="4"></circle>
+<circle cx="250" cy="210" fill="#86868b" r="4"></circle>
+<circle cx="160" cy="240" fill="#86868b" r="4"></circle>
+<circle cx="300" cy="130" fill="#86868b" r="4"></circle>
+<!-- Bounding box scan -->
+<rect fill="none" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="80" stroke="#c62828" stroke-dasharray="6,3" stroke-width="2" width="120" x="120" y="140"></rect>
+<circle cx="180" cy="180" fill="#0ba360" r="8" stroke="#333" stroke-width="1.5"></circle>
+<text fill="#fff" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="180" y="184">
+                    📍
+                </text>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="195" y="295">
+                    Scans irrelevant rows in bounding box
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="195" y="312">
+                    O(n) distance calc · index unaware of radius
+                </text>
+<!-- Right panel: Geohash grid -->
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="12" font-weight="700" text-anchor="middle" x="585" y="58">
+                    ✓ Geohash / quad-tree grid
+                </text>
+<rect fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig05-roughenGeo)" height="260" rx="10" stroke="#0ba360" stroke-width="2" width="330" x="420" y="70"></rect>
+<!-- Grid cells -->
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="55" stroke="#ccc" width="70" x="445" y="95"></rect>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="55" stroke="#ccc" width="70" x="520" y="95"></rect>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="55" stroke="#ccc" width="70" x="595" y="95"></rect>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="55" stroke="#ccc" width="70" x="670" y="95"></rect>
+<rect fill="#c8e6c9" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="55" stroke="#0ba360" stroke-width="2" width="70" x="445" y="155"></rect>
+<rect fill="#c8e6c9" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="55" stroke="#0ba360" stroke-width="2" width="70" x="520" y="155"></rect>
+<rect fill="#a5d6a7" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="55" stroke="#0ba360" stroke-width="2" width="70" x="595" y="155"></rect>
+<rect fill="#c8e6c9" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="55" stroke="#0ba360" stroke-width="2" width="70" x="670" y="155"></rect>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="55" stroke="#ccc" width="70" x="445" y="215"></rect>
+<rect fill="#c8e6c9" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="55" stroke="#0ba360" stroke-width="2" width="70" x="520" y="215"></rect>
+<rect fill="#c8e6c9" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="55" stroke="#0ba360" stroke-width="2" width="70" x="595" y="215"></rect>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig05-roughenLightGeo)" height="55" stroke="#ccc" width="70" x="670" y="215"></rect>
+<circle cx="632" cy="182" fill="#0ba360" r="8" stroke="#333" stroke-width="1.5"></circle>
+<text fill="#fff" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="632" y="186">
+                    📍
+                </text>
+<circle cx="555" cy="140" fill="#0ba360" r="3"></circle>
+<circle cx="700" cy="175" fill="#0ba360" r="3"></circle>
+<circle cx="560" cy="245" fill="#0ba360" r="3"></circle>
+<circle cx="645" cy="240" fill="#0ba360" r="3"></circle>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="585" y="295">
+                    Query pickup cell + 8 neighbors only
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="585" y="312">
+                    Redis GEOSEARCH · O(log N + M)
+                </text>
+</svg>

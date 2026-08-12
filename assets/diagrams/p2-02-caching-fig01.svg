@@ -1,0 +1,82 @@
+<svg style="max-width: 780px" viewbox="0 0 780 300" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p2-02-caching-fig01-dotGridK1" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p2-02-caching-fig01-roughenK1" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="11" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p2-02-caching-fig01-exArrowK1" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="300" rx="12" width="780"></rect>
+<rect fill="url(#p2-02-caching-fig01-dotGridK1)" height="300" rx="12" width="780"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" text-anchor="middle" x="390" y="30">
+                    One request, four possible stops before it ever reaches the database
+                </text>
+<!-- Client -->
+<rect fill="#fff1f2" filter="url(#p2-02-caching-fig01-roughenK1)" height="70" rx="9" stroke="#e11d48" stroke-width="1.5" width="110" x="20" y="110"></rect>
+<text fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="75" y="135">
+                    Client Device
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="75" y="152">
+                    localStorage,
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="75" y="164">
+                    HTTP cache
+                </text>
+<!-- CDN -->
+<rect fill="#fff7ed" filter="url(#p2-02-caching-fig01-roughenK1)" height="70" rx="9" stroke="#d97706" stroke-width="1.5" width="110" x="170" y="110"></rect>
+<text fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="225" y="135">
+                    CDN Edge
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="225" y="152">
+                    ~20ms away,
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="225" y="164">
+                    geography-optimized
+                </text>
+<!-- App + in-process -->
+<rect fill="#eef6ff" filter="url(#p2-02-caching-fig01-roughenK1)" height="110" rx="9" stroke="#0066cc" stroke-width="1.5" width="150" x="320" y="90"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="395" y="112">
+                    App Server
+                </text>
+<rect fill="#ffffff" filter="url(#p2-02-caching-fig01-roughenK1)" height="55" rx="6" stroke="#0066cc" stroke-dasharray="3,3" width="120" x="335" y="125"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="395" y="145">
+                    in-process cache
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" text-anchor="middle" x="395" y="160">
+                    private to this instance
+                </text>
+<!-- External cache -->
+<rect fill="#fff7ed" filter="url(#p2-02-caching-fig01-roughenK1)" height="70" rx="9" stroke="#d97706" stroke-width="1.5" width="130" x="510" y="110"></rect>
+<text fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="575" y="135">
+                    Redis Cluster
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="575" y="152">
+                    shared across
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="575" y="164">
+                    the whole fleet
+                </text>
+<!-- DB -->
+<rect fill="#f5f5f7" filter="url(#p2-02-caching-fig01-roughenK1)" height="70" rx="9" stroke="#333" stroke-width="1.5" width="90" x="670" y="110"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="715" y="140">
+                    Database
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="715" y="157">
+                    source of truth
+                </text>
+<path d="M 130 145 L 166 145" fill="none" marker-end="url(#p2-02-caching-fig01-exArrowK1)" stroke="#333" stroke-width="1.5"></path>
+<path d="M 280 145 L 316 145" fill="none" marker-end="url(#p2-02-caching-fig01-exArrowK1)" stroke="#333" stroke-width="1.5"></path>
+<path d="M 470 145 L 506 145" fill="none" marker-end="url(#p2-02-caching-fig01-exArrowK1)" stroke="#333" stroke-width="1.5"></path>
+<path d="M 640 145 L 666 145" fill="none" marker-end="url(#p2-02-caching-fig01-exArrowK1)" stroke="#333" stroke-width="1.5"></path>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="390" y="230">
+                    Each layer is a chance to answer the request without going one step further right.
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="390" y="250">
+                    Only requests that miss everywhere reach the database.
+                </text>
+</svg>

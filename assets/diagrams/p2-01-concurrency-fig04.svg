@@ -1,0 +1,64 @@
+<svg style="max-width: 780px" viewbox="0 0 780 300" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p2-01-concurrency-fig04-dotGridC4" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p2-01-concurrency-fig04-roughenC4" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="6" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p2-01-concurrency-fig04-exArrowC4" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#c2410c" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="300" rx="12" width="780"></rect>
+<rect fill="url(#p2-01-concurrency-fig04-dotGridC4)" height="300" rx="12" width="780"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="700" text-anchor="middle" x="130" y="35">
+                    200 incoming requests
+                </text>
+<circle cx="70" cy="70" fill="#fee2e2" filter="url(#p2-01-concurrency-fig04-roughenC4)" r="10" stroke="#c2410c"></circle>
+<circle cx="100" cy="70" fill="#fee2e2" filter="url(#p2-01-concurrency-fig04-roughenC4)" r="10" stroke="#c2410c"></circle>
+<circle cx="130" cy="70" fill="#fee2e2" filter="url(#p2-01-concurrency-fig04-roughenC4)" r="10" stroke="#c2410c"></circle>
+<circle cx="160" cy="70" fill="#fee2e2" filter="url(#p2-01-concurrency-fig04-roughenC4)" r="10" stroke="#c2410c"></circle>
+<circle cx="190" cy="70" fill="#fee2e2" filter="url(#p2-01-concurrency-fig04-roughenC4)" r="10" stroke="#c2410c"></circle>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" x="220" y="75">
+                    ...
+                </text>
+<!-- Semaphore gate -->
+<rect fill="#fff7ed" filter="url(#p2-01-concurrency-fig04-roughenC4)" height="130" rx="10" stroke="#c2410c" stroke-width="1.5" width="260" x="260" y="110"></rect>
+<text fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" font-weight="700" text-anchor="middle" x="390" y="135">
+                    Semaphore(25)
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="390" y="152">
+                    25 permits in circulation
+                </text>
+<rect fill="#fdba74" filter="url(#p2-01-concurrency-fig04-roughenC4)" height="16" rx="8" width="16" x="285" y="165"></rect>
+<rect fill="#fdba74" filter="url(#p2-01-concurrency-fig04-roughenC4)" height="16" rx="8" width="16" x="310" y="165"></rect>
+<rect fill="#fdba74" filter="url(#p2-01-concurrency-fig04-roughenC4)" height="16" rx="8" width="16" x="335" y="165"></rect>
+<rect fill="#fdba74" filter="url(#p2-01-concurrency-fig04-roughenC4)" height="16" rx="8" width="16" x="360" y="165"></rect>
+<rect fill="#fdba74" filter="url(#p2-01-concurrency-fig04-roughenC4)" height="16" rx="8" width="16" x="385" y="165"></rect>
+<rect fill="#fdba74" filter="url(#p2-01-concurrency-fig04-roughenC4)" height="16" rx="8" width="16" x="410" y="165"></rect>
+<rect fill="#fdba74" filter="url(#p2-01-concurrency-fig04-roughenC4)" height="16" rx="8" width="16" x="435" y="165"></rect>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" x="460" y="178">
+                    ...
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="390" y="205">
+                    175 requests wait here
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="390" y="222">
+                    for a permit to free up
+                </text>
+<!-- Payment API -->
+<rect fill="#eef2ff" filter="url(#p2-01-concurrency-fig04-roughenC4)" height="60" rx="9" stroke="#4f46e5" stroke-width="1.5" width="140" x="600" y="140"></rect>
+<text fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="700" text-anchor="middle" x="670" y="165">
+                    Payment API
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="670" y="182">
+                    hard cap: 25 concurrent
+                </text>
+<path d="M 220 90 L 260 150" fill="none" marker-end="url(#p2-01-concurrency-fig04-exArrowC4)" stroke="#c2410c" stroke-dasharray="3,3" stroke-width="1.5"></path>
+<path d="M 520 170 L 596 170" fill="none" marker-end="url(#p2-01-concurrency-fig04-exArrowC4)" stroke="#4f46e5" stroke-width="2"></path>
+<text fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="558" y="160">
+                    ≤25 in flight
+                </text>
+</svg>

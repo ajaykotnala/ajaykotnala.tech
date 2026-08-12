@@ -1,0 +1,61 @@
+<svg style="max-width: 780px" viewbox="0 0 780 350" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p2-03-rate-limiting-fig05-dotGridR5" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p2-03-rate-limiting-fig05-roughenR5" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="25" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p2-03-rate-limiting-fig05-exArrowR5" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="350" rx="12" width="780"></rect>
+<rect fill="url(#p2-03-rate-limiting-fig05-dotGridR5)" height="350" rx="12" width="780"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" text-anchor="middle" x="390" y="28">
+                    Each layer knows more than the one before it — and can therefore limit on more
+                </text>
+<!-- lanes -->
+<rect fill="#fff7ed" filter="url(#p2-03-rate-limiting-fig05-roughenR5)" height="180" rx="9" stroke="#d97706" stroke-width="1.5" width="170" x="30" y="55"></rect>
+<text fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="115" y="78">EDGE / CDN</text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="115" y="100">knows: IP, path, headers</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="115" y="122">limits on: ip /64, ASN</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="115" y="140">catches: floods, scrapers</text>
+<text fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="115" y="168">blind to: identity, plan,</text>
+<text fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="115" y="182">request cost</text>
+<text fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-weight="700" text-anchor="middle" x="115" y="212">cost to reject: ~0</text>
+<rect fill="#eef6ff" filter="url(#p2-03-rate-limiting-fig05-roughenR5)" height="180" rx="9" stroke="#0066cc" stroke-width="1.5" width="170" x="225" y="55"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="310" y="78">API GATEWAY</text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="310" y="100">knows: api key, tenant, plan</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="310" y="122">limits on: tenant, user</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="310" y="140">catches: noisy neighbours</text>
+<text fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="310" y="168">blind to: what the request</text>
+<text fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="310" y="182">will actually cost</text>
+<text fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-weight="700" text-anchor="middle" x="310" y="212">cost to reject: low</text>
+<rect fill="#f5f3ff" filter="url(#p2-03-rate-limiting-fig05-roughenR5)" height="180" rx="9" stroke="#6d28d9" stroke-width="1.5" width="180" x="420" y="55"></rect>
+<text fill="#6d28d9" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="510" y="78">SERVICE</text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="510" y="100">knows: the domain, the cost</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="510" y="122">limits on: tokens, rows, $</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="510" y="140">catches: expensive calls</text>
+<text fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="510" y="168">only layer that can do</text>
+<text fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="510" y="182">reserve-then-reconcile</text>
+<text fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-weight="700" text-anchor="middle" x="510" y="212">cost to reject: high</text>
+<rect fill="#f5f5f7" filter="url(#p2-03-rate-limiting-fig05-roughenR5)" height="180" rx="9" stroke="#333" stroke-width="1.5" width="125" x="625" y="55"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="687" y="130">Backend</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="687" y="150">DB, GPU, queue</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="687" y="172">protect with a</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="687" y="186">concurrency limit</text>
+<path d="M 200 145 L 221 145" fill="none" marker-end="url(#p2-03-rate-limiting-fig05-exArrowR5)" stroke="#333" stroke-width="1.5"></path>
+<path d="M 395 145 L 416 145" fill="none" marker-end="url(#p2-03-rate-limiting-fig05-exArrowR5)" stroke="#333" stroke-width="1.5"></path>
+<path d="M 600 145 L 621 145" fill="none" marker-end="url(#p2-03-rate-limiting-fig05-exArrowR5)" stroke="#333" stroke-width="1.5"></path>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="390" y="272">
+                    The further right a rejection happens, the more you already paid for it.
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="390" y="296">
+                    The further left, the less you know about whether it was fair.
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="390" y="324">
+                    That tension is why you place counters at every layer instead of choosing one.
+                </text>
+</svg>

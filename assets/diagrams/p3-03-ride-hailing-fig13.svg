@@ -1,0 +1,146 @@
+<svg style="max-width: 780px" viewbox="0 0 780 420" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p3-03-ride-hailing-fig13-dotGridPay" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p3-03-ride-hailing-fig13-roughenPay" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="23" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<filter height="102%" id="p3-03-ride-hailing-fig13-roughenLightPay" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="25" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p3-03-ride-hailing-fig13-exArrowPay" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0ba360" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p3-03-ride-hailing-fig13-exArrowPayBlue" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p3-03-ride-hailing-fig13-exArrowPayRed" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#c62828" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p3-03-ride-hailing-fig13-exArrowPayGray" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#86868b" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="420" rx="12" width="780"></rect>
+<rect fill="url(#p3-03-ride-hailing-fig13-dotGridPay)" height="420" rx="12" width="780"></rect>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="13" font-weight="600" text-anchor="middle" x="390" y="28">
+                    PAYMENT FLOW — FROM TRIP COMPLETION TO LEDGER
+                </text>
+<!-- Step 1: Ride completed trigger -->
+<rect fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig13-roughenPay)" height="55" rx="10" stroke="#0ba360" stroke-width="2" width="130" x="25" y="55"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="11" font-weight="700" text-anchor="middle" x="90" y="77">
+                    Ride Service
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="90" y="97">
+                    status → completed
+                </text>
+<!-- Arrow 1→2 -->
+<path d="M 155 82 C 175 82, 185 82, 200 82" fill="none" filter="url(#p3-03-ride-hailing-fig13-roughenLightPay)" marker-end="url(#p3-03-ride-hailing-fig13-exArrowPay)" stroke="#0ba360" stroke-width="2"></path>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="8" font-weight="600" x="178" y="72">
+                    emit
+                </text>
+<!-- Step 2: RideCompleted event -->
+<rect fill="#fff3e0" filter="url(#p3-03-ride-hailing-fig13-roughenPay)" height="55" rx="10" stroke="#3cba92" stroke-width="1.5" width="140" x="210" y="55"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="10" font-weight="600" text-anchor="middle" x="280" y="75">
+                    RideCompleted
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="280" y="92">
+                    event (Kafka)
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="280" y="104">
+                    ride_id, fare_id
+                </text>
+<!-- Arrow 2→3 -->
+<path d="M 350 82 C 375 82, 385 82, 400 82" fill="none" filter="url(#p3-03-ride-hailing-fig13-roughenLightPay)" marker-end="url(#p3-03-ride-hailing-fig13-exArrowPayBlue)" stroke="#0066cc" stroke-width="2"></path>
+<!-- Step 3: Payment Service -->
+<rect fill="#eef6ff" filter="url(#p3-03-ride-hailing-fig13-roughenPay)" height="75" rx="10" stroke="#0066cc" stroke-width="2" width="160" x="410" y="45"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="12" font-weight="700" text-anchor="middle" x="490" y="68">
+                    Payment Service
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="490" y="87">
+                    Load Fare row from DB
+                </text>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="8" font-weight="600" text-anchor="middle" x="490" y="103">
+                    ⚠ Never trust client amount
+                </text>
+<!-- Arrow 3→4 -->
+<path d="M 570 82 C 595 82, 610 82, 625 82" fill="none" filter="url(#p3-03-ride-hailing-fig13-roughenLightPay)" marker-end="url(#p3-03-ride-hailing-fig13-exArrowPayBlue)" stroke="#0066cc" stroke-width="2"></path>
+<!-- Step 4: Stripe -->
+<rect fill="#f5f5f7" filter="url(#p3-03-ride-hailing-fig13-roughenPay)" height="55" rx="10" stroke="#333" stroke-width="1.5" width="120" x="635" y="55"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="11" font-weight="700" text-anchor="middle" x="695" y="77">
+                    💳 Stripe API
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="695" y="97">
+                    authorize + capture
+                </text>
+<!-- Arrow 4→5: Success path down -->
+<path d="M 695 110 C 695 130, 695 140, 695 155" fill="none" filter="url(#p3-03-ride-hailing-fig13-roughenLightPay)" marker-end="url(#p3-03-ride-hailing-fig13-exArrowPay)" stroke="#0ba360" stroke-width="2"></path>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="8" font-weight="600" x="715" y="135">
+                    success
+                </text>
+<!-- Step 5: Ledger entry -->
+<rect fill="#c8e6c9" filter="url(#p3-03-ride-hailing-fig13-roughenPay)" height="50" rx="10" stroke="#0ba360" stroke-width="2" width="150" x="615" y="160"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="11" font-weight="700" text-anchor="middle" x="690" y="182">
+                    ✓ Write Ledger
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="690" y="200">
+                    debit rider, credit driver
+                </text>
+<!-- Failure path from Stripe -->
+<path d="M 635 95 C 605 115, 560 135, 535 155" fill="none" filter="url(#p3-03-ride-hailing-fig13-roughenLightPay)" marker-end="url(#p3-03-ride-hailing-fig13-exArrowPayRed)" stroke="#c62828" stroke-width="2"></path>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="8" font-weight="600" x="575" y="135">
+                    failure
+                </text>
+<!-- Retry box -->
+<rect fill="#ffebee" filter="url(#p3-03-ride-hailing-fig13-roughenPay)" height="50" rx="10" stroke="#c62828" stroke-width="1.5" width="160" x="410" y="160"></rect>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="10" font-weight="600" text-anchor="middle" x="490" y="180">
+                    Retry (exp. backoff)
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="490" y="198">
+                    1s → 2s → 4s → 8s
+                </text>
+<!-- Loop back to Stripe -->
+<path d="M 570 180 C 610 165, 630 140, 695 110" fill="none" filter="url(#p3-03-ride-hailing-fig13-roughenLightPay)" marker-end="url(#p3-03-ride-hailing-fig13-exArrowPayRed)" stroke="#c62828" stroke-dasharray="4,3" stroke-width="1.5"></path>
+<!-- DLQ path from retry -->
+<path d="M 490 210 C 490 230, 490 240, 490 255" fill="none" filter="url(#p3-03-ride-hailing-fig13-roughenLightPay)" marker-end="url(#p3-03-ride-hailing-fig13-exArrowPayRed)" stroke="#c62828" stroke-width="2"></path>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="8" x="505" y="238">
+                    exhausted
+                </text>
+<!-- Dead letter queue -->
+<rect fill="#ffcdd2" filter="url(#p3-03-ride-hailing-fig13-roughenPay)" height="45" rx="10" stroke="#c62828" stroke-width="2" width="160" x="410" y="260"></rect>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="11" font-weight="700" text-anchor="middle" x="490" y="280">
+                    📋 Dead Letter Queue
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="490" y="298">
+                    manual review + alert
+                </text>
+<!-- Bottom: Design decisions panel -->
+<rect fill="#f0faf5" filter="url(#p3-03-ride-hailing-fig13-roughenLightPay)" height="80" rx="10" stroke="#3cba92" width="730" x="25" y="325"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="11" font-weight="700" text-anchor="middle" x="390" y="347">
+                    🔑 Key design decisions
+                </text>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig13-roughenLightPay)" height="35" rx="6" stroke="#3cba92" width="220" x="40" y="357"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="9" font-weight="600" text-anchor="middle" x="150" y="372">
+                    Server-side fare only
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="150" y="385">
+                    Client amount is untrusted
+                </text>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig13-roughenLightPay)" height="35" rx="6" stroke="#3cba92" width="220" x="280" y="357"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="9" font-weight="600" text-anchor="middle" x="390" y="372">
+                    Idempotency key per charge
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="390" y="385">
+                    Retries never double-charge
+                </text>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig13-roughenLightPay)" height="35" rx="6" stroke="#3cba92" width="220" x="520" y="357"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="9" font-weight="600" text-anchor="middle" x="630" y="372">
+                    Event-driven, not sync
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="630" y="385">
+                    Payment failure ≠ ride failure
+                </text>
+</svg>

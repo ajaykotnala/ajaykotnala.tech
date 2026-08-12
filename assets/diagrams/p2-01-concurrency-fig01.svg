@@ -1,0 +1,104 @@
+<svg style="max-width: 780px" viewbox="0 0 780 340" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p2-01-concurrency-fig01-dotGridC1" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p2-01-concurrency-fig01-roughenC1" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="2" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<filter height="102%" id="p2-01-concurrency-fig01-roughenLightC1" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="5" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+</defs>
+<rect fill="#fefefe" height="340" rx="12" width="780"></rect>
+<rect fill="url(#p2-01-concurrency-fig01-dotGridC1)" height="340" rx="12" width="780"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" text-anchor="middle" x="390" y="32">
+                    "What kind of concurrency bug is this?"
+                </text>
+<!-- Correctness panel -->
+<rect fill="#eef2ff" filter="url(#p2-01-concurrency-fig01-roughenC1)" height="255" rx="10" stroke="#4f46e5" stroke-width="1.5" width="220" x="40" y="55"></rect>
+<text fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="15" font-weight="700" text-anchor="middle" x="150" y="85">
+                    🔒 Correctness
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="150" y="108">
+                    "Two threads, one variable,
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="150" y="122">
+                    zero protection"
+                </text>
+<rect fill="#ffffff" filter="url(#p2-01-concurrency-fig01-roughenC1)" height="34" rx="7" stroke="#4f46e5" stroke-width="1.2" width="180" x="60" y="145"></rect>
+<text fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="150" y="166">
+                    synchronized (lock)
+                </text>
+<rect fill="#ffffff" filter="url(#p2-01-concurrency-fig01-roughenC1)" height="34" rx="7" stroke="#4f46e5" stroke-width="1.2" width="180" x="60" y="188"></rect>
+<text fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="150" y="209">
+                    AtomicInteger (CAS)
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="150" y="250">
+                    Symptom: lost updates,
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="150" y="264">
+                    double-booked seats
+                </text>
+<text fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-style="italic" text-anchor="middle" x="150" y="292">
+                    Internal — protect shared state
+                </text>
+<!-- Coordination panel -->
+<rect fill="#f5f3ff" filter="url(#p2-01-concurrency-fig01-roughenC1)" height="255" rx="10" stroke="#9333ea" stroke-width="1.5" width="220" x="280" y="55"></rect>
+<text fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="15" font-weight="700" text-anchor="middle" x="390" y="85">
+                    🔄 Coordination
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="390" y="108">
+                    "How do threads talk
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="390" y="122">
+                    to each other?"
+                </text>
+<rect fill="#ffffff" filter="url(#p2-01-concurrency-fig01-roughenC1)" height="34" rx="7" stroke="#9333ea" stroke-width="1.2" width="180" x="300" y="145"></rect>
+<text fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="390" y="166">
+                    BlockingQueue
+                </text>
+<rect fill="#ffffff" filter="url(#p2-01-concurrency-fig01-roughenC1)" height="34" rx="7" stroke="#9333ea" stroke-width="1.2" width="180" x="300" y="188"></rect>
+<text fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="390" y="209">
+                    Bounded capacity
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="390" y="250">
+                    Symptom: busy-waiting,
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="390" y="264">
+                    unbounded memory growth
+                </text>
+<text fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-style="italic" text-anchor="middle" x="390" y="292">
+                    Internal — hand off work
+                </text>
+<!-- Scarcity panel -->
+<rect fill="#fff7ed" filter="url(#p2-01-concurrency-fig01-roughenC1)" height="255" rx="10" stroke="#c2410c" stroke-width="1.5" width="220" x="520" y="55"></rect>
+<text fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="15" font-weight="700" text-anchor="middle" x="630" y="85">
+                    🚦 Scarcity
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="630" y="108">
+                    "You can't just keep
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="630" y="122">
+                    adding threads"
+                </text>
+<rect fill="#ffffff" filter="url(#p2-01-concurrency-fig01-roughenC1)" height="34" rx="7" stroke="#c2410c" stroke-width="1.2" width="180" x="540" y="145"></rect>
+<text fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="630" y="166">
+                    Semaphore(N permits)
+                </text>
+<rect fill="#ffffff" filter="url(#p2-01-concurrency-fig01-roughenC1)" height="34" rx="7" stroke="#c2410c" stroke-width="1.2" width="180" x="540" y="188"></rect>
+<text fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="630" y="209">
+                    ThreadPoolExecutor
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="630" y="250">
+                    Symptom: 429s, timeouts,
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="630" y="264">
+                    thread-per-request explosion
+                </text>
+<text fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-style="italic" text-anchor="middle" x="630" y="292">
+                    External — respect a limit
+                </text>
+</svg>

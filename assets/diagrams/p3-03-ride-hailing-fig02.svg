@@ -1,0 +1,114 @@
+<svg style="max-width: 820px" viewbox="0 0 820 480" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p3-03-ride-hailing-fig02-dotGridSeq" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p3-03-ride-hailing-fig02-roughenSeq" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="2" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<filter height="102%" id="p3-03-ride-hailing-fig02-roughenLightSeq" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="5" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p3-03-ride-hailing-fig02-exArrowSeq" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p3-03-ride-hailing-fig02-exArrowGreenSeq" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0ba360" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p3-03-ride-hailing-fig02-exArrowBlueSeq" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="480" rx="12" width="820"></rect>
+<rect fill="url(#p3-03-ride-hailing-fig02-dotGridSeq)" height="480" rx="12" width="820"></rect>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="13" font-weight="600" text-anchor="middle" x="410" y="28">
+                    POST /RIDES END-TO-END SEQUENCE
+                </text>
+<!-- Swimlane labels -->
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="9" font-weight="700" x="15" y="58">
+                    Rider
+                </text>
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="9" font-weight="700" x="15" y="98">
+                    Gateway
+                </text>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="9" font-weight="700" x="15" y="138">
+                    Ride Svc
+                </text>
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="9" font-weight="700" x="15" y="178">
+                    Queue
+                </text>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="9" font-weight="700" x="15" y="218">
+                    Matching
+                </text>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="9" font-weight="700" x="15" y="258">
+                    Redis
+                </text>
+<text fill="#3cba92" font-family="'Segoe Print', cursive" font-size="9" font-weight="700" x="15" y="298">
+                    Notify
+                </text>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="9" font-weight="700" x="15" y="338">
+                    Driver
+                </text>
+<line stroke="#e0e0e0" x1="95" x2="95" y1="45" y2="460"></line>
+<path d="M 115 35 L 780 35" fill="none" marker-end="url(#p3-03-ride-hailing-fig02-exArrowSeq)" stroke="#ccc"></path>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="450" y="30">
+                    time →
+                </text>
+<!-- Messages -->
+<rect fill="#eef6ff" filter="url(#p3-03-ride-hailing-fig02-roughenSeq)" height="20" rx="5" stroke="#333" width="110" x="130" y="48"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="185" y="62">
+                    POST /rides
+                </text>
+<path d="M 185 55 L 185 93" marker-end="url(#p3-03-ride-hailing-fig02-exArrowSeq)" stroke="#333" stroke-width="1.5"></path>
+<rect fill="#e3f2fd" filter="url(#p3-03-ride-hailing-fig02-roughenSeq)" height="20" rx="5" stroke="#0066cc" width="100" x="220" y="88"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="270" y="102">
+                    auth + forward
+                </text>
+<path d="M 270 98 L 270 133" marker-end="url(#p3-03-ride-hailing-fig02-exArrowBlueSeq)" stroke="#0066cc" stroke-width="1.5"></path>
+<rect fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig02-roughenSeq)" height="20" rx="5" stroke="#0ba360" width="130" x="300" y="128"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="365" y="142">
+                    validate fareId TTL
+                </text>
+<rect fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig02-roughenSeq)" height="20" rx="5" stroke="#0ba360" width="120" x="450" y="128"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="510" y="142">
+                    INSERT Ride row
+                </text>
+<path d="M 510 148 L 510 173" marker-end="url(#p3-03-ride-hailing-fig02-exArrowBlueSeq)" stroke="#0066cc" stroke-width="1.5"></path>
+<rect fill="#eef6ff" filter="url(#p3-03-ride-hailing-fig02-roughenSeq)" height="20" rx="5" stroke="#0066cc" width="120" x="540" y="168"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="600" y="182">
+                    enqueue rideId
+                </text>
+<path d="M 600 188 L 600 213" marker-end="url(#p3-03-ride-hailing-fig02-exArrowGreenSeq)" stroke="#0ba360" stroke-width="1.5"></path>
+<rect fill="#f0faf5" filter="url(#p3-03-ride-hailing-fig02-roughenSeq)" height="20" rx="5" stroke="#0ba360" width="130" x="620" y="208"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="685" y="222">
+                    GEOSEARCH 2km
+                </text>
+<path d="M 685 228 L 685 253" marker-end="url(#p3-03-ride-hailing-fig02-exArrowSeq)" stroke="#c62828" stroke-width="1.5"></path>
+<rect fill="#ffebee" filter="url(#p3-03-ride-hailing-fig02-roughenSeq)" height="20" rx="5" stroke="#c62828" width="140" x="620" y="248"></rect>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="690" y="262">
+                    SET lock:D1 EX 10
+                </text>
+<path d="M 690 268 L 690 293" marker-end="url(#p3-03-ride-hailing-fig02-exArrowGreenSeq)" stroke="#3cba92" stroke-width="1.5"></path>
+<rect fill="#fff8e1" filter="url(#p3-03-ride-hailing-fig02-roughenSeq)" height="20" rx="5" stroke="#3cba92" width="130" x="620" y="288"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="685" y="302">
+                    FCM push offer
+                </text>
+<path d="M 685 308 L 685 333" marker-end="url(#p3-03-ride-hailing-fig02-exArrowGreenSeq)" stroke="#0ba360" stroke-width="1.5"></path>
+<rect fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig02-roughenSeq)" height="20" rx="5" stroke="#0ba360" width="120" x="620" y="328"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="680" y="342">
+                    PATCH accept
+                </text>
+<path d="M 680 348 L 680 133 L 200 133 L 200 58" fill="none" marker-end="url(#p3-03-ride-hailing-fig02-exArrowGreenSeq)" stroke="#0ba360" stroke-dasharray="5,3" stroke-width="1.5"></path>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="440" y="128">
+                    201 { rideId, status }
+                </text>
+<rect fill="#f5f5f7" filter="url(#p3-03-ride-hailing-fig02-roughenLightSeq)" height="55" rx="8" stroke="#ccc" width="560" x="130" y="380"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="410" y="402">
+                    Async matching decouples rider response from driver search latency
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="410" y="420">
+                    Queue absorbs surge · Redis lock prevents double-assign
+                </text>
+</svg>

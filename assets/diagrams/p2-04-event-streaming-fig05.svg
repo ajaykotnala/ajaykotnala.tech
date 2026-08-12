@@ -1,0 +1,107 @@
+<svg style="max-width: 760px" viewbox="0 0 760 400" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p2-04-event-streaming-fig05-dotGrid4" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p2-04-event-streaming-fig05-roughen4" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="6" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<filter height="102%" id="p2-04-event-streaming-fig05-roughenLight4" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="9" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p2-04-event-streaming-fig05-exArrow4" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p2-04-event-streaming-fig05-exArrowTeal4" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#00796b" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="400" rx="12" width="760"></rect>
+<rect fill="url(#p2-04-event-streaming-fig05-dotGrid4)" height="400" rx="12" width="760"></rect>
+<!-- Problem -->
+<text fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="700" text-anchor="middle" x="380" y="30">
+                    Problem: Hot Partition P0
+                </text>
+<rect fill="#e0f2f1" filter="url(#p2-04-event-streaming-fig05-roughen4)" height="70" rx="10" stroke="#00796b" stroke-width="2" width="200" x="280" y="45"></rect>
+<text fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" x="380" y="72">
+                    P0: 90% of ticket events
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="380" y="92">
+                    key = concert_id (one show)
+                </text>
+<rect fill="#f5f5f7" filter="url(#p2-04-event-streaming-fig05-roughen4)" height="50" rx="6" stroke="#ccc" stroke-width="1" width="70" x="80" y="55"></rect>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="115" y="85">
+                    P1 idle
+                </text>
+<rect fill="#f5f5f7" filter="url(#p2-04-event-streaming-fig05-roughen4)" height="50" rx="6" stroke="#ccc" stroke-width="1" width="70" x="610" y="55"></rect>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="645" y="85">
+                    P2 idle
+                </text>
+<!-- Strategy 1 -->
+<path d="M 380 115 L 380 135" fill="none" filter="url(#p2-04-event-streaming-fig05-roughenLight4)" marker-end="url(#p2-04-event-streaming-fig05-exArrow4)" stroke="#333" stroke-width="2"></path>
+<rect fill="#eef6ff" filter="url(#p2-04-event-streaming-fig05-roughen4)" height="110" rx="10" stroke="#0066cc" stroke-width="1.5" width="210" x="40" y="145"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="600" text-anchor="middle" x="145" y="172">
+                    1. Salting
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="145" y="195">
+                    key = concert_id + random(0-N)
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="145" y="215">
+                    Spread load, lose ordering
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="145" y="235">
+                    Reassemble downstream
+                </text>
+<!-- Strategy 2 -->
+<rect fill="#e0f2f1" filter="url(#p2-04-event-streaming-fig05-roughen4)" height="110" rx="10" stroke="#00796b" stroke-width="1.5" width="210" x="275" y="145"></rect>
+<text fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="600" text-anchor="middle" x="380" y="172">
+                    2. Composite Key
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="380" y="195">
+                    key = user_id (not concert_id)
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="380" y="215">
+                    Even spread per buyer
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="380" y="235">
+                    Order per user preserved
+                </text>
+<!-- Strategy 3 -->
+<rect fill="#fff3e0" filter="url(#p2-04-event-streaming-fig05-roughen4)" height="110" rx="10" stroke="#00a896" stroke-width="1.5" width="210" x="510" y="145"></rect>
+<text fill="#00a896" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="600" text-anchor="middle" x="615" y="172">
+                    3. Burst Topic
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="615" y="195">
+                    Dedicated high-partition topic
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="615" y="215">
+                    for on-sale events only
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="615" y="235">
+                    Tear down after rush
+                </text>
+<!-- Strategy 4 -->
+<rect fill="#f0faf8" filter="url(#p2-04-event-streaming-fig05-roughen4)" height="100" rx="10" stroke="#00796b" stroke-width="1.5" width="210" x="160" y="280"></rect>
+<text fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="600" text-anchor="middle" x="265" y="307">
+                    4. More Partitions
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="265" y="330">
+                    Only helps if key space
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="265" y="350">
+                    has natural cardinality
+                </text>
+<!-- Strategy 5 -->
+<rect fill="#e8f5e9" filter="url(#p2-04-event-streaming-fig05-roughen4)" height="100" rx="10" stroke="#2e7d32" stroke-width="1.5" width="210" x="390" y="280"></rect>
+<text fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="600" text-anchor="middle" x="495" y="307">
+                    5. Custom Partitioner
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="495" y="330">
+                    Route hot keys to dedicated
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="495" y="350">
+                    partition subset at runtime
+                </text>
+</svg>

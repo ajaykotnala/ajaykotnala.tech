@@ -1,0 +1,77 @@
+<svg style="max-width: 780px" viewbox="0 0 780 340" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p2-03-rate-limiting-fig02-dotGridR2" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p2-03-rate-limiting-fig02-roughenR2" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="22" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p2-03-rate-limiting-fig02-exArrowR2" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p2-03-rate-limiting-fig02-exArrowR2red" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#be123c" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="340" rx="12" width="780"></rect>
+<rect fill="url(#p2-03-rate-limiting-fig02-dotGridR2)" height="340" rx="12" width="780"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" text-anchor="middle" x="390" y="28">
+                    Coarse and cheap on the left; fine and expensive on the right
+                </text>
+<rect fill="#f5f5f7" filter="url(#p2-03-rate-limiting-fig02-roughenR2)" height="55" rx="8" stroke="#333" stroke-width="1.5" width="80" x="20" y="120"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="60" y="145">Request</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="60" y="162">arrives</text>
+<!-- gates -->
+<g>
+<rect fill="#dcfce7" filter="url(#p2-03-rate-limiting-fig02-roughenR2)" height="85" rx="8" stroke="#16a34a" stroke-width="1.5" width="105" x="130" y="105"></rect>
+<text fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-weight="700" text-anchor="middle" x="182" y="128">global</text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="182" y="146">1M/min</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" text-anchor="middle" x="182" y="164">local memory</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" text-anchor="middle" x="182" y="178">~0 ms</text>
+</g>
+<g>
+<rect fill="#dcfce7" filter="url(#p2-03-rate-limiting-fig02-roughenR2)" height="85" rx="8" stroke="#16a34a" stroke-width="1.5" width="105" x="265" y="105"></rect>
+<text fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-weight="700" text-anchor="middle" x="317" y="128">ip /64</text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="317" y="146">5,000/min</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" text-anchor="middle" x="317" y="164">edge / CDN</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" text-anchor="middle" x="317" y="178">~0 ms</text>
+</g>
+<g>
+<rect fill="#dcfce7" filter="url(#p2-03-rate-limiting-fig02-roughenR2)" height="85" rx="8" stroke="#16a34a" stroke-width="1.5" width="105" x="400" y="105"></rect>
+<text fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-weight="700" text-anchor="middle" x="452" y="128">tenant</text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="452" y="146">50,000/min</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" text-anchor="middle" x="452" y="164">shared Redis</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" text-anchor="middle" x="452" y="178">~1 ms</text>
+</g>
+<g>
+<rect fill="#fff1f2" filter="url(#p2-03-rate-limiting-fig02-roughenR2)" height="85" rx="8" stroke="#be123c" stroke-width="1.5" width="105" x="535" y="105"></rect>
+<text fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-weight="700" text-anchor="middle" x="587" y="128">tenant|user</text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="587" y="146">600/min</text>
+<text fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" font-weight="700" text-anchor="middle" x="587" y="164">EXCEEDED</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" text-anchor="middle" x="587" y="178">~1 ms</text>
+</g>
+<g>
+<rect fill="#f5f5f7" filter="url(#p2-03-rate-limiting-fig02-roughenR2)" height="85" rx="8" stroke="#c9c9c9" stroke-dasharray="4,3" stroke-width="1.5" width="90" x="670" y="105"></rect>
+<text fill="#a0a0a0" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-weight="700" text-anchor="middle" x="715" y="140">endpoint</text>
+<text fill="#a0a0a0" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="715" y="158">never reached</text>
+</g>
+<path d="M 100 147 L 126 147" fill="none" marker-end="url(#p2-03-rate-limiting-fig02-exArrowR2)" stroke="#16a34a" stroke-width="1.8"></path>
+<path d="M 235 147 L 261 147" fill="none" marker-end="url(#p2-03-rate-limiting-fig02-exArrowR2)" stroke="#16a34a" stroke-width="1.8"></path>
+<path d="M 370 147 L 396 147" fill="none" marker-end="url(#p2-03-rate-limiting-fig02-exArrowR2)" stroke="#16a34a" stroke-width="1.8"></path>
+<path d="M 505 147 L 531 147" fill="none" marker-end="url(#p2-03-rate-limiting-fig02-exArrowR2)" stroke="#16a34a" stroke-width="1.8"></path>
+<path d="M 587 195 L 587 240" fill="none" marker-end="url(#p2-03-rate-limiting-fig02-exArrowR2red)" stroke="#be123c" stroke-width="2"></path>
+<rect fill="#fff1f2" filter="url(#p2-03-rate-limiting-fig02-roughenR2)" height="52" rx="8" stroke="#be123c" stroke-width="1.5" width="275" x="450" y="248"></rect>
+<text fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="587" y="270">
+                    429 — scope: user, retry-after: 12
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="587" y="288">
+                    Naming the scope is what makes the 429 actionable
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="230" y="270">
+                    Order matters: reject on the free counters
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="230" y="288">
+                    before paying for the networked ones.
+                </text>
+</svg>

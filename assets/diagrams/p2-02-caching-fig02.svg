@@ -1,0 +1,80 @@
+<svg style="max-width: 780px" viewbox="0 0 780 320" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p2-02-caching-fig02-dotGridK2" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p2-02-caching-fig02-roughenK2" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="12" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p2-02-caching-fig02-exArrowK2" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="320" rx="12" width="780"></rect>
+<rect fill="url(#p2-02-caching-fig02-dotGridK2)" height="320" rx="12" width="780"></rect>
+<text fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="700" text-anchor="middle" x="195" y="30">
+                    READ PATTERN
+                </text>
+<text fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="700" text-anchor="middle" x="585" y="30">
+                    WRITE PATTERNS
+                </text>
+<path d="M 390 15 L 390 305" fill="none" stroke="#ccc" stroke-dasharray="4,4" stroke-width="1"></path>
+<!-- Cache-aside box -->
+<rect fill="#fff1f2" filter="url(#p2-02-caching-fig02-roughenK2)" height="90" rx="9" stroke="#e11d48" stroke-width="1.5" width="310" x="40" y="55"></rect>
+<text fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="700" text-anchor="middle" x="195" y="80">
+                    Cache-Aside
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="195" y="100">
+                    App checks cache → miss → app queries DB
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="195" y="116">
+                    → app writes result back to cache
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="195" y="134">
+                    Almost always the default read pattern
+                </text>
+<!-- Read-through box -->
+<rect fill="#fff1f2" filter="url(#p2-02-caching-fig02-roughenK2)" height="90" rx="9" stroke="#e11d48" stroke-dasharray="4,3" stroke-width="1.5" width="310" x="40" y="165"></rect>
+<text fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="700" text-anchor="middle" x="195" y="190">
+                    Read-Through
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="195" y="210">
+                    App only ever asks the cache — the cache
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="195" y="226">
+                    itself queries the DB on a miss
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="195" y="244">
+                    Needs a smarter caching library — this is how CDNs work
+                </text>
+<!-- Write-through box -->
+<rect fill="#fff7ed" filter="url(#p2-02-caching-fig02-roughenK2)" height="90" rx="9" stroke="#d97706" stroke-width="1.5" width="310" x="430" y="55"></rect>
+<text fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="700" text-anchor="middle" x="585" y="80">
+                    Write-Through
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="585" y="100">
+                    Cache write + DB write, synchronous —
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="585" y="116">
+                    both must succeed
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="585" y="134">
+                    Slower writes, always-fresh reads</text>
+<!-- Write-behind box -->
+<rect fill="#fff7ed" filter="url(#p2-02-caching-fig02-roughenK2)" height="90" rx="9" stroke="#d97706" stroke-width="1.5" width="310" x="430" y="165"></rect>
+<text fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="700" text-anchor="middle" x="585" y="190">
+                    Write-Behind
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="585" y="210">
+                    Cache write returns immediately;
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="585" y="226">
+                    DB write happens later, batched
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="585" y="244">
+                    Fast, but a crash before flush loses data</text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="390" y="290">
+                    Pick one read pattern + one write pattern — they combine, they don't compete.
+                </text>
+</svg>

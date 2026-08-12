@@ -1,0 +1,55 @@
+<svg style="max-width: 780px" viewbox="0 0 780 300" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p2-01-concurrency-fig02-dotGridC2" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p2-01-concurrency-fig02-roughenC2" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="3" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p2-01-concurrency-fig02-exArrowC2" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="300" rx="12" width="780"></rect>
+<rect fill="url(#p2-01-concurrency-fig02-dotGridC2)" height="300" rx="12" width="780"></rect>
+<text fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" font-weight="700" x="30" y="35">
+                    Thread A
+                </text>
+<text fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" font-weight="700" x="30" y="120">
+                    Thread B
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" font-weight="700" x="30" y="205">
+                    counter
+                </text>
+<!-- timeline base line -->
+<path d="M 130 210 L 740 210" fill="none" stroke="#ccc" stroke-dasharray="4,4" stroke-width="1.5"></path>
+<!-- Thread A steps -->
+<rect fill="#eef2ff" filter="url(#p2-01-concurrency-fig02-roughenC2)" height="34" rx="6" stroke="#4f46e5" stroke-width="1.5" width="90" x="130" y="45"></rect>
+<text fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="175" y="66">
+                    read: 0
+                </text>
+<rect fill="#eef2ff" filter="url(#p2-01-concurrency-fig02-roughenC2)" height="34" rx="6" stroke="#4f46e5" stroke-width="1.5" width="90" x="400" y="45"></rect>
+<text fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="445" y="66">
+                    write: 1
+                </text>
+<path d="M 220 62 L 396 62" fill="none" marker-end="url(#p2-01-concurrency-fig02-exArrowC2)" stroke="#4f46e5" stroke-dasharray="3,3" stroke-width="1.5"></path>
+<!-- Thread B steps -->
+<rect fill="#f5f3ff" filter="url(#p2-01-concurrency-fig02-roughenC2)" height="34" rx="6" stroke="#9333ea" stroke-width="1.5" width="90" x="240" y="130"></rect>
+<text fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="285" y="151">
+                    read: 0
+                </text>
+<rect fill="#f5f3ff" filter="url(#p2-01-concurrency-fig02-roughenC2)" height="34" rx="6" stroke="#9333ea" stroke-width="1.5" width="90" x="560" y="130"></rect>
+<text fill="#9333ea" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="605" y="151">
+                    write: 1
+                </text>
+<path d="M 330 147 L 556 147" fill="none" marker-end="url(#p2-01-concurrency-fig02-exArrowC2)" stroke="#9333ea" stroke-dasharray="3,3" stroke-width="1.5"></path>
+<!-- Result marker -->
+<circle cx="605" cy="210" fill="#c2410c" filter="url(#p2-01-concurrency-fig02-roughenC2)" r="5"></circle>
+<text fill="#c2410c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" font-weight="700" text-anchor="middle" x="500" y="255">
+                    Final value: 1 — should be 2. One increment lost.
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="500" y="275">
+                    Both threads read the stale value 0 before either write landed.
+                </text>
+</svg>

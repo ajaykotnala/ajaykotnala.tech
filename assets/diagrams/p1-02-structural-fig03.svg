@@ -1,0 +1,60 @@
+<svg font-family="'JetBrains Mono',monospace" viewbox="0 0 660 172" xmlns="http://www.w3.org/2000/svg">
+<rect fill="#13161d" height="172" width="660"></rect>
+<defs>
+<marker id="p1-02-structural-fig03-px1" markerheight="8" markerwidth="8" orient="auto" refx="6" refy="3">
+<path d="M0,0 L0,6 L8,3z" fill="#4f8ef7"></path>
+</marker>
+<marker id="p1-02-structural-fig03-px2" markerheight="8" markerwidth="8" orient="auto" refx="6" refy="3">
+<path d="M0,0 L0,6 L8,3z" fill="#3ecf8e"></path>
+</marker>
+<marker id="p1-02-structural-fig03-px3" markerheight="8" markerwidth="8" orient="auto" refx="6" refy="3">
+<path d="M0,0 L0,6 L8,3z" fill="#f0b84a"></path>
+</marker>
+</defs>
+<!-- Client -->
+<rect fill="#1a1e28" height="52" rx="1" stroke="#272d3d" stroke-width="1.5" width="100" x="18" y="60"></rect>
+<text fill="#9aa3bc" font-size="10" font-style="italic" text-anchor="middle" x="68" y="79">Client</text>
+<text fill="#6272a4" font-size="8" text-anchor="middle" x="68" y="97">query(sql)</text>
+<!-- arrow client → interface -->
+<line marker-end="url(#p1-02-structural-fig03-px1)" stroke="#4f8ef7" stroke-width="1.5" x1="118" x2="158" y1="86" y2="86"></line>
+<!-- IDatabase interface -->
+<rect fill="#1a1e28" height="84" rx="1" stroke="#272d3d" stroke-width="1.5" width="130" x="158" y="44"></rect>
+<rect fill="#0a0c10" height="20" rx="1" width="130" x="158" y="44"></rect>
+<rect fill="#0a0c10" height="10" width="130" x="158" y="54"></rect>
+<text fill="#6272a4" font-size="7.5" letter-spacing="0.5" text-anchor="middle" x="190" y="52">«interface»</text>
+<text fill="#8be9fd" font-size="10" font-style="italic" text-anchor="middle" x="223" y="62">IDatabase</text>
+<line stroke="#272d3d" stroke-width="0.8" x1="158" x2="288" y1="64" y2="64"></line>
+<text fill="#ffb86c" font-size="8.5" x="170" y="80">query(sql): any</text>
+<!-- arrow interface → proxy & realdb -->
+<line stroke="#272d3d" stroke-dasharray="4,2" stroke-width="1" x1="288" x2="328" y1="70" y2="50"></line>
+<line stroke="#272d3d" stroke-dasharray="4,2" stroke-width="1" x1="288" x2="328" y1="100" y2="130"></line>
+<!-- Proxy -->
+<rect fill="#1a1e28" height="82" rx="1" stroke="#4f8ef7" stroke-width="1.5" width="148" x="328" y="18"></rect>
+<rect fill="#0f1520" height="20" rx="1" width="148" x="328" y="18"></rect>
+<rect fill="#0f1520" height="10" width="148" x="328" y="28"></rect>
+<text fill="#4f8ef7" font-size="8" letter-spacing="0.5" text-anchor="middle" x="402" y="26">«proxy»</text>
+<text fill="#8be9fd" font-size="10" font-style="italic" text-anchor="middle" x="402" y="36">DatabaseProxy</text>
+<line stroke="#272d3d" stroke-width="0.8" x1="328" x2="476" y1="38" y2="38"></line>
+<text fill="#ff79c6" font-size="7.5" x="340" y="55">-realDb: RealDatabase</text>
+<text fill="#ff79c6" font-size="7.5" x="340" y="69">-cache: Map</text>
+<text fill="#f0b84a" font-size="7.5" x="340" y="83">-currentUser: string</text>
+<text fill="#50fa7b" font-size="7.5" x="340" y="96">query(sql): any</text>
+<!-- proxy intercept labels -->
+<text fill="#4f8ef7" font-size="7" font-style="italic" text-anchor="middle" x="402" y="116">① check auth
+                    ② check cache ③ delegate</text>
+<!-- Real DB -->
+<rect fill="#1a1e28" height="40" rx="1" stroke="#3ecf8e" stroke-width="1.5" width="148" x="328" y="118"></rect>
+<text fill="#3ecf8e" font-size="10" font-style="italic" text-anchor="middle" x="402" y="132">RealDatabase</text>
+<text fill="#6272a4" font-size="7.5" text-anchor="middle" x="402" y="148">query() → expensive DB
+                    call</text>
+<!-- arrow proxy → real -->
+<line marker-end="url(#p1-02-structural-fig03-px2)" stroke="#3ecf8e" stroke-width="1.5" x1="402" x2="402" y1="100" y2="118"></line>
+<text fill="#3ecf8e" font-size="7" font-style="italic" x="410" y="113">only if needed</text>
+<!-- Cache box -->
+<rect fill="#1a1e28" height="56" rx="1" stroke="#f0b84a" stroke-width="1.5" width="130" x="508" y="18"></rect>
+<text fill="#f0b84a" font-size="9" font-style="italic" text-anchor="middle" x="573" y="34">Cache
+                    (Map)</text>
+<text fill="#6272a4" font-size="7.5" text-anchor="middle" x="573" y="50">sql → result</text>
+<text fill="#6272a4" font-size="7.5" text-anchor="middle" x="573" y="63">skips DB on hit</text>
+<line marker-end="url(#p1-02-structural-fig03-px3)" stroke="#f0b84a" stroke-dasharray="4,2" stroke-width="1" x1="476" x2="508" y1="46" y2="40"></line>
+</svg>

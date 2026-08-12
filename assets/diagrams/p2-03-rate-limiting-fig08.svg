@@ -1,0 +1,59 @@
+<svg style="max-width: 780px" viewbox="0 0 780 330" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p2-03-rate-limiting-fig08-dotGridR8" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p2-03-rate-limiting-fig08-roughenR8" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="28" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+</defs>
+<rect fill="#fefefe" height="330" rx="12" width="780"></rect>
+<rect fill="url(#p2-03-rate-limiting-fig08-dotGridR8)" height="330" rx="12" width="780"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" text-anchor="middle" x="390" y="26">
+                    Annual AI budget, consumed over time
+                </text>
+<!-- axes -->
+<path d="M 70 260 L 730 260" fill="none" stroke="#999" stroke-width="1.4"></path>
+<path d="M 70 260 L 70 55" fill="none" stroke="#999" stroke-width="1.4"></path>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="end" x="52" y="62">100%</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="end" x="52" y="264">0%</text>
+<!-- month labels -->
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="125" y="280">Dec</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="235" y="280">Jan</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="345" y="280">Feb</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="455" y="280">Mar</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="565" y="280">Apr</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="690" y="280">… Nov</text>
+<!-- planned burn line -->
+<path d="M 70 260 L 730 65" fill="none" stroke="#16a34a" stroke-dasharray="6,4" stroke-width="1.6"></path>
+<text fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" x="640" y="118">
+                    planned burn (12 months)
+                </text>
+<!-- actual burn -->
+<path d="M 70 260 L 125 232 L 235 186 L 345 138 L 455 100 L 565 65" fill="none" stroke="#be123c" stroke-width="2.4"></path>
+<circle cx="235" cy="186" fill="#be123c" r="4"></circle>
+<circle cx="565" cy="65" fill="#be123c" r="5"></circle>
+<text fill="#be123c" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" x="500" y="52">actual — exhausted</text>
+<!-- soft cap line -->
+<path d="M 70 143 L 730 143" fill="none" stroke="#d97706" stroke-dasharray="3,3" stroke-width="1.3"></path>
+<text fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" x="76" y="138">
+                    soft cap 60% — warn, keep serving
+                </text>
+<!-- the alert moment -->
+<path d="M 235 186 L 235 300" fill="none" stroke="#6d28d9" stroke-dasharray="4,3" stroke-width="1.4"></path>
+<rect fill="#f5f3ff" filter="url(#p2-03-rate-limiting-fig08-roughenR8)" height="24" rx="5" stroke="#6d28d9" stroke-width="1.3" width="215" x="128" y="298"></rect>
+<text fill="#6d28d9" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-weight="700" text-anchor="middle" x="235" y="314">
+                    burn-rate alert fires here — week 6
+                </text>
+<rect fill="#fdf2f8" filter="url(#p2-03-rate-limiting-fig08-roughenR8)" height="58" rx="7" stroke="#db2777" stroke-width="1.4" width="330" x="390" y="196"></rect>
+<text fill="#db2777" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-weight="700" text-anchor="middle" x="555" y="216">
+                    A total-based alert at 80% fires in March.
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="555" y="234">
+                    A burn-rate alert fires in January, when the
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="555" y="248">
+                    slope first diverges — while you can still act.
+                </text>
+</svg>

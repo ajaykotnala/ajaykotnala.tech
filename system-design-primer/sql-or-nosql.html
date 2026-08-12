@@ -1,0 +1,3916 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SQL or NoSQL — System Design Primer | Ajay Kotnala</title>
+    <meta name="description"
+        content="A system design primer on databases — what the relational model buys you, SQL tuning and indexes, denormalization, master-slave and master-master replication, federation, sharding, the four NoSQL families, and how to actually choose between SQL and NoSQL. Written by Ajay Kotnala, Senior Solution Architect." />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+        rel="stylesheet" />
+    <style>
+        /* ===== Apple Design Tokens (matching index.html) ===== */
+        :root {
+            /* Color System */
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-pearl: #fafafc;
+            --color-on-primary: #ffffff;
+
+            /* Database brand accents (article identity) */
+            --db-blue: #0369a1;
+            --db-lime: #65a30d;
+            --db-rose: #e11d48;
+            --db-gradient: linear-gradient(135deg, #0369a1, #65a30d);
+
+            /* Typography */
+            --font-headline:
+                system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+                sans-serif;
+            --font-body: "Lora", Georgia, "Times New Roman", serif;
+            --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+
+            /* Border Radii */
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            /* Shadows */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06);
+
+            /* Article */
+            --article-width: 680px;
+        }
+
+        /* ===== Reset ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* ===== 1. Global Navigation Bar ===== */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            font-family: var(--font-ui);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .global-nav-logo .logo-icon {
+            font-size: 16px;
+            color: var(--color-primary-on-dark);
+        }
+
+        .global-nav-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .global-nav-actions a {
+            color: #cccccc;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .global-nav-actions a:hover {
+            color: #ffffff;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ===== 2. Sub Navigation Bar (Frosted Sticky) ===== */
+        .sub-nav-frosted {
+            position: sticky;
+            top: 44px;
+            left: 0;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 999;
+            border-bottom: 1px solid var(--color-divider-soft);
+        }
+
+        .sub-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .sub-nav-title {
+            font-family: var(--font-headline);
+            font-size: 21px;
+            font-weight: 600;
+            color: var(--color-ink);
+            text-decoration: none;
+            letter-spacing: 0.231px;
+        }
+
+        .sub-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sub-nav-link {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink);
+            text-decoration: none;
+            opacity: 0.8;
+            transition:
+                color 0.2s ease,
+                opacity 0.2s ease;
+        }
+
+        .sub-nav-link:hover {
+            color: var(--color-primary);
+            opacity: 1;
+        }
+
+        .sub-nav-button {
+            background: var(--color-primary);
+            color: var(--color-on-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            border-radius: var(--rounded-pill);
+            text-decoration: none;
+            transition:
+                background 0.2s ease,
+                transform 0.1s ease;
+        }
+
+        .sub-nav-button:hover {
+            background: var(--color-primary-focus);
+        }
+
+        .sub-nav-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== Scroll Progress Bar ===== */
+        .progress-bar {
+            position: fixed;
+            top: 44px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--db-gradient);
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        /* ===== Article Hero ===== */
+        .article-hero {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(96px + 4rem) 2rem 4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .article-hero-inner {
+            max-width: var(--article-width);
+            width: 100%;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .article-category {
+            display: inline-block;
+            padding: 4px 14px;
+            background: var(--db-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .article-date {
+            color: var(--color-body-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .article-read-time {
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 13px;
+        }
+
+        .article-read-time::before {
+            content: "·";
+            margin-right: 0.5rem;
+            color: var(--color-body-muted);
+        }
+
+        .article-hero h1 {
+            font-family: var(--font-headline);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+        }
+
+        .article-hero h1 .gradient-text {
+            background: var(--db-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .article-hero-desc {
+            font-family: var(--font-body);
+            font-size: 20px;
+            color: var(--color-body-muted);
+            line-height: 1.7;
+            max-width: 600px;
+        }
+
+        .article-hero-desc em {
+            font-style: italic;
+            color: var(--color-ink-muted-80);
+        }
+
+        /* ===== Author Bar ===== */
+        .author-bar {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--color-divider-soft);
+            margin-bottom: 2.5rem;
+        }
+
+        .author-bar-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-bar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .author-bar-name {
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-ink);
+        }
+
+        .author-bar-meta {
+            font-family: var(--font-ui);
+            font-size: 13px;
+            color: var(--color-body-muted);
+        }
+
+        /* ===== Table of Contents ===== */
+        .toc-wrapper {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .toc {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem 2.5rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--db-gradient);
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toc h3 {
+            font-size: 12px;
+            margin-bottom: 1.2rem;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            padding: 0.35rem 0;
+        }
+
+        .toc li a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 15px;
+            transition:
+                color 0.2s ease,
+                padding-left 0.2s ease;
+            display: inline-block;
+        }
+
+        .toc li a::before {
+            content: counter(toc-counter, decimal-leading-zero) ".";
+            color: var(--db-blue);
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-right: 0.8rem;
+            font-size: 13px;
+        }
+
+        .toc li a:hover {
+            color: var(--color-primary);
+            padding-left: 4px;
+        }
+
+        /* ===== Article Body ===== */
+        .article-body {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .article-body h2 {
+            font-family: var(--font-headline);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-top: 3.5rem;
+            margin-bottom: 1.2rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .article-body h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .article-body h2 .section-number {
+            color: var(--db-blue);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .article-body h3 {
+            font-family: var(--font-headline);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-top: 2.5rem;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .article-body h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin-top: 1.8rem;
+            margin-bottom: 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .article-body p {
+            font-family: var(--font-body);
+            font-size: 19px;
+            line-height: 1.85;
+            color: var(--color-ink-muted-80);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.003em;
+        }
+
+        .article-body ul,
+        .article-body ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .article-body li {
+            font-family: var(--font-body);
+            color: var(--color-ink-muted-80);
+            margin-bottom: 0.6rem;
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .article-body strong {
+            color: var(--color-ink);
+            font-weight: 600;
+        }
+
+        .article-body em {
+            color: var(--color-ink-muted-80);
+            font-style: italic;
+        }
+
+        .article-body code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--color-canvas-parchment);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--db-blue);
+        }
+
+        /* ===== Callout Boxes ===== */
+        .callout {
+            background: var(--color-canvas-parchment);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 0 var(--rounded-sm) var(--rounded-sm) 0;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .callout.callout-warning {
+            border-left-color: var(--db-rose);
+            background: #fff1f2;
+        }
+
+        .callout.callout-insight {
+            border-left-color: var(--db-blue);
+            background: #f0f9ff;
+        }
+
+        .callout.callout-nosql {
+            border-left-color: var(--db-lime);
+            background: #f7fee7;
+        }
+
+        .callout .callout-label {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.6rem;
+            color: var(--color-primary);
+        }
+
+        .callout.callout-warning .callout-label {
+            color: var(--db-rose);
+        }
+
+        .callout.callout-insight .callout-label {
+            color: var(--db-blue);
+        }
+
+        .callout.callout-nosql .callout-label {
+            color: #4d7c0f;
+        }
+
+        .callout p {
+            margin-bottom: 0;
+            font-size: 16px !important;
+            line-height: 1.7 !important;
+        }
+
+        .callout p + p {
+            margin-top: 0.8rem;
+        }
+
+        /* ===== Code Blocks ===== */
+        .code-block {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-hairline);
+            border-radius: var(--rounded-sm);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0 2rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--color-hairline);
+            color: var(--color-body-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 0 var(--rounded-sm) 0 var(--rounded-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--color-ink);
+            line-height: 1.7;
+            white-space: pre;
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .code-block .keyword {
+            color: #cf222e;
+        }
+
+        .code-block .string {
+            color: #0a3069;
+        }
+
+        .code-block .comment {
+            color: #6e7781;
+            font-style: italic;
+        }
+
+        .code-block .type {
+            color: #953800;
+        }
+
+        .code-block .number {
+            color: #0550ae;
+        }
+
+        /* ===== Entity Cards ===== */
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .entity-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 1.8rem;
+            text-align: center;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .entity-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .entity-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .entity-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin: 0 0 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .entity-card p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ===== Excalidraw-Style SVG Diagrams ===== */
+        .diagram-container {
+            margin: 3rem -2rem;
+            padding: 2rem;
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            overflow-x: auto;
+        }
+
+        .diagram-title {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-body-muted);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .diagram-caption {
+            text-align: center;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            margin-top: 1rem;
+            font-style: italic;
+        }
+
+        .diagram-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== Comparison Table ===== */
+        .comparison-table-wrapper {
+            overflow-x: auto;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 2rem 0;
+            border-radius: var(--rounded-md);
+            overflow: hidden;
+            border: 1px solid var(--color-divider-soft);
+            font-family: var(--font-ui);
+        }
+
+        .comparison-table th {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            background: var(--color-canvas);
+            color: var(--color-ink-muted-80);
+            font-size: 15px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--color-divider-soft);
+            line-height: 1.5;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--color-canvas-parchment);
+        }
+
+        .comparison-table td code,
+        .comparison-table th code {
+            font-size: 13px;
+        }
+
+        .sql-cell {
+            color: var(--db-blue);
+            font-weight: 600;
+        }
+
+        .nosql-cell {
+            color: #4d7c0f;
+            font-weight: 600;
+        }
+
+        /* ===== Scale Numbers ===== */
+        .scale-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .scale-stat {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 1.2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition:
+                box-shadow 0.3s ease,
+                transform 0.3s ease;
+        }
+
+        .scale-stat:hover {
+            box-shadow: var(--shadow-card);
+            transform: translateY(-2px);
+        }
+
+        .scale-stat::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--db-gradient);
+        }
+
+        .scale-stat .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            background: var(--db-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-headline);
+        }
+
+        .scale-stat .stat-desc {
+            color: var(--color-body-muted);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ===== Deep Dive Accordion ===== */
+        .deep-dive {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            margin: 1.5rem 0;
+            overflow: hidden;
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .deep-dive:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .deep-dive-header {
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            transition: background 0.2s ease;
+        }
+
+        .deep-dive-header:hover {
+            background: var(--color-canvas-parchment);
+        }
+
+        .deep-dive-header h4 {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--color-ink);
+            margin: 0;
+        }
+
+        .deep-dive-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-canvas-parchment);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            transition:
+                transform 0.3s ease,
+                background 0.3s ease;
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        .deep-dive.open .deep-dive-toggle {
+            transform: rotate(45deg);
+            background: #f0f9ff;
+            color: var(--db-blue);
+        }
+
+        .deep-dive-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .deep-dive.open .deep-dive-content {
+            max-height: 3000px;
+        }
+
+        .deep-dive-content-inner {
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .deep-dive-content-inner p,
+        .deep-dive-content-inner li {
+            font-size: 16px !important;
+        }
+
+        /* ===== Level Expectation Cards ===== */
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .level-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .level-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .level-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .level-card.mid::before {
+            background: var(--color-primary);
+        }
+
+        .level-card.senior::before {
+            background: var(--db-blue);
+        }
+
+        .level-card.staff::before {
+            background: var(--db-lime);
+        }
+
+        .level-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .level-card.mid .level-label {
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-label {
+            color: var(--db-blue);
+        }
+
+        .level-card.staff .level-label {
+            color: #4d7c0f;
+        }
+
+        .level-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            margin: 0 0 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .level-card p {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .level-focus {
+            display: inline-block;
+            margin-top: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .level-card.mid .level-focus {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-focus {
+            background: #f0f9ff;
+            color: var(--db-blue);
+        }
+
+        .level-card.staff .level-focus {
+            background: #f7fee7;
+            color: #4d7c0f;
+        }
+
+        /* ===== Author Footer Card ===== */
+        .article-footer {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+        }
+
+        .author-card {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-canvas);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            flex-shrink: 0;
+        }
+
+        .author-info h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 600;
+            margin: 0 0 2px;
+            color: var(--color-ink);
+        }
+
+        .author-info .author-role {
+            color: var(--color-primary);
+            font-size: 14px;
+            font-family: var(--font-ui);
+            margin-bottom: 0.6rem;
+        }
+
+        .author-info p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+        }
+
+        .back-links-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-weight: 500;
+            font-size: 15px;
+            transition: gap 0.2s ease;
+        }
+
+        .back-link:hover {
+            gap: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* ===== Global Footer ===== */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .footer-container {
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .social-links a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        .fine-print {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink-muted-48);
+            letter-spacing: -0.12px;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 833px) {
+            .sub-nav-container {
+                padding: 0 16px;
+            }
+
+            .article-hero {
+                padding: calc(96px + 2rem) 1.5rem 3rem;
+            }
+
+            .article-body {
+                padding: 0 1.5rem 4rem;
+            }
+
+            .toc-wrapper {
+                padding: 0 1.5rem;
+            }
+
+            .entity-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .scale-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .level-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .author-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .diagram-container {
+                margin: 2rem -1rem;
+                padding: 1.5rem 1rem;
+            }
+
+            .comparison-table {
+                font-size: 14px;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 8px 10px;
+            }
+
+            .author-bar {
+                padding: 0 1.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .scale-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        /* ===== Animations ===== */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(24px);
+            transition:
+                opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1),
+                transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .reveal-element.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- 1. Global Navigation Bar -->
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="index.html" class="global-nav-logo">
+                <span class="logo-icon">[AK]</span>
+                Ajay Kotnala
+            </a>
+            <div class="global-nav-actions">
+                <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
+                    </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" aria-label="LinkedIn">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. Sticky Sub Navigation Bar -->
+    <nav class="sub-nav-frosted">
+        <div class="sub-nav-container">
+            <a href="#" class="sub-nav-title">SQL or NoSQL</a>
+            <div class="sub-nav-right">
+                <a href="./index.html" class="sub-nav-link">Primer Articles</a>
+                <a href="../index.html" class="sub-nav-link">Portfolio</a>
+                <a href="../index.html#contact" class="sub-nav-button">Get in Touch</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Article Hero -->
+    <section class="article-hero">
+        <div class="article-hero-inner reveal-element active">
+            <div class="article-meta">
+                <span class="article-category">Fundamentals</span>
+                <span class="article-date">August 2026</span>
+                <span class="article-read-time">38 min read</span>
+            </div>
+            <h1>
+                SQL or NoSQL
+                <span class="gradient-text">— And the Six Moves Before You Choose</span>
+            </h1>
+            <p class="article-hero-desc">
+                "Postgres won't scale" is the most expensive sentence in system design, and it's almost always
+                said before anyone has run <em>EXPLAIN</em>. Here's what the relational model actually buys you,
+                the six techniques that take it much further than people think — tuning, denormalization,
+                replication, federation, sharding — and how to tell when you've genuinely outgrown it.
+            </p>
+        </div>
+    </section>
+
+    <!-- Author Bar -->
+    <div class="author-bar reveal-element active">
+        <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar" />
+        <div class="author-bar-info">
+            <div class="author-bar-name">Ajay Kotnala</div>
+            <div class="author-bar-meta">Senior Solution Architect · August 2026 · 38 min read</div>
+        </div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc-wrapper">
+        <div class="toc reveal-element">
+            <h3>In This Article</h3>
+            <ol>
+                <li><a href="#introduction">The Question Behind "Which Database?"</a></li>
+                <li><a href="#relational">What the Relational Model Actually Buys You</a></li>
+                <li><a href="#tuning">Move 1 — SQL Tuning, the Cheapest Scaling There Is</a></li>
+                <li><a href="#denormalization">Move 2 — Denormalization: Trading Writes for Reads</a></li>
+                <li><a href="#master-slave">Move 3 — Master-Slave Replication</a></li>
+                <li><a href="#master-master">Move 4 — Master-Master Replication</a></li>
+                <li><a href="#federation">Move 5 — Federation: Splitting by Function</a></li>
+                <li><a href="#sharding">Move 6 — Sharding: Splitting by Data</a></li>
+                <li><a href="#ladder">The Ladder — What Order to Do All This In</a></li>
+                <li><a href="#nosql">NoSQL — What the "No" Actually Means</a></li>
+                <li><a href="#families">The Four NoSQL Families</a></li>
+                <li><a href="#choosing">SQL or NoSQL — Choosing by Access Pattern</a></li>
+                <li><a href="#failures">Five Ways This Goes Wrong in Production</a></li>
+                <li><a href="#interview">Interview Essentials &amp; Level Expectations</a></li>
+                <li><a href="#summary">Summary</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Article Body -->
+    <article class="article-body">
+        <!-- Section 1: Introduction -->
+        <h2 id="introduction">
+            <span class="section-number">01</span>
+            The Question Behind "Which Database?"
+        </h2>
+
+        <p>
+            Someone opens a design doc with "we're using MongoDB." Someone else replies "why not Postgres?" Ninety
+            minutes disappear. Nobody in the room has said a single sentence about what the data looks like or how
+            it will be read.
+        </p>
+        <p>
+            That's the shape of almost every database argument I've sat through, and it's backwards. The
+            technology is the <em>last</em> decision, not the first. What comes before it:
+        </p>
+
+        <ol>
+            <li><strong>What are the access patterns?</strong> Which queries run a thousand times a second, and
+                which run once a day?</li>
+            <li><strong>What's the read/write ratio?</strong> Most systems read 100–1000× more than they write.
+                Yours might not.</li>
+            <li><strong>What has to be transactional?</strong> Which operations genuinely cannot be partially
+                applied?</li>
+            <li><strong>How much data, and how fast is it growing?</strong> Gigabytes and terabytes are different
+                problems.</li>
+            <li><strong>What's the shape of the data?</strong> Highly relational, document-like, or just a very
+                large hash table?</li>
+        </ol>
+
+        <p>
+            Answer those five and the technology choice usually makes itself. Skip them and you'll pick something
+            fashionable, then spend two years discovering which of its trade-offs you can't live with.
+        </p>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">6</div>
+                <div class="stat-desc">Moves Before You Migrate</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">100:1</div>
+                <div class="stat-desc">Typical Read:Write Ratio</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">O(log n)</div>
+                <div class="stat-desc">What an Index Buys You</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">4</div>
+                <div class="stat-desc">NoSQL Families, Not One Thing</div>
+            </div>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 1 — The Order Most Teams Use, and the Order That Works</div>
+            <svg viewBox="0 0 780 380" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridD1" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenD1" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="71" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowD1" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="380" fill="#fefefe" rx="12" />
+                <rect width="780" height="380" fill="url(#dotGridD1)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Same four questions. Opposite direction. Very different outcomes.
+                </text>
+
+                <!-- Wrong order -->
+                <text x="195" y="58" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">✕ THE USUAL ORDER</text>
+
+                <g filter="url(#roughenD1)">
+                    <rect x="55" y="75" width="280" height="38" rx="7" fill="#fff1f2" stroke="#e11d48"
+                        stroke-width="1.5" />
+                    <rect x="55" y="135" width="280" height="38" rx="7" fill="#ffffff" stroke="#999"
+                        stroke-width="1.2" />
+                    <rect x="55" y="195" width="280" height="38" rx="7" fill="#ffffff" stroke="#999"
+                        stroke-width="1.2" />
+                    <rect x="55" y="255" width="280" height="38" rx="7" fill="#ffffff" stroke="#999"
+                        stroke-width="1.2" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5" text-anchor="middle">
+                    <text x="195" y="99" fill="#e11d48" font-weight="700">pick the technology</text>
+                    <text x="195" y="159" fill="#333">design the schema around it</text>
+                    <text x="195" y="219" fill="#333">write the queries it allows</text>
+                    <text x="195" y="279" fill="#333">discover the access patterns</text>
+                </g>
+                <path d="M 195 116 L 195 131" fill="none" stroke="#e11d48" stroke-width="1.3"
+                    marker-end="url(#exArrowD1)" />
+                <path d="M 195 176 L 195 191" fill="none" stroke="#e11d48" stroke-width="1.3"
+                    marker-end="url(#exArrowD1)" />
+                <path d="M 195 236 L 195 251" fill="none" stroke="#e11d48" stroke-width="1.3"
+                    marker-end="url(#exArrowD1)" />
+
+                <text x="195" y="318" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">…and find out in month 9 that the</text>
+                <text x="195" y="334" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">one query that matters is the one</text>
+                <text x="195" y="350" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">this store is worst at.</text>
+
+                <!-- divider -->
+                <path d="M 390 45 L 390 360" fill="none" stroke="#ccc" stroke-width="1" stroke-dasharray="4,4" />
+
+                <!-- Right order -->
+                <text x="585" y="58" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">✓ THE ORDER THAT WORKS</text>
+
+                <g filter="url(#roughenD1)">
+                    <rect x="445" y="75" width="280" height="38" rx="7" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.5" />
+                    <rect x="445" y="135" width="280" height="38" rx="7" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.3" />
+                    <rect x="445" y="195" width="280" height="38" rx="7" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.3" />
+                    <rect x="445" y="255" width="280" height="38" rx="7" fill="#f7fee7" stroke="#65a30d"
+                        stroke-width="1.8" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5" text-anchor="middle">
+                    <text x="585" y="99" fill="#0369a1" font-weight="700">list the access patterns</text>
+                    <text x="585" y="159" fill="#333">measure read:write and volume</text>
+                    <text x="585" y="219" fill="#333">name what must be transactional</text>
+                    <text x="585" y="279" fill="#4d7c0f" font-weight="700">now the technology is obvious</text>
+                </g>
+                <path d="M 585 116 L 585 131" fill="none" stroke="#0369a1" stroke-width="1.3"
+                    marker-end="url(#exArrowD1)" />
+                <path d="M 585 176 L 585 191" fill="none" stroke="#0369a1" stroke-width="1.3"
+                    marker-end="url(#exArrowD1)" />
+                <path d="M 585 236 L 585 251" fill="none" stroke="#0369a1" stroke-width="1.3"
+                    marker-end="url(#exArrowD1)" />
+
+                <text x="585" y="318" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">The store that serves your top five</text>
+                <text x="585" y="334" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">queries well is the right store.</text>
+                <text x="585" y="350" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">Often that's boring. Boring is good.</text>
+            </svg>
+            <p class="diagram-caption">
+                Access patterns are the input; the database is the output. Any conversation that starts with a
+                product name has skipped the part that determines the answer.
+            </p>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The One-Line Version</div>
+            <p>
+                Start relational, learn its six scaling moves properly, and reach for NoSQL when a specific access
+                pattern genuinely doesn't fit — not when the row count gets big. A well-tuned Postgres handles far
+                more than most teams believe, and it will hand you joins and transactions for free while it does.
+            </p>
+        </div>
+
+        <!-- Section 2: Relational -->
+        <h2 id="relational">
+            <span class="section-number">02</span>
+            What the Relational Model Actually Buys You
+        </h2>
+
+        <p>
+            A relational database stores data in tables with a declared schema and lets you combine them at query
+            time. That's the surface. Underneath, you're paying for four things that are genuinely hard to build
+            yourself, and it's worth knowing exactly what they are before you give them up.
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">🔒</div>
+                <h4>ACID Transactions</h4>
+                <p>All-or-nothing writes across multiple rows and tables. The hardest thing on this list to
+                    replicate in application code.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🔗</div>
+                <h4>Joins</h4>
+                <p>Combine data at read time. Store each fact once and assemble any shape you need later.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">📐</div>
+                <h4>Schema &amp; Constraints</h4>
+                <p>The database refuses invalid data. A guarantee, not a convention someone can forget.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🧠</div>
+                <h4>A Query Planner</h4>
+                <p>You declare what you want; decades of optimizer research decides how. Nobody hand-writes
+                    access paths.</p>
+            </div>
+        </div>
+
+        <h3>ACID, Concretely</h3>
+
+        <ul>
+            <li><strong>Atomicity</strong> — a transaction either fully happens or fully doesn't. Debit and credit
+                land together or neither lands.</li>
+            <li><strong>Consistency</strong> — every committed transaction leaves the database satisfying its
+                declared rules: foreign keys, unique constraints, check constraints. (Note this is a different
+                "consistency" from the CAP kind — see the
+                <a href="availability-vs-consistency.html" style="color: var(--db-blue); font-weight: 600;">availability
+                    primer</a>.)</li>
+            <li><strong>Isolation</strong> — concurrent transactions don't see each other's half-finished work.
+                The isolation level decides how strictly.</li>
+            <li><strong>Durability</strong> — once committed, it survives a crash. The write-ahead log is on
+                disk before the commit returns.</li>
+        </ul>
+
+        <p>
+            The reason this matters for the SQL-versus-NoSQL question: if you drop ACID, you don't stop needing
+            it. You just move it into your application, where you'll implement a worse version with sagas,
+            compensating transactions, and idempotency keys. Sometimes that's the correct trade. It is never a
+            free one.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The Underrated Feature Is the Planner</div>
+            <p>
+                In SQL you write <em>what</em> you want. The planner examines statistics about your data, considers
+                index scans, sequential scans, hash joins, merge joins, and nested loops, estimates the cost of
+                each, and picks a plan. When the data distribution changes, it picks differently — with no code
+                change from you.
+            </p>
+            <p>
+                In most NoSQL stores you write <em>how</em> to get it, and the access path is baked into the
+                schema. That's exactly why NoSQL is fast when your queries match the design and painful when a new
+                query doesn't.
+            </p>
+        </div>
+
+        <p>
+            The six sections that follow are the standard toolkit for pushing a relational database much further
+            than the "it doesn't scale" reflex assumes. They're roughly in order of cost — start at the top.
+        </p>
+
+        <!-- Section 3: SQL tuning -->
+        <h2 id="tuning">
+            <span class="section-number">03</span>
+            Move 1 — SQL Tuning, the Cheapest Scaling There Is
+        </h2>
+
+        <p>
+            Before any architecture changes: most databases described as "at their limit" are running a handful of
+            queries doing far more work than necessary. Tuning is an afternoon. Sharding is a quarter. Do the
+            afternoon first.
+        </p>
+
+        <h3>Benchmark, Then Profile — In That Order</h3>
+
+        <p>
+            <strong>Benchmark</strong> to reproduce load: a tool like <code>ab</code>, <code>wrk</code>, or
+            <code>k6</code> pointed at a realistic mix of requests against a realistic volume of data. A benchmark
+            on a 1,000-row table tells you nothing about a 100-million-row table, because the planner will
+            genuinely choose a different strategy.
+        </p>
+        <p>
+            <strong>Profile</strong> to find the culprits: turn on the slow query log, and sort by
+            <em>total time consumed</em> rather than by worst single execution. A 40ms query that runs 10,000
+            times a minute is a far bigger problem than a 4-second report that runs hourly, and only the totals
+            column shows you that.
+        </p>
+
+        <h3>Indexes — What They Are and What They Cost</h3>
+
+        <p>
+            An index is a separate, sorted structure — almost always a B-tree — that maps column values to row
+            locations. Sorted order turns a full scan into a descent through a shallow tree: logarithmic instead
+            of linear. On a 10-million-row table that's the difference between examining ten million rows and
+            examining roughly two dozen.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 2 — Same Query, Two Plans</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridD2" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenD2" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="72" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.3" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowD2" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGridD2)" rx="12" />
+
+                <text x="390" y="26" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle">
+                    SELECT * FROM orders WHERE customer_id = 8821;   — 10,000,000 rows
+                </text>
+
+                <!-- Left: seq scan -->
+                <text x="195" y="56" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">NO INDEX — sequential scan</text>
+
+                <g filter="url(#roughenD2)">
+                    <rect x="60" y="75" width="270" height="150" rx="8" fill="#fff1f2" stroke="#e11d48"
+                        stroke-width="1.6" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" fill="#e11d48"
+                    text-anchor="middle">
+                    <text x="195" y="93">read every row, check every value</text>
+                </g>
+                <g fill="#fecdd3" stroke="#e11d48" stroke-width="0.7">
+                    <rect x="78" y="103" width="234" height="9" />
+                    <rect x="78" y="116" width="234" height="9" />
+                    <rect x="78" y="129" width="234" height="9" />
+                    <rect x="78" y="142" width="234" height="9" />
+                    <rect x="78" y="155" width="234" height="9" />
+                    <rect x="78" y="168" width="234" height="9" />
+                    <rect x="78" y="181" width="234" height="9" />
+                    <rect x="78" y="194" width="234" height="9" />
+                </g>
+                <text x="195" y="216" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">… ×10,000,000</text>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5" fill="#333">
+                    <text x="65" y="252">rows examined:</text>
+                    <text x="330" y="252" text-anchor="end" fill="#e11d48" font-weight="700">10,000,000</text>
+                    <text x="65" y="274">disk pages read:</text>
+                    <text x="330" y="274" text-anchor="end" fill="#e11d48" font-weight="700">~120,000</text>
+                    <text x="65" y="296">time:</text>
+                    <text x="330" y="296" text-anchor="end" fill="#e11d48" font-weight="700">2,400 ms</text>
+                </g>
+
+                <!-- divider -->
+                <path d="M 390 45 L 390 370" fill="none" stroke="#ccc" stroke-width="1" stroke-dasharray="4,4" />
+
+                <!-- Right: index scan -->
+                <text x="585" y="56" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">B-TREE INDEX — index scan</text>
+
+                <g filter="url(#roughenD2)">
+                    <rect x="525" y="80" width="120" height="26" rx="5" fill="#e0f2fe" stroke="#0369a1"
+                        stroke-width="1.4" />
+                    <rect x="455" y="130" width="100" height="24" rx="5" fill="#e0f2fe" stroke="#0369a1"
+                        stroke-width="1.3" />
+                    <rect x="615" y="130" width="100" height="24" rx="5" fill="#e0f2fe" stroke="#0369a1"
+                        stroke-width="1.3" />
+                    <rect x="440" y="180" width="72" height="24" rx="5" fill="#ffffff" stroke="#0369a1"
+                        stroke-width="1.1" />
+                    <rect x="522" y="180" width="72" height="24" rx="5" fill="#bae6fd" stroke="#0369a1"
+                        stroke-width="1.8" />
+                    <rect x="604" y="180" width="72" height="24" rx="5" fill="#ffffff" stroke="#0369a1"
+                        stroke-width="1.1" />
+                    <rect x="686" y="180" width="50" height="24" rx="5" fill="#ffffff" stroke="#0369a1"
+                        stroke-width="1.1" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5" text-anchor="middle" fill="#0369a1">
+                    <text x="585" y="97">root: 1 – 10,000,000</text>
+                    <text x="505" y="146">1 – 5,000,000</text>
+                    <text x="665" y="146">5,000,001 – 10M</text>
+                    <text x="476" y="196">…</text>
+                    <text x="558" y="196" font-weight="700">8,821 ✓</text>
+                    <text x="640" y="196">…</text>
+                    <text x="711" y="196">…</text>
+                </g>
+                <path d="M 560 108 L 520 127" fill="none" stroke="#0369a1" stroke-width="1.2"
+                    marker-end="url(#exArrowD2)" />
+                <path d="M 610 108 L 655 127" fill="none" stroke="#0369a1" stroke-width="1.1" stroke-dasharray="3,2" />
+                <path d="M 500 156 L 545 177" fill="none" stroke="#0369a1" stroke-width="1.2"
+                    marker-end="url(#exArrowD2)" />
+
+                <text x="585" y="228" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">3 levels deep · then jump straight to the rows</text>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5" fill="#333">
+                    <text x="455" y="252">rows examined:</text>
+                    <text x="720" y="252" text-anchor="end" fill="#0369a1" font-weight="700">24</text>
+                    <text x="455" y="274">disk pages read:</text>
+                    <text x="720" y="274" text-anchor="end" fill="#0369a1" font-weight="700">4</text>
+                    <text x="455" y="296">time:</text>
+                    <text x="720" y="296" text-anchor="end" fill="#0369a1" font-weight="700">0.8 ms</text>
+                </g>
+
+                <!-- the cost -->
+                <rect x="120" y="322" width="540" height="54" rx="8" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"
+                    filter="url(#roughenD2)" />
+                <text x="390" y="343" fill="#b45309" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">The index is not free.</text>
+                <text x="390" y="363" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    It costs disk, it costs memory, and every INSERT / UPDATE / DELETE must maintain it too.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                3,000× fewer rows examined for one <code>CREATE INDEX</code>. This is why tuning comes before every
+                architectural move — nothing else on the list has that ratio.
+            </p>
+        </div>
+
+        <p>
+            Index the columns you filter, join, group, and sort on. But every index is a write tax: each
+            <code>INSERT</code> has to update every index on the table. A table with nine indexes has slow writes,
+            and some of those indexes are almost certainly unused — every major database exposes index usage
+            statistics, and reviewing them is a ten-minute job that frequently finds several to drop.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">SQL — Read the Plan Before You Guess</span>
+            <pre><code><span class="comment">-- Never optimize by intuition. Ask the planner what it's doing.</span>
+EXPLAIN ANALYZE
+SELECT o.id, o.total, c.name
+FROM   orders o
+JOIN   customers c ON c.id = o.customer_id
+WHERE  o.created_at &gt;= <span class="string">'2026-08-01'</span>
+  AND  o.status = <span class="string">'PENDING'</span>
+ORDER  BY o.created_at DESC
+LIMIT  <span class="number">50</span>;
+
+<span class="comment">-- Things to look for in the output:</span>
+<span class="comment">--   "Seq Scan" on a big table        → a missing index</span>
+<span class="comment">--   rows estimated ≫ rows actual     → stale statistics; ANALYZE</span>
+<span class="comment">--   "Sort" on a large set            → index the ORDER BY column</span>
+<span class="comment">--   nested loop over many rows       → the join order is wrong</span>
+
+<span class="comment">-- A composite index matching filter + sort order serves all three:</span>
+CREATE INDEX idx_orders_status_created
+    ON orders (status, created_at DESC)
+    INCLUDE (total, customer_id);   <span class="comment">-- covering: no table lookup at all</span></code></pre>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Column Order in a Composite Index Is Not Cosmetic</div>
+            <p>
+                An index on <code>(status, created_at)</code> can serve queries filtering on <code>status</code>,
+                or on <code>status AND created_at</code> — but not one filtering on <code>created_at</code> alone.
+                The leftmost columns must be present. Think of it as a phone book sorted by surname then first
+                name: brilliant for finding "Kotnala, A", useless for finding everyone named Ajay.
+            </p>
+            <p>
+                Rule of thumb: equality filters first, then range filters, then sort columns.
+            </p>
+        </div>
+
+        <h3>The N+1 Query — Still the Most Common Bug in Production</h3>
+
+        <p>
+            Fetch 100 orders, then loop and fetch each order's customer. That's 101 round trips where one would
+            do. Each is fast in isolation, which is exactly why it survives code review and profiling at low
+            volume, and why it destroys throughput at high volume — 101× the round trips, 101× the connection
+            pool pressure.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — The Same Work, 101 Trips vs 1</span>
+            <pre><code><span class="comment">// ✕ N+1: reads fine, behaves terribly</span>
+<span class="type">List</span>&lt;Order&gt; orders = orderRepo.findRecent(<span class="number">100</span>);       <span class="comment">// 1 query</span>
+<span class="keyword">for</span> (Order o : orders) {
+    o.setCustomer(customerRepo.findById(o.customerId())); <span class="comment">// 100 more</span>
+}
+
+<span class="comment">// ✓ One round trip — let the database do the join</span>
+<span class="type">List</span>&lt;OrderWithCustomer&gt; rows = orderRepo.findRecentWithCustomers(<span class="number">100</span>);
+
+<span class="comment">// ✓ Or two, if a join is awkward — batch the second fetch</span>
+<span class="type">List</span>&lt;Order&gt; orders = orderRepo.findRecent(<span class="number">100</span>);
+<span class="type">Set</span>&lt;Long&gt; ids  = orders.stream().map(Order::customerId).collect(toSet());
+<span class="type">Map</span>&lt;Long, Customer&gt; byId = customerRepo.findAllById(ids)   <span class="comment">// 1 query, IN (...)</span>
+        .stream().collect(toMap(Customer::id, identity()));
+orders.forEach(o -&gt; o.setCustomer(byId.get(o.customerId())));</code></pre>
+        </div>
+
+        <h3>Schema Choices That Compound</h3>
+
+        <ul>
+            <li>
+                <strong>Use the narrowest type that fits.</strong> Rows are read in fixed-size disk pages, so
+                narrower rows mean more rows per page, which means fewer page reads and a much better chance the
+                working set stays in memory. Bloated column types are a quiet, permanent tax on every query.
+            </li>
+            <li>
+                <strong>Fixed-width where it's genuinely fixed.</strong> A country code is always two characters;
+                <code>CHAR(2)</code> lets the engine compute offsets directly instead of scanning for the end of
+                a variable-length value.
+            </li>
+            <li>
+                <strong><code>DECIMAL</code> for money, never a float.</strong> Binary floating point cannot
+                represent 0.10 exactly. Financial totals accumulate error, and the resulting bug reports are
+                extremely unfun.
+            </li>
+            <li>
+                <strong>Don't store large blobs in the row.</strong> Put the image in object storage and the URL
+                in the column. A megabyte inline destroys page density for every query that touches the table,
+                including ones that don't select the blob.
+            </li>
+            <li>
+                <strong><code>NOT NULL</code> wherever it's true.</strong> Nullable columns cost a bit of
+                per-row overhead and, more importantly, make the planner's job harder and your queries subtler.
+            </li>
+            <li>
+                <strong>Bulk-load with indexes off.</strong> Loading ten million rows into an indexed table
+                updates every index ten million times. Drop the indexes, load, rebuild — often an order of
+                magnitude faster.
+            </li>
+        </ul>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Measure, Don't Fold in Folklore</div>
+            <p>
+                Every one of these has a "but". Query caches sound obviously good and have been removed from
+                modern MySQL because their invalidation lock became a bottleneck under concurrency. Covering
+                indexes are excellent until the extra columns make the index too large to stay in memory.
+                <code>CHAR</code> versus <code>VARCHAR</code> matters far less on a modern SSD than it did on
+                spinning disks.
+            </p>
+            <p>
+                The permanent advice isn't a list of settings — it's <code>EXPLAIN ANALYZE</code> on your data, at
+                your volume, with your query mix.
+            </p>
+        </div>
+
+        <div class="deep-dive">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-partitioning')">
+                <h4>Table partitioning — sharding's much easier cousin</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content" id="dd-partitioning">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Partitioning splits one logical table into several physical pieces <em>inside the same
+                        database</em> — typically by date range, so each month lives in its own partition. The
+                        application still sees one table and writes ordinary SQL; the planner prunes irrelevant
+                        partitions automatically.
+                    </p>
+                    <p>
+                        The wins are real and cheap. Queries scoped to recent data touch only the recent
+                        partitions, so the hot set stays in memory. Deleting old data becomes dropping a
+                        partition — instant, rather than a <code>DELETE</code> that churns through millions of
+                        rows and bloats the table. Index maintenance is per-partition, so bulk loads stay fast.
+                    </p>
+                    <p>
+                        It's worth being precise about what it doesn't do: partitioning is still one server, so
+                        it doesn't add write capacity or survive that server's failure. But when the problem is
+                        "this table is too big to keep hot" rather than "this machine can't keep up",
+                        partitioning solves it for a fraction of sharding's cost — and it's reversible.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 4: Denormalization -->
+        <h2 id="denormalization">
+            <span class="section-number">04</span>
+            Move 2 — Denormalization: Trading Writes for Reads
+        </h2>
+
+        <p>
+            Normalization stores every fact exactly once. It's the right default: no contradictions possible, no
+            update anomalies, minimal storage. The cost is that answering a real question means reassembling those
+            facts with joins, and joins over large tables get expensive.
+        </p>
+        <p>
+            Denormalization deliberately breaks that rule. You store redundant copies of data so a common read
+            doesn't have to join. Reads get faster and simpler; writes get slower and more dangerous, because now
+            the same fact lives in several places and they can disagree.
+        </p>
+        <p>
+            The reason this trade usually pays: <strong>most systems read far more than they write</strong> —
+            commonly 100:1, often 1000:1. Making a write 20% more expensive to make a read 10× cheaper is,
+            arithmetically, an excellent deal.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 3 — Four Joins, or One Row</div>
+            <svg viewBox="0 0 780 410" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridD3" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenD3" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="73" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.3" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowD3" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="410" fill="#fefefe" rx="12" />
+                <rect width="780" height="410" fill="url(#dotGridD3)" rx="12" />
+
+                <text x="390" y="26" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle">
+                    "Show me this order" — the same answer, assembled two different ways
+                </text>
+
+                <!-- Normalized -->
+                <text x="195" y="54" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">NORMALIZED — assemble at read time</text>
+
+                <g filter="url(#roughenD3)">
+                    <rect x="55" y="72" width="120" height="46" rx="6" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.4" />
+                    <rect x="215" y="72" width="120" height="46" rx="6" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.4" />
+                    <rect x="55" y="148" width="120" height="46" rx="6" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.4" />
+                    <rect x="215" y="148" width="120" height="46" rx="6" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.4" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5" text-anchor="middle">
+                    <text x="115" y="92" fill="#0369a1" font-weight="700">orders</text>
+                    <text x="115" y="107" fill="#86868b" font-size="7">id, customer_id, total</text>
+                    <text x="275" y="92" fill="#0369a1" font-weight="700">customers</text>
+                    <text x="275" y="107" fill="#86868b" font-size="7">id, name, tier</text>
+                    <text x="115" y="168" fill="#0369a1" font-weight="700">order_items</text>
+                    <text x="115" y="183" fill="#86868b" font-size="7">order_id, product_id, qty</text>
+                    <text x="275" y="168" fill="#0369a1" font-weight="700">products</text>
+                    <text x="275" y="183" fill="#86868b" font-size="7">id, name, price</text>
+                </g>
+                <path d="M 177 95 L 211 95" fill="none" stroke="#0369a1" stroke-width="1.2"
+                    marker-end="url(#exArrowD3)" />
+                <path d="M 115 120 L 115 145" fill="none" stroke="#0369a1" stroke-width="1.2"
+                    marker-end="url(#exArrowD3)" />
+                <path d="M 177 171 L 211 171" fill="none" stroke="#0369a1" stroke-width="1.2"
+                    marker-end="url(#exArrowD3)" />
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="55" y="222" fill="#0369a1">✓ every fact stored exactly once</text>
+                    <text x="55" y="241" fill="#0369a1">✓ a price change updates ONE row</text>
+                    <text x="55" y="260" fill="#0369a1">✓ contradictions are impossible</text>
+                    <text x="55" y="283" fill="#e11d48">✕ every read pays for 3 joins</text>
+                    <text x="55" y="302" fill="#e11d48">✕ joins across shards are far worse</text>
+                </g>
+                <text x="195" y="332" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">read: ~45 ms at 50M rows</text>
+                <text x="195" y="352" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">write: 1 row touched</text>
+
+                <!-- divider -->
+                <path d="M 390 45 L 390 375" fill="none" stroke="#ccc" stroke-width="1" stroke-dasharray="4,4" />
+
+                <!-- Denormalized -->
+                <text x="585" y="54" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">DENORMALIZED — assemble at write time</text>
+
+                <g filter="url(#roughenD3)">
+                    <rect x="435" y="72" width="300" height="122" rx="7" fill="#f7fee7" stroke="#65a30d"
+                        stroke-width="1.8" />
+                </g>
+                <text x="585" y="92" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">order_summary</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5" fill="#333">
+                    <text x="452" y="110">order_id · total · status</text>
+                    <text x="452" y="127" fill="#65a30d">customer_name · customer_tier ← copied</text>
+                    <text x="452" y="144" fill="#65a30d">item_count · first_product_name ← copied</text>
+                    <text x="452" y="161">created_at</text>
+                    <text x="452" y="182" fill="#86868b">one row. no joins. one disk page.</text>
+                </g>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="435" y="222" fill="#4d7c0f">✓ single-row read, no join at all</text>
+                    <text x="435" y="241" fill="#4d7c0f">✓ works even when tables live on</text>
+                    <text x="450" y="257" fill="#4d7c0f">different shards or services</text>
+                    <text x="435" y="283" fill="#e11d48">✕ a name change updates N rows</text>
+                    <text x="435" y="302" fill="#e11d48">✕ copies can drift out of sync</text>
+                </g>
+                <text x="585" y="332" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">read: ~2 ms</text>
+                <text x="585" y="352" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">write: 1 row + every copy</text>
+
+                <text x="390" y="392" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    At 100 reads per write, paying 20% more on writes to save 95% on reads is an easy trade.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Denormalization moves work from read time to write time. That's only a win when reads dominate —
+                which they usually do, but check rather than assume.
+            </p>
+        </div>
+
+        <h3>Materialized Views — Denormalization the Database Maintains</h3>
+
+        <p>
+            Hand-maintained duplicate columns are where denormalization goes wrong: someone adds a new write path
+            and forgets to update the copy. A materialized view avoids that by letting the database own the
+            duplication — you declare the query, it stores the result, and you refresh it on a schedule or on
+            demand.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">SQL — Let the Database Maintain the Copy</span>
+            <pre><code><span class="comment">-- The expensive aggregate, computed once instead of per request</span>
+CREATE MATERIALIZED VIEW customer_order_stats AS
+SELECT c.id           AS customer_id,
+       c.name,
+       COUNT(o.id)    AS order_count,
+       SUM(o.total)   AS lifetime_value,
+       MAX(o.created_at) AS last_order_at
+FROM   customers c
+LEFT   JOIN orders o ON o.customer_id = c.id
+GROUP  BY c.id, c.name;
+
+CREATE UNIQUE INDEX ON customer_order_stats (customer_id);
+
+<span class="comment">-- Refresh without blocking readers (Postgres):</span>
+REFRESH MATERIALIZED VIEW CONCURRENTLY customer_order_stats;
+
+<span class="comment">-- The trade is explicit and visible: this data is as fresh as</span>
+<span class="comment">-- your last refresh. That's a staleness budget you chose,</span>
+<span class="comment">-- not one you discovered during an incident.</span></code></pre>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Denormalize Late, and Write Down Why</div>
+            <p>
+                Normalize first. Denormalize only when a specific query is measurably too slow and you've already
+                indexed it properly. Premature denormalization gives you all of the write complexity for none of
+                the read benefit, and it's much harder to undo than to add.
+            </p>
+            <p>
+                When you do it, leave a comment naming the source of truth and the query it exists for. Six months
+                later, the person deciding whether a copy can be dropped will be someone else.
+            </p>
+        </div>
+
+        <!-- Section 5: Master-slave -->
+        <h2 id="master-slave">
+            <span class="section-number">05</span>
+            Move 3 — Master-Slave Replication
+        </h2>
+
+        <p>
+            One database accepts writes. Its changes stream to one or more read-only copies. Reads spread across
+            all of them; writes all land on the one primary.
+        </p>
+        <p>
+            This is the first genuinely architectural move on the list, and it's a big one — for a read-heavy
+            workload, which is most of them, it multiplies your read capacity by the number of replicas for the
+            cost of running them. It's also usually a configuration change plus a routing change in the
+            application, not a rewrite.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 4 — Primary and Replicas: Reads Scale, Writes Don't</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridD4" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenD4" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="74" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowD4" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGridD4)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Every write still goes through one node. Only reads multiply.
+                </text>
+
+                <!-- app -->
+                <rect x="300" y="52" width="180" height="34" rx="7" fill="#f5f5f7" stroke="#333" stroke-width="1.3"
+                    filter="url(#roughenD4)" />
+                <text x="390" y="74" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle">application</text>
+
+                <!-- write path -->
+                <path d="M 340 89 L 195 128" fill="none" stroke="#e11d48" stroke-width="2.2"
+                    marker-end="url(#exArrowD4)" />
+                <text x="228" y="105" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">ALL writes</text>
+
+                <!-- read path -->
+                <path d="M 440 89 L 560 128" fill="none" stroke="#0369a1" stroke-width="1.6"
+                    marker-end="url(#exArrowD4)" />
+                <text x="530" y="105" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    font-weight="700">reads</text>
+
+                <!-- primary -->
+                <rect x="95" y="132" width="200" height="70" rx="9" fill="#e0f2fe" stroke="#0369a1" stroke-width="2.4"
+                    filter="url(#roughenD4)" />
+                <text x="195" y="158" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">PRIMARY</text>
+                <text x="195" y="177" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">writes + the freshest reads</text>
+                <text x="195" y="192" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">this is your write ceiling</text>
+
+                <!-- replicas -->
+                <g filter="url(#roughenD4)">
+                    <rect x="420" y="132" width="105" height="70" rx="9" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.4" />
+                    <rect x="540" y="132" width="105" height="70" rx="9" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.4" />
+                    <rect x="660" y="132" width="80" height="70" rx="9" fill="#fff1f2" stroke="#e11d48"
+                        stroke-width="1.6" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">
+                    <text x="472" y="158" fill="#0369a1" font-weight="700">replica 1</text>
+                    <text x="472" y="177" fill="#333" font-size="8">read-only</text>
+                    <text x="472" y="192" fill="#0369a1" font-size="8">lag 6 ms</text>
+                    <text x="592" y="158" fill="#0369a1" font-weight="700">replica 2</text>
+                    <text x="592" y="177" fill="#333" font-size="8">read-only</text>
+                    <text x="592" y="192" fill="#0369a1" font-size="8">lag 11 ms</text>
+                    <text x="700" y="158" fill="#e11d48" font-weight="700">replica 3</text>
+                    <text x="700" y="177" fill="#333" font-size="8">rebuilding</text>
+                    <text x="700" y="192" fill="#e11d48" font-size="8">lag 40 s</text>
+                </g>
+
+                <!-- replication stream -->
+                <path d="M 297 167 L 416 167" fill="none" stroke="#65a30d" stroke-width="1.8" stroke-dasharray="6,3"
+                    marker-end="url(#exArrowD4)" />
+                <text x="356" y="158" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">WAL stream</text>
+
+                <!-- the anomaly -->
+                <rect x="60" y="235" width="660" height="76" rx="9" fill="#fff1f2" stroke="#e11d48" stroke-width="1.6"
+                    filter="url(#roughenD4)" />
+                <text x="390" y="257" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">⚠ the bug this always produces</text>
+                <text x="390" y="277" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle">
+                    User saves their profile (→ primary), the confirmation page reads (→ replica 3, 40s behind),
+                </text>
+                <text x="390" y="295" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle">
+                    and they see their OLD data. They assume the save failed and do it again.
+                </text>
+
+                <!-- fixes -->
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="90" y="340" fill="#0369a1" font-weight="700">Fixes:</text>
+                    <text x="160" y="340">· route a user's reads to the primary for N seconds after they write</text>
+                    <text x="160" y="359">· or pick a replica proven caught up to the version they just created</text>
+                    <text x="160" y="378">· and alert on MAX replica lag, never on the average</text>
+                </g>
+            </svg>
+            <p class="diagram-caption">
+                Replication lag is per-replica, and the worst replica defines the worst user experience. An average
+                lag of 8ms hides the node that's 40 seconds behind and serving a slice of your traffic.
+            </p>
+        </div>
+
+        <h3>What You Get and What It Costs</h3>
+
+        <div class="comparison-table-wrapper">
+            <table class="comparison-table reveal-element">
+                <thead>
+                    <tr>
+                        <th>Upside</th>
+                        <th>Downside</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="sql-cell">Read capacity scales with replica count</td>
+                        <td>Write capacity is unchanged — one primary, forever</td>
+                    </tr>
+                    <tr>
+                        <td class="sql-cell">Replicas double as hot standbys for failover</td>
+                        <td>Promotion is a procedure that can go wrong, and rarely gets rehearsed</td>
+                    </tr>
+                    <tr>
+                        <td class="sql-cell">Analytics can run on a replica without hurting production</td>
+                        <td>Async replication means a failover can lose recently acknowledged writes</td>
+                    </tr>
+                    <tr>
+                        <td class="sql-cell">Usually config plus read/write routing, not a rewrite</td>
+                        <td>Every replica applies every write — replication itself is load</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p>
+            That last point catches people out. A replica isn't free capacity: it does all the write work the
+            primary does, plus serves reads. Adding replicas to a <em>write</em>-bound system adds cost and no
+            capacity at all.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Sync, Semi-Sync, Async — One Knob, Big Consequences</div>
+            <p>
+                <strong>Async</strong> (the default almost everywhere): the primary acknowledges as soon as its own
+                disk write lands. Fastest writes; a failover loses whatever hadn't shipped yet.
+                <strong>Semi-synchronous</strong>: acknowledge once at least one replica confirms receipt. One
+                extra round trip, and now your data-loss window is bounded rather than unknown.
+                <strong>Synchronous</strong>: wait for all (or a quorum of) replicas. Zero loss, and your write
+                latency is now the slowest replica's latency.
+            </p>
+            <p>
+                Semi-sync is the pragmatic middle for most systems, and the fact that it's rarely the default is
+                worth knowing.
+            </p>
+        </div>
+
+        <!-- Section 6: Master-master -->
+        <h2 id="master-master">
+            <span class="section-number">06</span>
+            Move 4 — Master-Master Replication
+        </h2>
+
+        <p>
+            Both nodes accept writes and replicate to each other. On paper it fixes the single-writer ceiling and
+            removes the promotion step from failover entirely. In practice it introduces a problem that has no
+            clean general solution: two nodes can modify the same row at the same time, and something has to
+            decide who wins.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 5 — Two Writers, One Row, No Referee</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridD5" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenD5" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="75" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowD5" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGridD5)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Both nodes said "yes". Both were telling the truth at the time.
+                </text>
+
+                <!-- clients -->
+                <rect x="60" y="52" width="140" height="30" rx="6" fill="#f5f5f7" stroke="#333" stroke-width="1.2"
+                    filter="url(#roughenD5)" />
+                <text x="130" y="72" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">client A · Mumbai</text>
+                <rect x="580" y="52" width="140" height="30" rx="6" fill="#f5f5f7" stroke="#333" stroke-width="1.2"
+                    filter="url(#roughenD5)" />
+                <text x="650" y="72" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">client B · Frankfurt</text>
+
+                <path d="M 130 85 L 155 122" fill="none" stroke="#333" stroke-width="1.3"
+                    marker-end="url(#exArrowD5)" />
+                <path d="M 650 85 L 625 122" fill="none" stroke="#333" stroke-width="1.3"
+                    marker-end="url(#exArrowD5)" />
+
+                <!-- two primaries -->
+                <rect x="70" y="126" width="210" height="86" rx="9" fill="#e0f2fe" stroke="#0369a1" stroke-width="2.2"
+                    filter="url(#roughenD5)" />
+                <text x="175" y="150" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">PRIMARY A</text>
+                <text x="175" y="172" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">UPDATE price = ₹900</text>
+                <text x="175" y="190" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">committed at 10:00:00.120</text>
+                <text x="175" y="205" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">✓ acknowledged to client A</text>
+
+                <rect x="500" y="126" width="210" height="86" rx="9" fill="#e0f2fe" stroke="#0369a1" stroke-width="2.2"
+                    filter="url(#roughenD5)" />
+                <text x="605" y="150" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">PRIMARY B</text>
+                <text x="605" y="172" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">UPDATE price = ₹750</text>
+                <text x="605" y="190" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">committed at 10:00:00.140</text>
+                <text x="605" y="205" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">✓ acknowledged to client B</text>
+
+                <!-- bidirectional replication -->
+                <path d="M 285 158 L 495 158" fill="none" stroke="#65a30d" stroke-width="1.8" stroke-dasharray="6,3"
+                    marker-end="url(#exArrowD5)" />
+                <path d="M 495 182 L 285 182" fill="none" stroke="#65a30d" stroke-width="1.8" stroke-dasharray="6,3"
+                    marker-end="url(#exArrowD5)" />
+                <text x="390" y="153" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">replicate →</text>
+                <text x="390" y="198" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">← replicate</text>
+
+                <!-- collision -->
+                <path d="M 375 215 L 405 245" fill="none" stroke="#e11d48" stroke-width="3" stroke-linecap="round" />
+                <path d="M 405 215 L 375 245" fill="none" stroke="#e11d48" stroke-width="3" stroke-linecap="round" />
+                <text x="390" y="266" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">CONFLICT</text>
+
+                <!-- resolution options -->
+                <rect x="60" y="286" width="660" height="94" rx="9" fill="#ffffff" stroke="#333" stroke-width="1.3"
+                    stroke-dasharray="4,3" filter="url(#roughenD5)" />
+                <text x="390" y="307" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">Someone has to decide — and you choose in advance, or
+                    the default chooses for you</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5" fill="#333">
+                    <text x="150" y="332" text-anchor="middle" font-weight="700">last-write-wins</text>
+                    <text x="150" y="347" text-anchor="middle" fill="#e11d48">₹900 vanishes silently</text>
+                    <text x="150" y="361" text-anchor="middle" fill="#86868b" font-size="7.5">and clocks drift, so
+                        "last" may be wrong</text>
+
+                    <text x="390" y="332" text-anchor="middle" font-weight="700">partition writes by key</text>
+                    <text x="390" y="347" text-anchor="middle" fill="#4d7c0f">EU rows only on B</text>
+                    <text x="390" y="361" text-anchor="middle" fill="#86868b" font-size="7.5">no collision possible —
+                        the only clean answer</text>
+
+                    <text x="620" y="332" text-anchor="middle" font-weight="700">detect &amp; escalate</text>
+                    <text x="620" y="347" text-anchor="middle" fill="#4d7c0f">app or human resolves</text>
+                    <text x="620" y="361" text-anchor="middle" fill="#86868b" font-size="7.5">correct, and expensive to
+                        build</text>
+                </g>
+            </svg>
+            <p class="diagram-caption">
+                Master-master is safe when the two writers never touch the same rows. Once they can, you're running
+                a distributed conflict-resolution problem, and last-write-wins is a decision to lose data quietly.
+            </p>
+        </div>
+
+        <h3>Where It Genuinely Fits</h3>
+
+        <ul>
+            <li>
+                <strong>Geographically partitioned writes.</strong> EU customers write to the EU primary, APAC to
+                the APAC primary, and the two datasets barely overlap. Latency improves for everyone, data
+                residency gets easier, and conflicts are rare by construction.
+            </li>
+            <li>
+                <strong>High-availability pairs where one side is effectively idle.</strong> Both are configured
+                as primaries so failover is instant, but the load balancer sends all traffic to one at a time.
+            </li>
+            <li>
+                <strong>Append-mostly workloads</strong> where records are written once and rarely updated —
+                event logs, audit trails — so there's nothing to conflict over.
+            </li>
+        </ul>
+
+        <p>
+            Where it does <em>not</em> fit: a globally contended dataset. If any row can be updated from any
+            region, you have signed up for conflict resolution on your hottest keys, and you'll be building it
+            yourself.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Two Traps Specific to Master-Master</div>
+            <p>
+                <strong>Auto-increment collisions.</strong> Two primaries independently assigning sequential IDs
+                will hand out the same number. The usual fixes are offset/increment settings (A uses odd, B uses
+                even) or switching to UUIDs — but decide before launch, not after two rows share an ID.
+            </p>
+            <p>
+                <strong>It doesn't double your write throughput.</strong> Every node still applies every write —
+                its own plus everything replicated in. Two primaries do not give you 2× write capacity; they give
+                you write <em>locality</em> and faster failover. Only partitioning the data (§08) adds write
+                capacity.
+            </p>
+        </div>
+
+        <!-- Section 7: Federation -->
+        <h2 id="federation">
+            <span class="section-number">07</span>
+            Move 5 — Federation: Splitting by Function
+        </h2>
+
+        <p>
+            Federation — functional partitioning — splits one database into several, divided by business domain
+            rather than by rows. Users in one database, products in another, orders in a third. Each has its own
+            hardware, its own primary, and its own write path.
+        </p>
+        <p>
+            The wins compound in a way that's easy to underestimate:
+        </p>
+
+        <ul>
+            <li>
+                <strong>Writes go parallel.</strong> Three primaries instead of one means three independent write
+                paths. This is the first move on the list that actually raises write capacity.
+            </li>
+            <li>
+                <strong>Each database gets smaller</strong>, so a larger fraction of each working set fits in
+                memory. Cache hit rates rise, and disk reads fall — often the single biggest practical effect.
+            </li>
+            <li>
+                <strong>Blast radius shrinks.</strong> The analytics database melting down no longer takes
+                checkout with it.
+            </li>
+            <li>
+                <strong>Independent tuning and scaling.</strong> The write-heavy events database and the
+                read-heavy catalogue can have completely different index strategies, hardware, and replica
+                counts.
+            </li>
+        </ul>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 6 — Federation: Three Databases, Three Write Paths, One Broken Join</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridD6" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenD6" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="76" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowD6" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGridD6)" rx="12" />
+
+                <!-- Before -->
+                <text x="150" y="32" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">BEFORE — one database, one writer</text>
+
+                <rect x="55" y="50" width="190" height="150" rx="9" fill="#fff1f2" stroke="#e11d48" stroke-width="2"
+                    filter="url(#roughenD6)" />
+                <text x="150" y="72" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5"
+                    text-anchor="middle" font-weight="700">app_db · 94% CPU</text>
+                <g fill="#ffe4e6" stroke="#e11d48" stroke-width="0.9">
+                    <rect x="72" y="84" width="156" height="17" rx="3" />
+                    <rect x="72" y="106" width="156" height="17" rx="3" />
+                    <rect x="72" y="128" width="156" height="17" rx="3" />
+                    <rect x="72" y="150" width="156" height="17" rx="3" />
+                    <rect x="72" y="172" width="156" height="17" rx="3" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" fill="#333" text-anchor="middle">
+                    <text x="150" y="96">users, sessions, auth</text>
+                    <text x="150" y="118">products, categories</text>
+                    <text x="150" y="140">orders, payments</text>
+                    <text x="150" y="162">events, clickstream</text>
+                    <text x="150" y="184">reports, aggregates</text>
+                </g>
+                <text x="150" y="222" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">everything competes for the same</text>
+                <text x="150" y="238" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">buffer pool, locks, and CPU</text>
+
+                <path d="M 255 130 L 300 130" fill="none" stroke="#333" stroke-width="1.8"
+                    marker-end="url(#exArrowD6)" />
+                <text x="277" y="120" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">federate</text>
+
+                <!-- After -->
+                <text x="545" y="32" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">AFTER — three domains, three writers</text>
+
+                <g filter="url(#roughenD6)">
+                    <rect x="320" y="50" width="140" height="72" rx="8" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.6" />
+                    <rect x="475" y="50" width="140" height="72" rx="8" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.6" />
+                    <rect x="630" y="50" width="110" height="72" rx="8" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.6" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">
+                    <text x="390" y="72" fill="#0369a1" font-weight="700">users_db</text>
+                    <text x="390" y="90" fill="#333" font-size="8">users, sessions, auth</text>
+                    <text x="390" y="108" fill="#0369a1" font-size="8">31% CPU · fits in RAM</text>
+
+                    <text x="545" y="72" fill="#0369a1" font-weight="700">catalog_db</text>
+                    <text x="545" y="90" fill="#333" font-size="8">products, categories</text>
+                    <text x="545" y="108" fill="#0369a1" font-size="8">24% CPU · read-heavy</text>
+
+                    <text x="685" y="72" fill="#0369a1" font-weight="700">orders_db</text>
+                    <text x="685" y="90" fill="#333" font-size="8">orders, payments</text>
+                    <text x="685" y="108" fill="#0369a1" font-size="8">38% CPU · write-heavy</text>
+                </g>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="325" y="152" fill="#0369a1">✓ three independent write paths</text>
+                    <text x="325" y="171" fill="#0369a1">✓ each working set now fits in memory</text>
+                    <text x="325" y="190" fill="#0369a1">✓ tune, scale, and fail independently</text>
+                    <text x="325" y="209" fill="#0369a1">✓ maps cleanly onto team ownership</text>
+                    <text x="325" y="234" fill="#0369a1">✓ each domain can pick its own engine</text>
+                </g>
+
+                <!-- broken join -->
+                <rect x="60" y="272" width="660" height="106" rx="9" fill="#fff7ed" stroke="#ea580c" stroke-width="1.8"
+                    filter="url(#roughenD6)" />
+                <text x="390" y="294" fill="#b45309" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">⚠ what you gave up: the cross-domain join</text>
+                <text x="390" y="316" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    SELECT u.name, o.total FROM users u JOIN orders o … ← no longer possible in one query
+                </text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5" fill="#333">
+                    <text x="105" y="341" font-weight="700">Instead:</text>
+                    <text x="175" y="341">· two queries + join in application code (usually fine)</text>
+                    <text x="175" y="358">· or denormalize the field you keep needing across the boundary</text>
+                    <text x="175" y="374">· and accept that a transaction can no longer span both</text>
+                </g>
+            </svg>
+            <p class="diagram-caption">
+                Federation is the same idea as splitting a monolith into services, applied to storage — and it
+                brings the same benefit and the same bill: independence, minus the joins and transactions that
+                used to cross the line.
+            </p>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Draw the Line Where the Queries Aren't</div>
+            <p>
+                Federation works when the domains are genuinely loosely coupled. It fails when your most important
+                query spans the split — you've turned one indexed join into two round trips plus an in-memory
+                merge, on the hot path.
+              </p>
+            <p>
+                Before splitting, list your top ten queries and check how many cross the proposed boundary. If
+                it's more than one or two, the boundary is in the wrong place. And note the transaction loss:
+                "create user and their first order atomically" is no longer a thing the database can do for you.
+            </p>
+        </div>
+
+        <!-- Section 8: Sharding -->
+        <h2 id="sharding">
+            <span class="section-number">08</span>
+            Move 6 — Sharding: Splitting by Data
+        </h2>
+
+        <p>
+            Sharding splits a single logical table across multiple databases, each holding a subset of the rows.
+            Same schema everywhere; users A–H on shard 1, I–P on shard 2, and so on. It's the only technique on
+            this list with no ceiling — and the only one you'll still be living with in five years.
+        </p>
+
+        <h3>Choosing How to Split</h3>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">#️⃣</div>
+                <h4>Hash</h4>
+                <p>Hash the key, mod the shard count. Even distribution, no range queries, painful to resize
+                    without consistent hashing.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">📏</div>
+                <h4>Range</h4>
+                <p>Contiguous key ranges per shard. Range scans work beautifully; sequential keys create a
+                    permanent hot shard.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">📖</div>
+                <h4>Directory</h4>
+                <p>A lookup service maps key to shard. Total flexibility, easy rebalancing, and a new component
+                    on every request path.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🌍</div>
+                <h4>Geographic</h4>
+                <p>Split by region. Great for latency and data residency; badly skewed if your users are.</p>
+            </div>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 7 — The Shard Key Decides Everything</div>
+            <svg viewBox="0 0 780 420" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridD7" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenD7" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="77" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.3" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="420" fill="#fefefe" rx="12" />
+                <rect width="780" height="420" fill="url(#dotGridD7)" rx="12" />
+
+                <text x="390" y="26" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle">
+                    Four shards. Same data. Three different keys, three different outcomes.
+                </text>
+
+                <!-- Good: hash on user_id -->
+                <text x="130" y="56" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">✓ hash(user_id)</text>
+                <g filter="url(#roughenD7)">
+                    <rect x="45" y="70" width="38" height="90" rx="5" fill="#ffffff" stroke="#65a30d"
+                        stroke-width="1.3" />
+                    <rect x="89" y="70" width="38" height="90" rx="5" fill="#ffffff" stroke="#65a30d"
+                        stroke-width="1.3" />
+                    <rect x="133" y="70" width="38" height="90" rx="5" fill="#ffffff" stroke="#65a30d"
+                        stroke-width="1.3" />
+                    <rect x="177" y="70" width="38" height="90" rx="5" fill="#ffffff" stroke="#65a30d"
+                        stroke-width="1.3" />
+                </g>
+                <g fill="#d9f99d" stroke="#65a30d" stroke-width="0.8">
+                    <rect x="49" y="98" width="30" height="58" />
+                    <rect x="93" y="94" width="30" height="62" />
+                    <rect x="137" y="100" width="30" height="56" />
+                    <rect x="181" y="96" width="30" height="60" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" text-anchor="middle" fill="#4d7c0f">
+                    <text x="64" y="172">25%</text>
+                    <text x="108" y="172">26%</text>
+                    <text x="152" y="172">24%</text>
+                    <text x="196" y="172">25%</text>
+                </g>
+                <text x="130" y="192" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">even. no range scans though.</text>
+
+                <!-- Bad: range on created_at -->
+                <text x="390" y="56" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">✕ range(created_at)</text>
+                <g filter="url(#roughenD7)">
+                    <rect x="305" y="70" width="38" height="90" rx="5" fill="#ffffff" stroke="#e11d48"
+                        stroke-width="1.3" />
+                    <rect x="349" y="70" width="38" height="90" rx="5" fill="#ffffff" stroke="#e11d48"
+                        stroke-width="1.3" />
+                    <rect x="393" y="70" width="38" height="90" rx="5" fill="#ffffff" stroke="#e11d48"
+                        stroke-width="1.3" />
+                    <rect x="437" y="70" width="38" height="90" rx="5" fill="#fff1f2" stroke="#e11d48"
+                        stroke-width="2.4" />
+                </g>
+                <g fill="#fecdd3" stroke="#e11d48" stroke-width="0.8">
+                    <rect x="309" y="150" width="30" height="6" />
+                    <rect x="353" y="150" width="30" height="6" />
+                    <rect x="397" y="146" width="30" height="10" />
+                    <rect x="441" y="76" width="30" height="80" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" text-anchor="middle">
+                    <text x="324" y="172" fill="#86868b">idle</text>
+                    <text x="368" y="172" fill="#86868b">idle</text>
+                    <text x="412" y="172" fill="#86868b">idle</text>
+                    <text x="456" y="172" fill="#e11d48" font-weight="700">100%</text>
+                </g>
+                <text x="390" y="192" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">every new write lands on "today".</text>
+
+                <!-- Bad: tenant_id with a whale -->
+                <text x="650" y="56" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">✕ tenant_id + a whale</text>
+                <g filter="url(#roughenD7)">
+                    <rect x="565" y="70" width="38" height="90" rx="5" fill="#ffffff" stroke="#e11d48"
+                        stroke-width="1.3" />
+                    <rect x="609" y="70" width="38" height="90" rx="5" fill="#fff1f2" stroke="#e11d48"
+                        stroke-width="2.4" />
+                    <rect x="653" y="70" width="38" height="90" rx="5" fill="#ffffff" stroke="#e11d48"
+                        stroke-width="1.3" />
+                    <rect x="697" y="70" width="38" height="90" rx="5" fill="#ffffff" stroke="#e11d48"
+                        stroke-width="1.3" />
+                </g>
+                <g fill="#fecdd3" stroke="#e11d48" stroke-width="0.8">
+                    <rect x="569" y="140" width="30" height="16" />
+                    <rect x="613" y="82" width="30" height="74" />
+                    <rect x="657" y="138" width="30" height="18" />
+                    <rect x="701" y="142" width="30" height="14" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" text-anchor="middle">
+                    <text x="584" y="172" fill="#86868b">14%</text>
+                    <text x="628" y="172" fill="#e11d48" font-weight="700">61%</text>
+                    <text x="672" y="172" fill="#86868b">13%</text>
+                    <text x="716" y="172" fill="#86868b">12%</text>
+                </g>
+                <text x="650" y="192" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5"
+                    text-anchor="middle">one huge customer, one melted shard.</text>
+
+                <!-- What breaks -->
+                <rect x="50" y="218" width="330" height="180" rx="9" fill="#fff1f2" stroke="#e11d48" stroke-width="1.6"
+                    filter="url(#roughenD7)" />
+                <text x="215" y="240" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10.5"
+                    text-anchor="middle" font-weight="700">What sharding takes away</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="70" y="266">· joins across shards — now app-side</text>
+                    <text x="70" y="288">· transactions across shards — now sagas</text>
+                    <text x="70" y="310">· global uniqueness — needs UUIDs or a</text>
+                    <text x="82" y="326">   central sequence service</text>
+                    <text x="70" y="348">· global ORDER BY / aggregates — scatter,</text>
+                    <text x="82" y="364">   gather, and merge in the app</text>
+                    <text x="70" y="386">· resharding — the hardest migration there is</text>
+                </g>
+
+                <rect x="400" y="218" width="330" height="180" rx="9" fill="#f7fee7" stroke="#65a30d" stroke-width="1.6"
+                    filter="url(#roughenD7)" />
+                <text x="565" y="240" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10.5"
+                    text-anchor="middle" font-weight="700">What a good key looks like</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="420" y="266">· high cardinality — millions of values</text>
+                    <text x="420" y="288">· evenly distributed — no natural whales</text>
+                    <text x="420" y="310">· present in most of your queries, so reads</text>
+                    <text x="432" y="326">   hit one shard instead of all of them</text>
+                    <text x="420" y="348">· stable — a key that changes means moving</text>
+                    <text x="432" y="364">   the row between shards</text>
+                    <text x="420" y="386" fill="#4d7c0f" font-weight="700">· and plan resharding anyway</text>
+                </g>
+            </svg>
+            <p class="diagram-caption">
+                Sharding is the only move here that is genuinely hard to reverse. The key deserves a week of
+                argument before it gets a day of implementation.
+            </p>
+        </div>
+
+        <h3>Consistent Hashing — Why Plain Modulo Hurts</h3>
+
+        <p>
+            The naive scheme is <code>shard = hash(key) % N</code>. It distributes evenly and it's trivially
+            simple. It also means that changing <code>N</code> changes the destination of nearly every key: going
+            from 4 shards to 5 remaps roughly 80% of your data, which is a migration of the entire dataset just to
+            add one machine.
+        </p>
+        <p>
+            Consistent hashing places shards and keys on a ring, and each key belongs to the next shard clockwise.
+            Add a shard and only the keys in one arc move — roughly <code>1/N</code> of the data instead of nearly
+            all of it. Virtual nodes (many ring positions per physical shard) smooth out the distribution.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">The Resize Cost, Concretely</span>
+            <pre><code>MODULO:  4 shards → 5 shards
+  key 1001: 1001 % 4 = 1  →  1001 % 5 = 1   stays
+  key 1002: 1002 % 4 = 2  →  1002 % 5 = 2   stays
+  key 1003: 1003 % 4 = 3  →  1003 % 5 = 3   stays
+  key 1004: 1004 % 4 = 0  →  1004 % 5 = 4   MOVES
+  key 1005: 1005 % 4 = 1  →  1005 % 5 = 0   MOVES
+  …roughly 80% of all keys move. Full dataset migration.
+
+CONSISTENT HASHING:  4 shards → 5 shards
+  only the keys in the new node's arc move
+  …roughly 20% of keys move (1/N). The rest never notice.</code></pre>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ The Celebrity Problem Has No Elegant Fix</div>
+            <p>
+                Shard by <code>user_id</code> and your distribution is perfect — until one account has 200 million
+                followers and every read of that account hits one shard. The unit of distribution is indivisible:
+                you cannot split one user across two shards without abandoning the scheme.
+            </p>
+            <p>
+                The real answers are all workarounds, and you pick one deliberately: cache the hot entity
+                aggressively so most reads never reach the shard; give known whales their own dedicated shard;
+                or add a synthetic suffix to the key for the hottest entities and fan out reads across the
+                resulting sub-keys. None of them are free, and all of them are easier to add before launch than
+                during an incident.
+            </p>
+        </div>
+
+        <!-- Section 9: The ladder -->
+        <h2 id="ladder">
+            <span class="section-number">09</span>
+            The Ladder — What Order to Do All This In
+        </h2>
+
+        <p>
+            Six techniques, wildly different costs. The order matters more than any individual choice, because
+            each rung buys you time to do the next one properly instead of at 2 a.m.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 8 — The Scaling Ladder: Cheap and Reversible First</div>
+            <svg viewBox="0 0 780 430" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridD8" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenD8" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="78" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.3" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowD8" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="430" fill="#fefefe" rx="12" />
+                <rect width="780" height="430" fill="url(#dotGridD8)" rx="12" />
+
+                <text x="390" y="26" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle">
+                    Each step costs more and is harder to undo than the one below it
+                </text>
+
+                <!-- axes hints -->
+                <path d="M 44 390 L 44 55" fill="none" stroke="#333" stroke-width="1.3"
+                    marker-end="url(#exArrowD8)" />
+                <text x="26" y="230" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" transform="rotate(-90 26 230)">cost · risk · permanence →</text>
+
+                <!-- steps, bottom to top -->
+                <g filter="url(#roughenD8)">
+                    <rect x="60" y="340" width="240" height="46" rx="7" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.6" />
+                    <rect x="140" y="286" width="240" height="46" rx="7" fill="#f0f9ff" stroke="#0369a1"
+                        stroke-width="1.6" />
+                    <rect x="220" y="232" width="240" height="46" rx="7" fill="#e0f2fe" stroke="#0369a1"
+                        stroke-width="1.6" />
+                    <rect x="300" y="178" width="240" height="46" rx="7" fill="#ecfccb" stroke="#65a30d"
+                        stroke-width="1.6" />
+                    <rect x="380" y="124" width="240" height="46" rx="7" fill="#ecfccb" stroke="#65a30d"
+                        stroke-width="1.6" />
+                    <rect x="460" y="70" width="260" height="46" rx="7" fill="#fff1f2" stroke="#e11d48"
+                        stroke-width="2" />
+                </g>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5">
+                    <text x="76" y="360" fill="#0369a1" font-weight="700">1 · TUNE &amp; INDEX</text>
+                    <text x="76" y="376" fill="#86868b" font-size="8">an afternoon · fully reversible · 10–1000×</text>
+
+                    <text x="156" y="306" fill="#0369a1" font-weight="700">2 · CACHE THE HOT READS</text>
+                    <text x="156" y="322" fill="#86868b" font-size="8">days · reversible · removes most read load</text>
+
+                    <text x="236" y="252" fill="#0369a1" font-weight="700">3 · READ REPLICAS</text>
+                    <text x="236" y="268" fill="#86868b" font-size="8">days · reversible · scales reads only</text>
+
+                    <text x="316" y="198" fill="#4d7c0f" font-weight="700">4 · DENORMALIZE / MATERIALIZE</text>
+                    <text x="316" y="214" fill="#86868b" font-size="8">weeks · awkward to undo · kills the hot joins</text>
+
+                    <text x="396" y="144" fill="#4d7c0f" font-weight="700">5 · FEDERATE BY DOMAIN</text>
+                    <text x="396" y="160" fill="#86868b" font-size="8">weeks–months · first real write scaling</text>
+
+                    <text x="476" y="90" fill="#e11d48" font-weight="700">6 · SHARD BY DATA</text>
+                    <text x="476" y="106" fill="#86868b" font-size="8">a quarter+ · effectively permanent · no ceiling</text>
+                </g>
+
+                <!-- the note -->
+                <rect x="60" y="398" width="660" height="22" rx="6" fill="#fff7ed" stroke="#ea580c" stroke-width="1.3" />
+                <text x="390" y="413" fill="#b45309" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">
+                    Most teams that jumped to step 6 could have stayed on step 1 or 2 for another two years.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Each rung buys time. The value of that time is what makes the order matter: step 1 done well often
+                means step 6 never happens.
+            </p>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Caching Deserves Its Rung</div>
+            <p>
+                Notice step 2 — it isn't one of the six database techniques, and it's frequently the single
+                highest-leverage move available. A cache in front of a read-heavy database removes most of the
+                load without changing the schema, the topology, or anything about the write path.
+            </p>
+            <p>
+                It comes with its own failure modes — thundering herds, hot keys, staleness — which is why they
+                get their own
+                <a href="../DeepDives/caching-system-design.html" style="color: var(--db-blue); font-weight: 600;">deep
+                    dive</a>. But on a cost-per-unit-of-relief basis, nothing above it competes.
+            </p>
+        </div>
+
+        <!-- Section 10: NoSQL -->
+        <h2 id="nosql">
+            <span class="section-number">10</span>
+            NoSQL — What the "No" Actually Means
+        </h2>
+
+        <p>
+            "NoSQL" is a terrible name for a real idea. It isn't about disliking a query language — several NoSQL
+            stores ship SQL-like dialects. The name is usually back-fitted as "Not Only SQL," which is closer.
+        </p>
+        <p>
+            What actually unites the category is a set of deliberate <em>removals</em>. NoSQL stores drop features
+            of the relational model in exchange for things the relational model finds hard: horizontal write
+            scaling, schema flexibility, and predictable performance at very large volumes.
+        </p>
+
+        <div class="comparison-table-wrapper">
+            <table class="comparison-table reveal-element">
+                <thead>
+                    <tr>
+                        <th>What's given up</th>
+                        <th>What's bought with it</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Joins — data is denormalized, assembly happens in your code</td>
+                        <td class="nosql-cell">Rows can live on any node; no cross-node join to coordinate</td>
+                    </tr>
+                    <tr>
+                        <td>Multi-row ACID transactions (mostly; some now offer limited ones)</td>
+                        <td class="nosql-cell">No distributed locking or two-phase commit on the write path</td>
+                    </tr>
+                    <tr>
+                        <td>A rigid enforced schema</td>
+                        <td class="nosql-cell">Fields vary per record; no migration to add one</td>
+                    </tr>
+                    <tr>
+                        <td>Ad-hoc querying — you query the way you designed for</td>
+                        <td class="nosql-cell">Predictable, often single-digit-millisecond access at any scale</td>
+                    </tr>
+                    <tr>
+                        <td>Strong consistency by default</td>
+                        <td class="nosql-cell">Availability during partitions; writes accepted anywhere</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>BASE, the Counterpart to ACID</h3>
+
+        <p>
+            The philosophy is usually summarised as BASE — <strong>B</strong>asically <strong>A</strong>vailable,
+            <strong>S</strong>oft state, <strong>E</strong>ventual consistency. Read plainly: the system stays up
+            and answers, data may be in flux, and replicas converge given time. It's the same trade covered in the
+            <a href="availability-vs-consistency.html" style="color: var(--db-blue); font-weight: 600;">availability
+                vs consistency primer</a>, viewed from the storage layer.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Two Myths Worth Retiring</div>
+            <p>
+                <strong>"NoSQL means no schema."</strong> It means no <em>enforced</em> schema. The schema still
+                exists — it now lives in your application code, in every place that reads a document and assumes a
+                field is there. That's not less schema; it's unversioned, unchecked schema scattered across a
+                codebase. Records written in 2023 will still be in the collection in 2027, in the old shape.
+            </p>
+            <p>
+                <strong>"NoSQL is faster."</strong> Not inherently. It's faster <em>for the access pattern it was
+                designed around</em>, and often dramatically slower for one it wasn't. A relational database with
+                the right index will beat a document store doing a collection scan every time.
+            </p>
+        </div>
+
+        <!-- Section 11: Four families -->
+        <h2 id="families">
+            <span class="section-number">11</span>
+            The Four NoSQL Families
+        </h2>
+
+        <p>
+            Treating NoSQL as one thing is the root of most bad choices in this area. There are four families with
+            genuinely different data models, and picking between them matters far more than picking between two
+            products in the same family.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 9 — Four Data Models, Drawn as the Data Actually Looks</div>
+            <svg viewBox="0 0 780 470" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridD9" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenD9" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="79" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.3" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowD9" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#4d7c0f" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="470" fill="#fefefe" rx="12" />
+                <rect width="780" height="470" fill="url(#dotGridD9)" rx="12" />
+
+                <!-- KEY-VALUE -->
+                <rect x="35" y="35" width="350" height="185" rx="10" fill="#f7fee7" stroke="#65a30d"
+                    stroke-width="1.8" filter="url(#roughenD9)" />
+                <text x="210" y="58" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">KEY-VALUE</text>
+                <text x="210" y="74" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">a very large, very fast hash table</text>
+
+                <g filter="url(#roughenD9)">
+                    <rect x="60" y="86" width="130" height="22" rx="4" fill="#ffffff" stroke="#65a30d"
+                        stroke-width="1.1" />
+                    <rect x="200" y="86" width="160" height="22" rx="4" fill="#ecfccb" stroke="#65a30d"
+                        stroke-width="1.1" />
+                    <rect x="60" y="114" width="130" height="22" rx="4" fill="#ffffff" stroke="#65a30d"
+                        stroke-width="1.1" />
+                    <rect x="200" y="114" width="160" height="22" rx="4" fill="#ecfccb" stroke="#65a30d"
+                        stroke-width="1.1" />
+                    <rect x="60" y="142" width="130" height="22" rx="4" fill="#ffffff" stroke="#65a30d"
+                        stroke-width="1.1" />
+                    <rect x="200" y="142" width="160" height="22" rx="4" fill="#ecfccb" stroke="#65a30d"
+                        stroke-width="1.1" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" fill="#333">
+                    <text x="70" y="101">session:a91f</text>
+                    <text x="210" y="101">{uid: 88, exp: 1730…}</text>
+                    <text x="70" y="129">cart:u:2211</text>
+                    <text x="210" y="129">[sku-19, sku-77]</text>
+                    <text x="70" y="157">rate:ip:10.2.1.9</text>
+                    <text x="210" y="157">47</text>
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" fill="#333">
+                    <text x="60" y="184">O(1) get / put · no query language · nothing but the key</text>
+                    <text x="60" y="200" fill="#4d7c0f" font-weight="700">sessions · carts · counters · caches ·
+                        feature flags</text>
+                    <text x="60" y="214" fill="#86868b">Redis · Memcached · DynamoDB · etcd</text>
+                </g>
+
+                <!-- DOCUMENT -->
+                <rect x="400" y="35" width="345" height="185" rx="10" fill="#f7fee7" stroke="#65a30d"
+                    stroke-width="1.8" filter="url(#roughenD9)" />
+                <text x="572" y="58" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">DOCUMENT</text>
+                <text x="572" y="74" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">one self-contained record per entity</text>
+
+                <rect x="425" y="84" width="140" height="82" rx="5" fill="#ffffff" stroke="#65a30d"
+                    stroke-width="1.2" filter="url(#roughenD9)" />
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" fill="#333">
+                    <text x="433" y="97">{ _id: 88,</text>
+                    <text x="433" y="108">  name: "Ajay",</text>
+                    <text x="433" y="119">  tier: "gold",</text>
+                    <text x="433" y="130">  addresses: [ {…},</text>
+                    <text x="433" y="141">               {…} ],</text>
+                    <text x="433" y="152">  prefs: { … } }</text>
+                    <text x="433" y="163" fill="#86868b">nested. no join needed.</text>
+                </g>
+                <rect x="580" y="84" width="140" height="82" rx="5" fill="#ffffff" stroke="#65a30d"
+                    stroke-width="1.2" stroke-dasharray="3,2" filter="url(#roughenD9)" />
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" fill="#333">
+                    <text x="588" y="97">{ _id: 89,</text>
+                    <text x="588" y="108">  name: "Priya",</text>
+                    <text x="588" y="119">  company: "Acme",</text>
+                    <text x="588" y="130" fill="#e11d48">  vat_id: "GB…",</text>
+                    <text x="588" y="141" fill="#e11d48">  ← different fields!</text>
+                    <text x="588" y="152">  prefs: { … } }</text>
+                    <text x="588" y="163" fill="#86868b">same collection.</text>
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" fill="#333">
+                    <text x="425" y="184">query inside the document · secondary indexes · flexible shape</text>
+                    <text x="425" y="200" fill="#4d7c0f" font-weight="700">catalogues · user profiles · CMS ·
+                        event payloads</text>
+                    <text x="425" y="214" fill="#86868b">MongoDB · CouchDB · DynamoDB · Firestore</text>
+                </g>
+
+                <!-- WIDE COLUMN -->
+                <rect x="35" y="238" width="350" height="198" rx="10" fill="#f7fee7" stroke="#65a30d"
+                    stroke-width="1.8" filter="url(#roughenD9)" />
+                <text x="210" y="261" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">WIDE COLUMN</text>
+                <text x="210" y="277" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">row key → columns, and each row can differ</text>
+
+                <g filter="url(#roughenD9)">
+                    <rect x="60" y="288" width="76" height="26" rx="4" fill="#ecfccb" stroke="#65a30d"
+                        stroke-width="1.2" />
+                    <rect x="142" y="288" width="70" height="26" rx="4" fill="#ffffff" stroke="#65a30d"
+                        stroke-width="1" />
+                    <rect x="218" y="288" width="70" height="26" rx="4" fill="#ffffff" stroke="#65a30d"
+                        stroke-width="1" />
+                    <rect x="294" y="288" width="66" height="26" rx="4" fill="#ffffff" stroke="#65a30d"
+                        stroke-width="1" />
+
+                    <rect x="60" y="320" width="76" height="26" rx="4" fill="#ecfccb" stroke="#65a30d"
+                        stroke-width="1.2" />
+                    <rect x="142" y="320" width="70" height="26" rx="4" fill="#ffffff" stroke="#65a30d"
+                        stroke-width="1" />
+                    <rect x="218" y="320" width="142" height="26" rx="4" fill="#ffffff" stroke="#65a30d"
+                        stroke-width="1" stroke-dasharray="3,2" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7" fill="#333">
+                    <text x="68" y="304" font-weight="700">sensor:41</text>
+                    <text x="150" y="304">t0→22.1°</text>
+                    <text x="226" y="304">t1→22.4°</text>
+                    <text x="302" y="304">t2→22.9°</text>
+                    <text x="68" y="336" font-weight="700">sensor:42</text>
+                    <text x="150" y="336">t0→18.0°</text>
+                    <text x="240" y="336" fill="#86868b">(no readings yet — costs nothing)</text>
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" fill="#333">
+                    <text x="60" y="368">keys stay sorted → efficient range scans over a key span</text>
+                    <text x="60" y="383">every cell timestamped → versioning and conflict resolution</text>
+                    <text x="60" y="400" fill="#4d7c0f" font-weight="700">time series · IoT · logs · messaging ·
+                        petabyte tables</text>
+                    <text x="60" y="414" fill="#86868b">Cassandra · HBase · Bigtable · ScyllaDB</text>
+                </g>
+
+                <!-- GRAPH -->
+                <rect x="400" y="238" width="345" height="198" rx="10" fill="#f7fee7" stroke="#65a30d"
+                    stroke-width="1.8" filter="url(#roughenD9)" />
+                <text x="572" y="261" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">GRAPH</text>
+                <text x="572" y="277" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">relationships are first-class, not foreign keys</text>
+
+                <g filter="url(#roughenD9)">
+                    <circle cx="470" cy="320" r="20" fill="#ecfccb" stroke="#65a30d" stroke-width="1.4" />
+                    <circle cx="565" cy="300" r="20" fill="#ecfccb" stroke="#65a30d" stroke-width="1.4" />
+                    <circle cx="660" cy="325" r="20" fill="#ecfccb" stroke="#65a30d" stroke-width="1.4" />
+                    <circle cx="565" cy="380" r="20" fill="#ffffff" stroke="#65a30d" stroke-width="1.4" />
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="7.5" text-anchor="middle" fill="#4d7c0f">
+                    <text x="470" y="323">Ajay</text>
+                    <text x="565" y="303">Priya</text>
+                    <text x="660" y="328">Sam</text>
+                    <text x="565" y="383">Post</text>
+                </g>
+                <path d="M 489 314 L 546 304" fill="none" stroke="#4d7c0f" stroke-width="1.3"
+                    marker-end="url(#exArrowD9)" />
+                <path d="M 585 304 L 641 319" fill="none" stroke="#4d7c0f" stroke-width="1.3"
+                    marker-end="url(#exArrowD9)" />
+                <path d="M 565 360 L 565 322" fill="none" stroke="#4d7c0f" stroke-width="1.3"
+                    marker-end="url(#exArrowD9)" />
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="6.5" fill="#86868b">
+                    <text x="500" y="303">FOLLOWS</text>
+                    <text x="596" y="305">FOLLOWS</text>
+                    <text x="572" y="345">AUTHORED</text>
+                </g>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" fill="#333">
+                    <text x="425" y="410">"friends of friends who liked X" — one traversal, not six joins</text>
+                    <text x="425" y="425" fill="#4d7c0f" font-weight="700">social · fraud rings · recommendations ·
+                        access graphs</text>
+                </g>
+
+                <text x="390" y="456" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    These are four different questions, not four brands. Match the model to your data's shape.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                The boundaries blur in practice — DynamoDB is both key-value and document; several key-value stores
+                index into their values. The distinction that matters is what the store lets you ask for cheaply.
+            </p>
+        </div>
+
+        <h3>Key-Value Store</h3>
+
+        <p>
+            A hash table, distributed. Put a value under a key, get it back by that key, in O(1). No querying by
+            content, no relationships, no partial reads of a value — the key is the only way in.
+        </p>
+        <p>
+            That severity is the point. With no query planner, no join logic, and no secondary index to maintain,
+            a key-value store does one thing at extreme speed and scales horizontally almost trivially: any node
+            can own any key range. Many keep keys in sorted order, which quietly gives you efficient range scans
+            over a key prefix — genuinely useful for time-ordered data.
+        </p>
+        <p>
+            The complexity doesn't disappear; it moves into your application, which now owns anything resembling a
+            relationship or a secondary lookup. <strong>Best for:</strong> sessions, shopping carts, rate-limit
+            counters, feature flags, caching layers, leaderboards.
+        </p>
+
+        <h3>Document Store</h3>
+
+        <p>
+            Values become structured documents — JSON, BSON, XML — and the store can look inside them. You can
+            query on nested fields, build secondary indexes, and update part of a document without rewriting it.
+        </p>
+        <p>
+            The natural fit is data that is genuinely tree-shaped and read as a unit. A product with variants,
+            images, and attributes; a user with addresses and preferences. In a relational model that's five
+            tables and four joins; as a document it's one read of one contiguous record.
+        </p>
+        <p>
+            The flexible schema is the double-edged part. Adding a field costs nothing — no migration, no
+            downtime. But documents written years apart coexist in the same collection with different shapes, and
+            every reader must cope. <strong>Best for:</strong> catalogues, user profiles, content management,
+            event payloads, anything whose shape varies by record.
+        </p>
+
+        <h3>Wide Column Store</h3>
+
+        <p>
+            The most misunderstood family, largely because "column" suggests a spreadsheet. The model is closer to
+            a nested map: a row key points to a set of column families, and each family holds arbitrarily many
+            columns. Crucially, <strong>each row can have entirely different columns</strong>, and empty columns
+            cost nothing at all — a row with three columns and a row with three million sit happily side by side.
+        </p>
+        <p>
+            Row keys are kept in sorted order, which makes range scans over a key span cheap, and every cell
+            carries a timestamp, which gives you versioning and a conflict-resolution mechanism for free. That
+            combination is why the family dominates time-series and event data: make the row key
+            <code>(device_id, day)</code> and the columns timestamps, and "give me every reading from this sensor
+            last Tuesday" becomes one sequential read.
+        </p>
+        <p>
+            These systems — Bigtable and its descendants HBase and Cassandra — are built for very large datasets
+            and very high write rates, with linear horizontal scaling. The cost is that queries must match the key
+            design; an unanticipated query pattern can mean rewriting how the data is stored.
+            <strong>Best for:</strong> time series, IoT telemetry, logs, messaging history, tables measured in
+            terabytes and up.
+        </p>
+
+        <h3>Graph Database</h3>
+
+        <p>
+            Nodes are records, edges are relationships, and both can carry properties. The distinguishing feature
+            is that traversing an edge is a pointer hop rather than an index lookup — so the cost of walking a
+            relationship doesn't grow with the size of the database.
+        </p>
+        <p>
+            That's the whole value proposition, and it only matters for queries that walk many hops. "Friends of
+            friends who bought this" is three self-joins in SQL, and each join multiplies the intermediate result
+            set; at six degrees it's unrunnable. As a traversal, it's proportional to the number of edges actually
+            visited.
+        </p>
+        <p>
+            The trade-offs are real: a smaller ecosystem, fewer engineers who know it, and horizontal scaling
+            that's genuinely hard, because a graph resists partitioning — any cut you make severs edges that
+            queries then have to cross. <strong>Best for:</strong> social graphs, fraud-ring detection,
+            recommendation engines, permission and org hierarchies, network topology.
+        </p>
+
+        <div class="callout callout-nosql">
+            <div class="callout-label">🌿 Don't Reach for a Graph Database Too Early</div>
+            <p>
+                Having relationships in your data is not a reason to use a graph database — relational databases
+                are named after relations. The reason is <em>deep traversal</em>: queries that follow chains three,
+                four, six hops out, where each hop would be another join.
+            </p>
+            <p>
+                A social network's "people you may know" is a genuine case. A blog with authors and tags is not.
+                Two joins are not a graph problem.
+            </p>
+        </div>
+
+        <!-- Section 12: Choosing -->
+        <h2 id="choosing">
+            <span class="section-number">12</span>
+            SQL or NoSQL — Choosing by Access Pattern
+        </h2>
+
+        <p>
+            Now the actual question. The honest answer is that this is rarely a fork in the road and usually a
+            question asked once per dataset — but there are real signals in each direction.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 10 — The Decision, Driven by the Data</div>
+            <svg viewBox="0 0 780 430" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridD10" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenD10" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="80" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowD10" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="430" fill="#fefefe" rx="12" />
+                <rect width="780" height="430" fill="url(#dotGridD10)" rx="12" />
+
+                <rect x="255" y="28" width="270" height="44" rx="9" fill="#f5f5f7" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughenD10)" />
+                <text x="390" y="47" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10.5"
+                    text-anchor="middle" font-weight="700">What do the top five queries need?</text>
+                <text x="390" y="63" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">not "how much data" — that's rarely the deciding factor</text>
+
+                <path d="M 310 74 L 200 112" fill="none" stroke="#0369a1" stroke-width="1.4"
+                    marker-end="url(#exArrowD10)" />
+                <path d="M 470 74 L 580 112" fill="none" stroke="#65a30d" stroke-width="1.4"
+                    marker-end="url(#exArrowD10)" />
+
+                <!-- SQL side -->
+                <rect x="35" y="118" width="340" height="212" rx="10" fill="#f0f9ff" stroke="#0369a1"
+                    stroke-width="1.8" filter="url(#roughenD10)" />
+                <text x="205" y="142" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">STAY RELATIONAL</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="55" y="168">· the data is genuinely relational</text>
+                    <text x="55" y="189">· you need multi-row transactions</text>
+                    <text x="55" y="210">· queries are ad-hoc / will change</text>
+                    <text x="55" y="231">· reporting and analytics matter</text>
+                    <text x="55" y="252">· the schema is a feature, not a burden</text>
+                    <text x="55" y="273">· correctness &gt; raw throughput</text>
+                    <text x="55" y="294">· the team already knows it</text>
+                    <text x="55" y="318" fill="#0369a1" font-weight="700">Default here. Make NoSQL earn the switch.</text>
+                </g>
+
+                <!-- NoSQL side -->
+                <rect x="405" y="118" width="340" height="212" rx="10" fill="#f7fee7" stroke="#65a30d"
+                    stroke-width="1.8" filter="url(#roughenD10)" />
+                <text x="575" y="142" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">GO NOSQL</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="425" y="168">· one known access pattern, run constantly</text>
+                    <text x="425" y="189">· semi-structured or shape-varying records</text>
+                    <text x="425" y="210">· no joins needed — data is self-contained</text>
+                    <text x="425" y="231">· terabytes to petabytes, still growing</text>
+                    <text x="425" y="252">· write throughput beyond one primary</text>
+                    <text x="425" y="273">· very high IOPS, predictable latency</text>
+                    <text x="425" y="294">· deep graph traversal (→ graph store)</text>
+                    <text x="425" y="318" fill="#4d7c0f" font-weight="700">Pick the FAMILY first, the product
+                        second.</text>
+                </g>
+
+                <!-- polyglot -->
+                <rect x="90" y="348" width="600" height="62" rx="9" fill="#fff7ed" stroke="#ea580c" stroke-width="1.8"
+                    filter="url(#roughenD10)" />
+                <text x="390" y="370" fill="#b45309" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">…and the real answer is usually "both"</text>
+                <text x="390" y="390" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    Postgres for orders · Redis for sessions · Elasticsearch for search · Cassandra for events
+                </text>
+                <text x="390" y="404" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    One question per dataset, not one answer per company.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Data volume is the weakest signal on this chart, and the one most often used to justify a switch.
+                Access pattern and data shape are what actually decide.
+            </p>
+        </div>
+
+        <h3>Polyglot Persistence — and Its Bill</h3>
+
+        <p>
+            Using several stores, each matched to a workload, is the mature answer. It's also how you end up with
+            five databases, five backup strategies, five failure modes, five on-call runbooks, and a data
+            consistency story that spans all of them.
+        </p>
+        <p>
+            The tempering rule: <strong>every additional datastore should earn its place against a specific,
+            measured problem.</strong> "It seemed like a better fit" is not a measurement. And note that a
+            modern relational database has quietly absorbed a lot of the competition — Postgres has excellent
+            JSONB support with indexing, full-text search, array and range types, and range partitioning. For a
+            great many workloads, "use Postgres for that too" is genuinely the right call and one fewer system to
+            operate.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The Question That Cuts Through It</div>
+            <p>
+                "What query does this store make easy that our current one makes hard — and how often do we run
+                it?"
+            </p>
+            <p>
+                If there's a crisp answer, the new store is probably justified. If the answer is about scale in
+                the abstract, or about how modern something feels, you're about to buy an operational burden
+                without a matching benefit.
+            </p>
+        </div>
+
+        <div class="deep-dive">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-migration')">
+                <h4>If you do migrate: how to do it without a big-bang cutover</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content" id="dd-migration">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        <strong>Dual-write, then verify, then flip.</strong> Write to both the old and new store
+                        for a period while continuing to read from the old one. Backfill history in the
+                        background. Run a continuous comparison job that reads the same keys from both and reports
+                        mismatches — that job is the whole point, and it's the step people skip.
+                    </p>
+                    <p>
+                        <strong>Move reads gradually.</strong> Shift a small percentage of read traffic to the new
+                        store behind a flag, compare results, then ramp. Keep the old store writable and current
+                        until you're confident, because the ability to flip back within seconds is what makes the
+                        migration safe.
+                    </p>
+                    <p>
+                        <strong>Expect the dual-write window to be long</strong> — months, not days, for anything
+                        important — and budget for the fact that dual writes can themselves diverge when one side
+                        fails. An idempotent write path and a reconciliation job aren't optional extras here;
+                        they're the mechanism.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 13: Failure gallery -->
+        <h2 id="failures">
+            <span class="section-number">13</span>
+            Five Ways This Goes Wrong in Production
+        </h2>
+
+        <p>
+            The same material as incidents. Each one is a team making a defensible decision and meeting the part
+            of it they hadn't priced in.
+        </p>
+
+        <h3>1. The Migration That Was a Missing Index</h3>
+        <p>
+            Queries slow down as the table crosses 50 million rows. The team concludes the relational model has
+            hit its limit and spends a quarter moving to a document store. Latency improves — because the new
+            store was designed around the one access pattern that mattered, and it got a fresh index on the right
+            field. The same index on the original table would have delivered the same result in an afternoon.
+            They now own a second database, no joins, and no transactions. Always run <code>EXPLAIN</code> before
+            you run a migration.
+        </p>
+
+        <h3>2. Read Replicas Added to a Write-Bound System</h3>
+        <p>
+            Write latency climbs. Someone adds three read replicas. Nothing improves, and the primary gets
+            marginally slower because it's now also feeding three replication streams. Replicas scale reads;
+            writes still go through one node. The tell is the ratio — check writes per second against reads per
+            second before choosing a scaling move, because the two problems look identical on a latency graph and
+            have opposite fixes.
+        </p>
+
+        <h3>3. Sharded on Tenant ID, Then Signed an Enterprise Customer</h3>
+        <p>
+            The distribution is beautiful across four thousand small tenants. Then one customer arrives
+            representing 40% of all data and traffic, permanently pinned to one shard. Adding shards doesn't help
+            — a tenant is indivisible. The team ends up building a dedicated shard for that customer and special
+            routing for it, which is a reasonable answer that would have been much cheaper to design in from the
+            start. Any shard key with a natural whale needs an escape hatch on day one.
+        </p>
+
+        <h3>4. "Schemaless" Meant Five Schemas</h3>
+        <p>
+            Two years into a document store, one collection contains records written by four generations of the
+            application. Some have <code>address</code> as a string, some as an object, some as an array of
+            objects, and some not at all. Every read path is defensive; every new feature starts with an
+            archaeology session. The schema never went away — it stopped being enforced, versioned, or visible.
+            Schema validation and an explicit version field on every document cost almost nothing at the start and
+            are close to unaffordable to retrofit.
+        </p>
+
+        <h3>5. Eventual Consistency Met a Business Rule</h3>
+        <p>
+            Inventory moves to an eventually consistent store for write throughput. It works, until two customers
+            buy the last unit within the replication window and both get confirmations. The store did exactly what
+            it promised; nobody had asked whether "briefly wrong" was acceptable for this particular number. Some
+            data tolerates staleness and some doesn't, and the boundary is a business decision — not one the
+            database can make for you. This is the
+            <a href="availability-vs-consistency.html" style="color: var(--db-blue); font-weight: 600;">per-operation
+                choice</a> arriving at the storage layer.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ The Common Thread</div>
+            <p>
+                Four of these five are the same mistake: a technology was chosen to fix a symptom before anyone
+                measured the cause. The database was rarely the problem — the query, the index, the key, or the
+                assumption was.
+            </p>
+            <p>
+                One habit prevents most of it: before any storage change, write down the specific query, its
+                current plan, its volume, and the number it needs to hit. If you can't fill in that sentence, the
+                change is a guess.
+            </p>
+        </div>
+
+        <!-- Section 14: Interview -->
+        <h2 id="interview">
+            <span class="section-number">14</span>
+            Interview Essentials &amp; Level Expectations
+        </h2>
+
+        <p>
+            Database choice comes up in essentially every system design interview, usually as "what would you
+            store this in?" The trap is answering with a product name instead of a reason.
+        </p>
+
+        <div class="level-grid reveal-element">
+            <div class="level-card mid">
+                <div class="level-label">Mid-Level (E4)</div>
+                <h4>Know the Toolkit</h4>
+                <p>
+                    Explain ACID and what an index does. Distinguish the four NoSQL families and give a use case
+                    for each. Know that read replicas scale reads and sharding scales writes. Recognise the N+1
+                    query and how to fix it.
+                </p>
+                <span class="level-focus">80% Concepts · 20% Trade-offs</span>
+            </div>
+            <div class="level-card senior">
+                <div class="level-label">Senior (E5)</div>
+                <h4>Justify the Order</h4>
+                <p>
+                    Start from access patterns, not products. Walk the ladder — tune, cache, replicate, federate,
+                    denormalize, shard — and say why each step comes where it does. Defend a shard key. Name what
+                    federation costs you in joins and transactions.
+                </p>
+                <span class="level-focus">50% Design · 50% Depth</span>
+            </div>
+            <div class="level-card staff">
+                <div class="level-label">Staff+ (E6)</div>
+                <h4>Own the Data Architecture</h4>
+                <p>
+                    Design a polyglot topology and defend every store in it. Plan a live migration with dual
+                    writes, verification, and a rollback path. Reason about hot tenants, resharding, and cross-store
+                    consistency. Know when the senior answer is "one Postgres, tuned properly."
+                </p>
+                <span class="level-focus">30% Design · 70% Depth</span>
+            </div>
+        </div>
+
+        <h3>Questions Worth Rehearsing</h3>
+
+        <ul>
+            <li>
+                <em>"SQL or NoSQL for this?"</em> — Depends on the access patterns. Name the top queries first,
+                then answer per dataset. Volume alone doesn't decide it.
+            </li>
+            <li>
+                <em>"The database is slow. What do you do?"</em> — <code>EXPLAIN</code> the slowest queries by
+                total time consumed. Index, then cache, then replicate. Architecture last.
+            </li>
+            <li>
+                <em>"How would you shard this?"</em> — Pick a high-cardinality, evenly-distributed key that appears
+                in most queries. Then immediately say what breaks: cross-shard joins, transactions, global
+                uniqueness, and what happens when one tenant gets huge.
+            </li>
+            <li>
+                <em>"Master-slave or master-master?"</em> — Master-slave unless writes are geographically
+                partitioned. Master-master's write conflicts are a real cost and it doesn't double write
+                throughput.
+            </li>
+            <li>
+                <em>"When would you denormalize?"</em> — When a measured hot query is join-bound and already
+                indexed, and reads outnumber writes heavily. Prefer a materialized view so the database maintains
+                the copy.
+            </li>
+            <li>
+                <em>"Users say their update disappeared."</em> — Replica lag plus a read routed to a lagging
+                replica. Fix with read-your-writes routing, not by abandoning replicas.
+            </li>
+        </ul>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Senior Signal</div>
+            <p>
+                Volunteer what you're giving up. "I'd shard orders by <code>customer_id</code> — it's high
+                cardinality and it's in most of our queries, so reads hit one shard. What I lose is
+                cross-customer reporting, which becomes a scatter-gather, so I'd feed those into a separate
+                analytics store. And I'd cap any single customer's share before it becomes a hot shard."
+            </p>
+            <p>
+                Anyone can pick a shard key. The second half of that answer is what distinguishes someone who has
+                operated one.
+            </p>
+        </div>
+
+        <!-- Section 15: Summary -->
+        <h2 id="summary">
+            <span class="section-number">15</span>
+            Summary
+        </h2>
+
+        <p>
+            The database conversation goes wrong when it starts with products. It goes right when it starts with
+            the five questions from §01 — access patterns, read/write ratio, what must be transactional, volume
+            and growth, and the shape of the data.
+        </p>
+        <p>
+            The compressed version: relational databases give you transactions, joins, constraints, and a query
+            planner, and they scale much further than the reflex assumes — through tuning, caching, replication,
+            federation, denormalization, and finally sharding, in that order of cost. NoSQL isn't one thing; it's
+            four families that each drop different guarantees to buy different capabilities. Choose per dataset,
+            and make every extra store justify itself against a specific query you can name.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 11 — The Whole Decision Space on One Page</div>
+            <svg viewBox="0 0 780 450" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridD11" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenD11" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="81" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.3" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowD11" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="450" fill="#fefefe" rx="12" />
+                <rect width="780" height="450" fill="url(#dotGridD11)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">
+                    Start here → work down the left → cross over only when you must
+                </text>
+
+                <!-- Left column: the six moves -->
+                <rect x="35" y="45" width="340" height="290" rx="10" fill="#f0f9ff" stroke="#0369a1"
+                    stroke-width="1.8" filter="url(#roughenD11)" />
+                <text x="205" y="68" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">RELATIONAL — the six moves</text>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="55" y="96" fill="#0369a1" font-weight="700">1 · SQL tuning</text>
+                    <text x="175" y="96">EXPLAIN, index, kill the N+1</text>
+                    <text x="55" y="121" fill="#0369a1" font-weight="700">— cache —</text>
+                    <text x="175" y="121" fill="#86868b">not a DB move, but do it here</text>
+                    <text x="55" y="146" fill="#0369a1" font-weight="700">2 · denormalize</text>
+                    <text x="175" y="146">materialized views; reads ≫ writes</text>
+                    <text x="55" y="171" fill="#0369a1" font-weight="700">3 · master-slave</text>
+                    <text x="175" y="171">scales READS · watch replica lag</text>
+                    <text x="55" y="196" fill="#0369a1" font-weight="700">4 · master-master</text>
+                    <text x="175" y="196">write locality · conflicts are yours</text>
+                    <text x="55" y="221" fill="#0369a1" font-weight="700">5 · federation</text>
+                    <text x="175" y="221">split by domain · first write scaling</text>
+                    <text x="55" y="246" fill="#0369a1" font-weight="700">6 · sharding</text>
+                    <text x="175" y="246">split by data · no ceiling, no undo</text>
+                </g>
+                <path d="M 60 258 L 60 288" fill="none" stroke="#0369a1" stroke-width="1.4"
+                    marker-end="url(#exArrowD11)" />
+                <text x="205" y="286" fill="#0369a1" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">cost and permanence increase downward</text>
+                <text x="205" y="310" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">You keep: transactions · joins · constraints ·</text>
+                <text x="205" y="325" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">a query planner · ad-hoc queries</text>
+
+                <!-- Right column: the four families -->
+                <rect x="405" y="45" width="340" height="290" rx="10" fill="#f7fee7" stroke="#65a30d"
+                    stroke-width="1.8" filter="url(#roughenD11)" />
+                <text x="575" y="68" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">NOSQL — the four families</text>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#333">
+                    <text x="425" y="100" fill="#4d7c0f" font-weight="700">key-value</text>
+                    <text x="545" y="100">O(1) by key, nothing else</text>
+                    <text x="545" y="115" fill="#86868b" font-size="8">sessions · carts · counters · cache</text>
+
+                    <text x="425" y="146" fill="#4d7c0f" font-weight="700">document</text>
+                    <text x="545" y="146">whole entity in one record</text>
+                    <text x="545" y="161" fill="#86868b" font-size="8">catalogues · profiles · CMS</text>
+
+                    <text x="425" y="192" fill="#4d7c0f" font-weight="700">wide column</text>
+                    <text x="545" y="192">sorted keys, sparse columns</text>
+                    <text x="545" y="207" fill="#86868b" font-size="8">time series · logs · IoT · petabytes</text>
+
+                    <text x="425" y="238" fill="#4d7c0f" font-weight="700">graph</text>
+                    <text x="545" y="238">edges are pointers, not joins</text>
+                    <text x="545" y="253" fill="#86868b" font-size="8">social · fraud rings · permissions</text>
+                </g>
+                <text x="575" y="288" fill="#4d7c0f" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">pick the FAMILY first, the product second</text>
+                <text x="575" y="310" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">You give up: joins · multi-row ACID ·</text>
+                <text x="575" y="325" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">enforced schema · unplanned queries</text>
+
+                <!-- crossover -->
+                <path d="M 378 190 L 400 190" fill="none" stroke="#333" stroke-width="1.6"
+                    marker-end="url(#exArrowD11)" />
+                <text x="389" y="180" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">only when a</text>
+                <text x="389" y="205" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">query demands it</text>
+
+                <!-- bottom bar -->
+                <rect x="60" y="352" width="660" height="76" rx="9" fill="#fff7ed" stroke="#ea580c" stroke-width="1.8"
+                    filter="url(#roughenD11)" />
+                <text x="390" y="375" fill="#b45309" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">The five questions that come before any of this</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8.5" fill="#333"
+                    text-anchor="middle">
+                    <text x="390" y="396">access patterns · read:write ratio · what must be transactional ·</text>
+                    <text x="390" y="412">volume and growth · the shape of the data</text>
+                </g>
+            </svg>
+            <p class="diagram-caption">
+                Left column top to bottom before crossing over — and the orange bar is the part that determines
+                everything above it.
+            </p>
+        </div>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Concept</th>
+                    <th>One-Line Recall</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>The first question</td>
+                    <td>Access patterns decide the database — not row count, not fashion</td>
+                </tr>
+                <tr>
+                    <td>ACID</td>
+                    <td>Atomicity, Consistency, Isolation, Durability — drop it and you rebuild it worse</td>
+                </tr>
+                <tr>
+                    <td>SQL tuning</td>
+                    <td>EXPLAIN first; indexes turn linear scans into logarithmic ones</td>
+                </tr>
+                <tr>
+                    <td>Index cost</td>
+                    <td>Every index is a write tax — and the unused ones are pure tax</td>
+                </tr>
+                <tr>
+                    <td>N+1 query</td>
+                    <td>101 round trips where one join would do; invisible at low volume</td>
+                </tr>
+                <tr>
+                    <td>Denormalization</td>
+                    <td>Faster reads, slower and riskier writes — worth it at 100:1 read/write</td>
+                </tr>
+                <tr>
+                    <td>Materialized view</td>
+                    <td>Denormalization the database maintains, with an explicit staleness budget</td>
+                </tr>
+                <tr>
+                    <td>Master-slave</td>
+                    <td>Scales reads only; replica lag is per-replica, so alert on the max</td>
+                </tr>
+                <tr>
+                    <td>Master-master</td>
+                    <td>Write locality and fast failover — not 2× write throughput. Conflicts are yours</td>
+                </tr>
+                <tr>
+                    <td>Federation</td>
+                    <td>Split by domain; parallel writes, smaller working sets, no cross-domain joins</td>
+                </tr>
+                <tr>
+                    <td>Sharding</td>
+                    <td>Split by data; the only move with no ceiling and no easy undo</td>
+                </tr>
+                <tr>
+                    <td>Shard key</td>
+                    <td>High cardinality, even, in most queries, stable — and plan for the whale</td>
+                </tr>
+                <tr>
+                    <td>Consistent hashing</td>
+                    <td>Resizing moves ~1/N of keys instead of ~all of them</td>
+                </tr>
+                <tr>
+                    <td>Key-value</td>
+                    <td>O(1) by key and nothing else — sessions, carts, counters, cache</td>
+                </tr>
+                <tr>
+                    <td>Document</td>
+                    <td>Whole entity in one record; flexible shape becomes unversioned schema</td>
+                </tr>
+                <tr>
+                    <td>Wide column</td>
+                    <td>Sorted row keys, sparse timestamped columns — time series and huge tables</td>
+                </tr>
+                <tr>
+                    <td>Graph</td>
+                    <td>Traversal beats joins past ~3 hops; not for merely having relationships</td>
+                </tr>
+                <tr>
+                    <td>Polyglot persistence</td>
+                    <td>Right, and expensive — every store must earn its place with a named query</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Final Thought</div>
+            <p>
+                The most useful thing you can bring to a database decision isn't knowledge of exotic stores. It's
+                the discipline to ask what the top five queries are, run <code>EXPLAIN</code> on the slow one, and
+                say out loud what the proposed change costs — in joins, in transactions, in operational surface.
+            </p>
+            <p>
+                Most of the time that conversation ends with "index it and revisit in a year," and that's a good
+                outcome. The systems that age well are usually the ones that stayed boring for as long as they
+                honestly could.
+            </p>
+        </div>
+
+        <div class="callout" style="margin-top: 2rem;">
+            <div class="callout-label">Related Reading</div>
+            <p>
+                This is the fourth primer in the series.
+                <a href="performance-vs-scalability.html" style="color: var(--db-blue); font-weight: 600;">Performance
+                    vs scalability</a>
+                covers the general shape of the ladder above — why fixing the query beats adding machines.
+                <a href="availability-vs-consistency.html" style="color: var(--db-blue); font-weight: 600;">Availability
+                    vs consistency</a>
+                explains replication's failure modes and what "eventually consistent" actually promises, and
+                <a href="latency-vs-throughput.html" style="color: var(--db-blue); font-weight: 600;">latency vs
+                    throughput</a>
+                is where the connection-pool maths comes from. The
+                <a href="../DeepDives/caching-system-design.html" style="color: var(--db-blue); font-weight: 600;">caching
+                    deep dive</a>
+                covers step 2 of the ladder in full.
+            </p>
+        </div>
+    </article>
+
+    <!-- Author Footer -->
+    <div class="article-footer">
+        <div class="author-card reveal-element">
+            <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar" />
+            <div class="author-info">
+                <h4>Ajay Kotnala</h4>
+                <div class="author-role">Senior Solution Architect</div>
+                <p>
+                    15+ years designing cloud-native, event-driven architectures at enterprise scale. Passionate
+                    about system design, API-first thinking, and making complex systems feel simple.
+                </p>
+            </div>
+        </div>
+        <div class="back-links-row">
+            <a href="../index.html" class="back-link">← Back to Portfolio</a>
+            <a href="./index.html" class="back-link">Back to Primer Articles →</a>
+        </div>
+    </div>
+
+    <!-- Global Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-bottom">
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank">LinkedIn</a>
+                    <a href="https://github.com/ajaykotnala" target="_blank">GitHub</a>
+                    <a href="https://medium.com/@ajay.kotnalajpr" target="_blank">Medium</a>
+                </div>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll Progress Bar
+        window.addEventListener("scroll", () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrollTop / docHeight) * 100;
+            document.getElementById("progressBar").style.width = progress + "%";
+        });
+
+        // Intersection Observer for scroll-reveal animations
+        document.addEventListener("DOMContentLoaded", () => {
+            const observerOptions = {
+                threshold: 0.12,
+                rootMargin: "0px 0px -40px 0px",
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("active");
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll(".reveal-element").forEach((el) => {
+                observer.observe(el);
+            });
+        });
+
+        // Deep Dive Accordion
+        function toggleDeepDive(id) {
+            const content = document.getElementById(id);
+            if (!content) return;
+            const panel = content.closest(".deep-dive");
+            if (panel) panel.classList.toggle("open");
+        }
+
+        // Smooth scroll for TOC and anchor links
+        document.querySelectorAll('.toc a, a[href^="#"]').forEach((anchor) => {
+            anchor.addEventListener("click", function (e) {
+                const targetId = this.getAttribute("href");
+                if (targetId.startsWith("#")) {
+                    e.preventDefault();
+                    const target = document.querySelector(targetId);
+                    if (target) {
+                        const offset = 110;
+                        const targetPosition = target.getBoundingClientRect().top + window.scrollY - offset;
+                        window.scrollTo({ top: targetPosition, behavior: "smooth" });
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

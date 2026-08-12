@@ -1,0 +1,45 @@
+<svg font-family="'Instrument Sans',sans-serif" viewbox="0 0 620 230" xmlns="http://www.w3.org/2000/svg">
+<rect fill="#ede7d9" height="230" width="620"></rect>
+<defs>
+<marker id="p1-01-creational-fig01-a1" markerheight="8" markerwidth="8" orient="auto" refx="6" refy="3">
+<path d="M0,0 L0,6 L8,3z" fill="#b5451b"></path>
+</marker>
+<marker id="p1-01-creational-fig01-a2" markerheight="8" markerwidth="8" orient="auto" refx="6" refy="3">
+<path d="M0,0 L0,6 L8,3z" fill="#2a6e3f"></path>
+</marker>
+</defs>
+<!-- CLASS BOX -->
+<rect fill="#f5f0e8" height="138" rx="1" stroke="#3a3628" stroke-width="1.5" width="230" x="195" y="24"></rect>
+<rect fill="#1c1a14" height="32" rx="1" width="230" x="195" y="24"></rect>
+<rect fill="#1c1a14" height="14" width="230" x="195" y="42"></rect>
+<text fill="#f5f0e8" font-family="'Fraunces',serif" font-size="13" font-style="italic" font-weight="700" text-anchor="middle" x="310" y="44">Singleton</text>
+<line stroke="#d4c9b5" stroke-width="0.8" x1="195" x2="425" y1="56" y2="56"></line>
+<text fill="#b5451b" font-family="'Fira Code',monospace" font-size="9.5" x="210" y="74">_instance =
+                    None</text>
+<text fill="#b5451b" font-family="'Fira Code',monospace" font-size="9.5" x="210" y="90">_lock:
+                    threading.Lock</text>
+<line stroke="#d4c9b5" stroke-width="0.8" x1="195" x2="425" y1="100" y2="100"></line>
+<text fill="#c8971a" font-family="'Fira Code',monospace" font-size="9.5" x="210" y="118">__new__(cls)</text>
+<text fill="#2a6e3f" font-family="'Fira Code',monospace" font-size="9.5" x="210" y="134">get_instance()
+                    → Self</text>
+<text fill="#8a8070" font-family="'Fira Code',monospace" font-size="9.5" x="210" y="150">business_logic()</text>
+<!-- CLIENT A -->
+<rect fill="#f5f0e8" height="40" rx="1" stroke="#d4c9b5" stroke-width="1.5" width="126" x="26" y="148"></rect>
+<text fill="#1c1a14" font-family="'Fraunces',serif" font-size="10" font-style="italic" text-anchor="middle" x="89" y="165">Client A</text>
+<text fill="#8a8070" font-size="8.5" text-anchor="middle" x="89" y="180">get_instance()</text>
+<!-- CLIENT B -->
+<rect fill="#f5f0e8" height="40" rx="1" stroke="#d4c9b5" stroke-width="1.5" width="126" x="468" y="148"></rect>
+<text fill="#1c1a14" font-family="'Fraunces',serif" font-size="10" font-style="italic" text-anchor="middle" x="531" y="165">Client B</text>
+<text fill="#8a8070" font-size="8.5" text-anchor="middle" x="531" y="180">get_instance()</text>
+<!-- Arrows -->
+<line marker-end="url(#p1-01-creational-fig01-a1)" stroke="#b5451b" stroke-dasharray="5,3" stroke-width="1.5" x1="152" x2="195" y1="163" y2="113"></line>
+<line marker-end="url(#p1-01-creational-fig01-a1)" stroke="#b5451b" stroke-dasharray="5,3" stroke-width="1.5" x1="468" x2="425" y1="163" y2="113"></line>
+<text fill="#b5451b" font-size="8.5" font-style="italic" x="140" y="138">same ref</text>
+<text fill="#b5451b" font-size="8.5" font-style="italic" x="428" y="138">same ref</text>
+<!-- Note -->
+<rect fill="#fdf6e3" height="40" rx="1" stroke="#d4c9b5" width="230" x="195" y="178"></rect>
+<text fill="#c8971a" font-size="8.5" text-anchor="middle" x="310" y="193">🔒 Double-checked
+                    locking</text>
+<text fill="#8a8070" font-size="8.5" text-anchor="middle" x="310" y="208">thread-safe creation on first
+                    call only</text>
+</svg>

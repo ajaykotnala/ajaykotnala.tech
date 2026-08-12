@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 320" style="max-width: 780px">
+<defs>
+<pattern id="p2-06-data-storage-fig04-dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+<circle cx="10" cy="10" r="0.8" fill="#d0d0d0"/></pattern>
+<filter id="p2-06-data-storage-fig04-roughen" x="-2%" y="-2%" width="104%" height="104%">
+<feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="7" result="n"/>
+<feDisplacementMap in="SourceGraphic" in2="n" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+</filter>
+<marker id="p2-06-data-storage-fig04-arw" viewBox="0 0 12 12" refX="10" refY="6"
+ markerWidth="10" markerHeight="10" orient="auto">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333"
+ stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="p2-06-data-storage-fig04-arwRed" viewBox="0 0 12 12" refX="10" refY="6"
+ markerWidth="10" markerHeight="10" orient="auto">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#c62828"
+ stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="780" height="320" rx="12" fill="#fefefe"/>
+<rect width="780" height="320" rx="12" fill="url(#p2-06-data-storage-fig04-dotGrid)"/>
+<text x="390" y="26" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" fill="#3d3728" text-anchor="middle" font-weight="700">PARTITION KEY DECIDES WHETHER SCALING WORKS</text>
+<rect x="40" y="50" width="330" height="250" rx="8" fill="#ffebee" stroke="#c62828" stroke-width="1.6" filter="url(#p2-06-data-storage-fig04-roughen)"/>
+<text x="205" y="74" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" fill="#c62828" text-anchor="middle" font-weight="700">RANGE by timestamp</text>
+<rect x="75" y="232" width="60" height="8" rx="4" fill="#e0e0e0" stroke="#86868b" stroke-width="1.2" filter="url(#p2-06-data-storage-fig04-roughen)"/>
+<text x="105" y="258" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" fill="#86868b" text-anchor="middle" font-weight="400">node 1</text>
+<text x="105" y="224" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" fill="#86868b" text-anchor="middle" font-weight="700">6%</text>
+<rect x="175" y="230" width="60" height="10" rx="4" fill="#e0e0e0" stroke="#86868b" stroke-width="1.2" filter="url(#p2-06-data-storage-fig04-roughen)"/>
+<text x="205" y="258" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" fill="#86868b" text-anchor="middle" font-weight="400">node 2</text>
+<text x="205" y="222" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" fill="#86868b" text-anchor="middle" font-weight="700">10%</text>
+<rect x="275" y="144" width="60" height="96" rx="4" fill="#c62828" stroke="#c62828" stroke-width="1.2" filter="url(#p2-06-data-storage-fig04-roughen)"/>
+<text x="305" y="258" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" fill="#86868b" text-anchor="middle" font-weight="400">node 3</text>
+<text x="305" y="136" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" fill="#c62828" text-anchor="middle" font-weight="700">96%</text>
+<text x="205" y="282" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" fill="#c62828" text-anchor="middle" font-weight="400" font-style="italic">all of today's writes land on one node</text>
+<rect x="410" y="50" width="330" height="250" rx="8" fill="#e8f5e9" stroke="#0ba360" stroke-width="1.6" filter="url(#p2-06-data-storage-fig04-roughen)"/>
+<text x="575" y="74" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" fill="#2e7d32" text-anchor="middle" font-weight="700">HASH of user_id</text>
+<rect x="445" y="202" width="60" height="38" rx="4" fill="#c8e6c9" stroke="#0ba360" stroke-width="1.2" filter="url(#p2-06-data-storage-fig04-roughen)"/>
+<text x="475" y="258" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" fill="#86868b" text-anchor="middle" font-weight="400">node 1</text>
+<text x="475" y="194" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" fill="#2e7d32" text-anchor="middle" font-weight="700">33%</text>
+<rect x="545" y="202" width="60" height="38" rx="4" fill="#c8e6c9" stroke="#0ba360" stroke-width="1.2" filter="url(#p2-06-data-storage-fig04-roughen)"/>
+<text x="575" y="258" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" fill="#86868b" text-anchor="middle" font-weight="400">node 2</text>
+<text x="575" y="194" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" fill="#2e7d32" text-anchor="middle" font-weight="700">33%</text>
+<rect x="645" y="202" width="60" height="38" rx="4" fill="#c8e6c9" stroke="#0ba360" stroke-width="1.2" filter="url(#p2-06-data-storage-fig04-roughen)"/>
+<text x="675" y="258" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" fill="#86868b" text-anchor="middle" font-weight="400">node 3</text>
+<text x="675" y="194" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" fill="#2e7d32" text-anchor="middle" font-weight="700">33%</text>
+<text x="575" y="282" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" fill="#2e7d32" text-anchor="middle" font-weight="400" font-style="italic">even writes — but range scans now hit every node</text>
+</svg>

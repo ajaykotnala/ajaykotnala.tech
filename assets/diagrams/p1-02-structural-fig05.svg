@@ -1,0 +1,49 @@
+<svg font-family="'JetBrains Mono',monospace" viewbox="0 0 660 220" xmlns="http://www.w3.org/2000/svg">
+<rect fill="#13161d" height="220" width="660"></rect>
+<defs>
+<marker id="p1-02-structural-fig05-cm1" markerheight="8" markerwidth="8" orient="auto" refx="6" refy="3">
+<path d="M0,0 L0,6 L8,3z" fill="#272d3d"></path>
+</marker>
+</defs>
+<!-- FileSystem interface (top center) -->
+<rect fill="#1a1e28" height="60" rx="1" stroke="#272d3d" stroke-width="1.5" width="200" x="230" y="10"></rect>
+<rect fill="#0a0c10" height="20" rx="1" width="200" x="230" y="10"></rect>
+<rect fill="#0a0c10" height="10" width="200" x="230" y="20"></rect>
+<text fill="#6272a4" font-size="7.5" letter-spacing="0.5" text-anchor="middle" x="300" y="18">«interface»</text>
+<text fill="#8be9fd" font-size="11" font-style="italic" text-anchor="middle" x="330" y="28">FileSystem</text>
+<line stroke="#272d3d" stroke-width="0.8" x1="230" x2="430" y1="30" y2="30"></line>
+<text fill="#ffb86c" font-size="8.5" x="242" y="46">size(): string</text>
+<text fill="#ffb86c" font-size="8.5" x="242" y="59">listcommand(): void</text>
+<!-- Implements arrows -->
+<line stroke="#272d3d" stroke-width="1.5" x1="310" x2="170" y1="70" y2="108"></line>
+<polygon fill="#1a1e28" points="310,70 305,82 316,82" stroke="#272d3d" stroke-width="1.5"></polygon>
+<line stroke="#272d3d" stroke-width="1.5" x1="355" x2="490" y1="70" y2="108"></line>
+<polygon fill="#1a1e28" points="355,70 350,82 361,82" stroke="#272d3d" stroke-width="1.5"></polygon>
+<!-- file (leaf) -->
+<rect fill="#1a1e28" height="70" rx="1" stroke="#272d3d" stroke-width="1.5" width="220" x="60" y="108"></rect>
+<rect fill="#0a0c10" height="22" rx="1" width="220" x="60" y="108"></rect>
+<rect fill="#0a0c10" height="12" width="220" x="60" y="118"></rect>
+<text fill="#6272a4" font-size="8" letter-spacing="0.5" text-anchor="middle" x="130" y="117">«leaf»</text>
+<text fill="#dce4f5" font-size="11" font-style="italic" text-anchor="middle" x="170" y="125">file</text>
+<line stroke="#272d3d" stroke-width="0.8" x1="60" x2="280" y1="130" y2="130"></line>
+<text fill="#ff79c6" font-size="8.5" x="72" y="147">-name: string</text>
+<text fill="#ff79c6" font-size="8.5" x="72" y="161">-space: string</text>
+<text fill="#50fa7b" font-size="8.5" x="72" y="174">size() / listcommand()</text>
+<text fill="#6272a4" font-size="7" letter-spacing="0.5" text-anchor="middle" x="170" y="193">no children
+                    — leaf node</text>
+<!-- directory (composite) -->
+<rect fill="#1a1e28" height="88" rx="1" stroke="#4f8ef7" stroke-width="1.5" width="240" x="370" y="108"></rect>
+<rect fill="#0f1520" height="22" rx="1" width="240" x="370" y="108"></rect>
+<rect fill="#0f1520" height="12" width="240" x="370" y="118"></rect>
+<text fill="#4f8ef7" font-size="8" letter-spacing="0.5" text-anchor="middle" x="450" y="117">«composite»</text>
+<text fill="#8be9fd" font-size="11" font-style="italic" text-anchor="middle" x="490" y="125">directory</text>
+<line stroke="#272d3d" stroke-width="0.8" x1="370" x2="610" y1="130" y2="130"></line>
+<text fill="#ff79c6" font-size="8.5" x="382" y="147">-name: string</text>
+<text fill="#ff79c6" font-size="8.5" x="382" y="161">-folderlist: FileSystem[]</text>
+<text fill="#50fa7b" font-size="8.5" x="382" y="175">size() / listcommand()</text>
+<text fill="#50fa7b" font-size="8.5" x="382" y="188">addfile(fs: FileSystem)</text>
+<!-- self-reference loop -->
+<path d="M610 170 Q645 170 645 196 Q645 215 490 215 Q370 215 370 196 Q370 183 382 180" fill="none" stroke="#4f8ef7" stroke-dasharray="4,2" stroke-width="1"></path>
+<text fill="#4f8ef7" font-size="7" font-style="italic" text-anchor="middle" x="490" y="213">contains
+                    FileSystem[] (recursive)</text>
+</svg>

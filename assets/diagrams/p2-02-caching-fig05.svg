@@ -1,0 +1,54 @@
+<svg style="max-width: 780px" viewbox="0 0 780 240" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p2-02-caching-fig05-dotGridK5" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p2-02-caching-fig05-roughenK5" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="15" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p2-02-caching-fig05-exArrowK5" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#e11d48" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="240" rx="12" width="780"></rect>
+<rect fill="url(#p2-02-caching-fig05-dotGridK5)" height="240" rx="12" width="780"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="120" y="40">
+                    GET user:9999991
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="120" y="58">
+                    GET user:9999992
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="120" y="76">
+                    ... (IDs that don't exist)
+                </text>
+<rect fill="#fff1f2" filter="url(#p2-02-caching-fig05-roughenK5)" height="70" rx="9" stroke="#e11d48" stroke-width="1.5" width="150" x="260" y="30"></rect>
+<text fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="335" y="55">
+                    Cache
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="335" y="72">
+                    always a miss —
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="335" y="86">
+                    nothing to hit
+                </text>
+<rect fill="#fff7ed" filter="url(#p2-02-caching-fig05-roughenK5)" height="70" rx="9" stroke="#d97706" stroke-width="1.5" width="150" x="500" y="30"></rect>
+<text fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="575" y="55">
+                    Database
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="575" y="72">
+                    queried every
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="575" y="86">
+                    single time
+                </text>
+<path d="M 175 55 L 256 55" fill="none" marker-end="url(#p2-02-caching-fig05-exArrowK5)" stroke="#333" stroke-width="1.5"></path>
+<path d="M 410 65 L 496 65" fill="none" marker-end="url(#p2-02-caching-fig05-exArrowK5)" stroke="#e11d48" stroke-width="2"></path>
+<rect fill="#f5f5f7" filter="url(#p2-02-caching-fig05-roughenK5)" height="60" rx="9" stroke="#333" stroke-dasharray="4,3" stroke-width="1.2" width="620" x="80" y="150"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="390" y="175">
+                    Fix: cache the absence too — "user:9999991 → NOT_FOUND, TTL 30s"
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="390" y="193">
+                    Now repeated lookups of the same missing key hit the cache, not the database
+                </text>
+</svg>

@@ -1,0 +1,70 @@
+<svg style="max-width: 780px" viewbox="0 0 780 320" xmlns="http://www.w3.org/2000/svg"><defs><marker id="p3-02-ticketing-fig02-exArrowBlue" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker><pattern height="20" id="p3-02-ticketing-fig02-dotGrid" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern><marker id="p3-02-ticketing-fig02-exArrowRed" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#C4242D" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker><marker id="p3-02-ticketing-fig02-exArrow" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker><filter height="102%" id="p3-02-ticketing-fig02-roughenLight" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="5" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter><filter height="104%" id="p3-02-ticketing-fig02-roughen" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="2" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter></defs>
+<rect fill="#fefefe" height="320" rx="12" width="780"></rect>
+<rect fill="url(#p3-02-ticketing-fig02-dotGrid)" height="320" rx="12" width="780"></rect>
+<!-- Client -->
+<rect fill="#eef6ff" filter="url(#p3-02-ticketing-fig02-roughen)" height="120" rx="16" stroke="#333" stroke-width="2" width="110" x="30" y="100"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="20" text-anchor="middle" x="85" y="155">
+                    🔍
+                </text>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" text-anchor="middle" x="85" y="178">
+                    Client
+                </text>
+<!-- Arrow -->
+<path d="M 142 160 C 160 158, 175 162, 198 160" fill="none" filter="url(#p3-02-ticketing-fig02-roughenLight)" marker-end="url(#p3-02-ticketing-fig02-exArrow)" stroke="#333" stroke-linecap="round" stroke-width="2"></path>
+<!-- Load Balancer -->
+<rect fill="#fff3e0" filter="url(#p3-02-ticketing-fig02-roughen)" height="90" rx="10" stroke="#e56b47" stroke-width="2" width="100" x="205" y="115"></rect>
+<text fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="600" text-anchor="middle" x="255" y="155">
+                    Load
+                </text>
+<text fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="600" text-anchor="middle" x="255" y="173">
+                    Balancer
+                </text>
+<!-- Arrow -->
+<path d="M 305 160 C 320 158, 335 162, 355 160" fill="none" filter="url(#p3-02-ticketing-fig02-roughenLight)" marker-end="url(#p3-02-ticketing-fig02-exArrow)" stroke="#333" stroke-linecap="round" stroke-width="2"></path>
+<!-- API Gateway -->
+<rect fill="#e3f2fd" filter="url(#p3-02-ticketing-fig02-roughen)" height="90" rx="10" stroke="#0066cc" stroke-width="2" width="105" x="362" y="115"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="600" text-anchor="middle" x="414" y="155">
+                    API GW
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="414" y="173">
+                    Auth · Route
+                </text>
+<!-- Arrow -->
+<path d="M 467 160 C 485 158, 500 162, 518 160" fill="none" filter="url(#p3-02-ticketing-fig02-roughenLight)" marker-end="url(#p3-02-ticketing-fig02-exArrowBlue)" stroke="#0066cc" stroke-dasharray="6,4" stroke-linecap="round" stroke-width="2"></path>
+<!-- Search Service -->
+<rect fill="#fce4ec" filter="url(#p3-02-ticketing-fig02-roughen)" height="120" rx="10" stroke="#C4242D" stroke-width="2" width="110" x="525" y="100"></rect>
+<text fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="600" text-anchor="middle" x="580" y="148">
+                    Search
+                </text>
+<text fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="600" text-anchor="middle" x="580" y="168">
+                    Service
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="580" y="195">
+                    Filter · Paginate
+                </text>
+<!-- Arrow to DB -->
+<path d="M 580 220 C 580 240, 580 250, 580 265" fill="none" filter="url(#p3-02-ticketing-fig02-roughenLight)" marker-end="url(#p3-02-ticketing-fig02-exArrowRed)" stroke="#C4242D" stroke-linecap="round" stroke-width="2"></path>
+<!-- Events DB -->
+<ellipse cx="580" cy="268" fill="#fce4ec" filter="url(#p3-02-ticketing-fig02-roughen)" rx="45" ry="14" stroke="#333" stroke-width="1.5"></ellipse>
+<path d="M 535 268 L 535 298" filter="url(#p3-02-ticketing-fig02-roughenLight)" stroke="#333" stroke-width="1.5"></path>
+<path d="M 625 268 L 625 298" filter="url(#p3-02-ticketing-fig02-roughenLight)" stroke="#333" stroke-width="1.5"></path>
+<ellipse cx="580" cy="298" fill="#fce4ec" filter="url(#p3-02-ticketing-fig02-roughen)" rx="45" ry="14" stroke="#333" stroke-width="1.5"></ellipse>
+<rect fill="#fce4ec" height="30" stroke="none" width="90" x="535" y="268"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="600" text-anchor="middle" x="580" y="290">
+                    Events DB
+                </text>
+</svg>

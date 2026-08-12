@@ -1,0 +1,3869 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Latency vs Throughput — System Design Primer | Ajay Kotnala</title>
+    <meta name="description"
+        content="A system design primer on latency and throughput — what each one actually measures, Little's Law, percentiles and tail latency, the queueing cliff at high utilization, the three levers that trade one for the other, and how to measure both honestly. Written by Ajay Kotnala, Senior Solution Architect." />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+        rel="stylesheet" />
+    <style>
+        /* ===== Apple Design Tokens (matching index.html) ===== */
+        :root {
+            /* Color System */
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-pearl: #fafafc;
+            --color-on-primary: #ffffff;
+
+            /* Latency/Throughput brand accents (article identity) */
+            --lt-indigo: #4f46e5;
+            --lt-teal: #0d9488;
+            --lt-rose: #e11d48;
+            --lt-gradient: linear-gradient(135deg, #4f46e5, #0d9488);
+
+            /* Typography */
+            --font-headline:
+                system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+                sans-serif;
+            --font-body: "Lora", Georgia, "Times New Roman", serif;
+            --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+
+            /* Border Radii */
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            /* Shadows */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06);
+
+            /* Article */
+            --article-width: 680px;
+        }
+
+        /* ===== Reset ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* ===== 1. Global Navigation Bar ===== */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            font-family: var(--font-ui);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .global-nav-logo .logo-icon {
+            font-size: 16px;
+            color: var(--color-primary-on-dark);
+        }
+
+        .global-nav-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .global-nav-actions a {
+            color: #cccccc;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .global-nav-actions a:hover {
+            color: #ffffff;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ===== 2. Sub Navigation Bar (Frosted Sticky) ===== */
+        .sub-nav-frosted {
+            position: sticky;
+            top: 44px;
+            left: 0;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 999;
+            border-bottom: 1px solid var(--color-divider-soft);
+        }
+
+        .sub-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .sub-nav-title {
+            font-family: var(--font-headline);
+            font-size: 21px;
+            font-weight: 600;
+            color: var(--color-ink);
+            text-decoration: none;
+            letter-spacing: 0.231px;
+        }
+
+        .sub-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sub-nav-link {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink);
+            text-decoration: none;
+            opacity: 0.8;
+            transition:
+                color 0.2s ease,
+                opacity 0.2s ease;
+        }
+
+        .sub-nav-link:hover {
+            color: var(--color-primary);
+            opacity: 1;
+        }
+
+        .sub-nav-button {
+            background: var(--color-primary);
+            color: var(--color-on-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            border-radius: var(--rounded-pill);
+            text-decoration: none;
+            transition:
+                background 0.2s ease,
+                transform 0.1s ease;
+        }
+
+        .sub-nav-button:hover {
+            background: var(--color-primary-focus);
+        }
+
+        .sub-nav-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== Scroll Progress Bar ===== */
+        .progress-bar {
+            position: fixed;
+            top: 44px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--lt-gradient);
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        /* ===== Article Hero ===== */
+        .article-hero {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(96px + 4rem) 2rem 4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .article-hero-inner {
+            max-width: var(--article-width);
+            width: 100%;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .article-category {
+            display: inline-block;
+            padding: 4px 14px;
+            background: var(--lt-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .article-date {
+            color: var(--color-body-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .article-read-time {
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 13px;
+        }
+
+        .article-read-time::before {
+            content: "·";
+            margin-right: 0.5rem;
+            color: var(--color-body-muted);
+        }
+
+        .article-hero h1 {
+            font-family: var(--font-headline);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+        }
+
+        .article-hero h1 .gradient-text {
+            background: var(--lt-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .article-hero-desc {
+            font-family: var(--font-body);
+            font-size: 20px;
+            color: var(--color-body-muted);
+            line-height: 1.7;
+            max-width: 600px;
+        }
+
+        .article-hero-desc em {
+            font-style: italic;
+            color: var(--color-ink-muted-80);
+        }
+
+        /* ===== Author Bar ===== */
+        .author-bar {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--color-divider-soft);
+            margin-bottom: 2.5rem;
+        }
+
+        .author-bar-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-bar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .author-bar-name {
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-ink);
+        }
+
+        .author-bar-meta {
+            font-family: var(--font-ui);
+            font-size: 13px;
+            color: var(--color-body-muted);
+        }
+
+        /* ===== Table of Contents ===== */
+        .toc-wrapper {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .toc {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem 2.5rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--lt-gradient);
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toc h3 {
+            font-size: 12px;
+            margin-bottom: 1.2rem;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            padding: 0.35rem 0;
+        }
+
+        .toc li a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 15px;
+            transition:
+                color 0.2s ease,
+                padding-left 0.2s ease;
+            display: inline-block;
+        }
+
+        .toc li a::before {
+            content: counter(toc-counter, decimal-leading-zero) ".";
+            color: var(--lt-indigo);
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-right: 0.8rem;
+            font-size: 13px;
+        }
+
+        .toc li a:hover {
+            color: var(--color-primary);
+            padding-left: 4px;
+        }
+
+        /* ===== Article Body ===== */
+        .article-body {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .article-body h2 {
+            font-family: var(--font-headline);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-top: 3.5rem;
+            margin-bottom: 1.2rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .article-body h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .article-body h2 .section-number {
+            color: var(--lt-indigo);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .article-body h3 {
+            font-family: var(--font-headline);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-top: 2.5rem;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .article-body p {
+            font-family: var(--font-body);
+            font-size: 19px;
+            line-height: 1.85;
+            color: var(--color-ink-muted-80);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.003em;
+        }
+
+        .article-body ul,
+        .article-body ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .article-body li {
+            font-family: var(--font-body);
+            color: var(--color-ink-muted-80);
+            margin-bottom: 0.6rem;
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .article-body strong {
+            color: var(--color-ink);
+            font-weight: 600;
+        }
+
+        .article-body em {
+            color: var(--color-ink-muted-80);
+            font-style: italic;
+        }
+
+        .article-body code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--color-canvas-parchment);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--lt-indigo);
+        }
+
+        /* ===== Callout Boxes ===== */
+        .callout {
+            background: var(--color-canvas-parchment);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 0 var(--rounded-sm) var(--rounded-sm) 0;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .callout.callout-warning {
+            border-left-color: var(--lt-rose);
+            background: #fff1f2;
+        }
+
+        .callout.callout-insight {
+            border-left-color: var(--lt-indigo);
+            background: #eef2ff;
+        }
+
+        .callout.callout-throughput {
+            border-left-color: var(--lt-teal);
+            background: #ecfdf5;
+        }
+
+        .callout .callout-label {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.6rem;
+            color: var(--color-primary);
+        }
+
+        .callout.callout-warning .callout-label {
+            color: var(--lt-rose);
+        }
+
+        .callout.callout-insight .callout-label {
+            color: var(--lt-indigo);
+        }
+
+        .callout.callout-throughput .callout-label {
+            color: var(--lt-teal);
+        }
+
+        .callout p {
+            margin-bottom: 0;
+            font-size: 16px !important;
+            line-height: 1.7 !important;
+        }
+
+        .callout p + p {
+            margin-top: 0.8rem;
+        }
+
+        /* ===== Code Blocks ===== */
+        .code-block {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-hairline);
+            border-radius: var(--rounded-sm);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0 2rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--color-hairline);
+            color: var(--color-body-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 0 var(--rounded-sm) 0 var(--rounded-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--color-ink);
+            line-height: 1.7;
+            white-space: pre;
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .code-block .keyword {
+            color: #cf222e;
+        }
+
+        .code-block .string {
+            color: #0a3069;
+        }
+
+        .code-block .comment {
+            color: #6e7781;
+            font-style: italic;
+        }
+
+        .code-block .type {
+            color: #953800;
+        }
+
+        .code-block .number {
+            color: #0550ae;
+        }
+
+        /* ===== Entity Cards ===== */
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .entity-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 1.8rem;
+            text-align: center;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .entity-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .entity-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .entity-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .entity-card p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ===== Excalidraw-Style SVG Diagrams ===== */
+        .diagram-container {
+            margin: 3rem -2rem;
+            padding: 2rem;
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            overflow-x: auto;
+        }
+
+        .diagram-title {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-body-muted);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .diagram-caption {
+            text-align: center;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            margin-top: 1rem;
+            font-style: italic;
+        }
+
+        .diagram-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== Comparison Table ===== */
+        .comparison-table-wrapper {
+            overflow-x: auto;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 2rem 0;
+            border-radius: var(--rounded-md);
+            overflow: hidden;
+            border: 1px solid var(--color-divider-soft);
+            font-family: var(--font-ui);
+        }
+
+        .comparison-table th {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            background: var(--color-canvas);
+            color: var(--color-ink-muted-80);
+            font-size: 15px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--color-divider-soft);
+            line-height: 1.5;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--color-canvas-parchment);
+        }
+
+        .comparison-table td code,
+        .comparison-table th code {
+            font-size: 13px;
+        }
+
+        .lat-cell {
+            color: var(--lt-indigo);
+            font-weight: 600;
+        }
+
+        .thr-cell {
+            color: var(--lt-teal);
+            font-weight: 600;
+        }
+
+        /* ===== Scale Numbers ===== */
+        .scale-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .scale-stat {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 1.2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition:
+                box-shadow 0.3s ease,
+                transform 0.3s ease;
+        }
+
+        .scale-stat:hover {
+            box-shadow: var(--shadow-card);
+            transform: translateY(-2px);
+        }
+
+        .scale-stat::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--lt-gradient);
+        }
+
+        .scale-stat .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            background: var(--lt-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-headline);
+        }
+
+        .scale-stat .stat-desc {
+            color: var(--color-body-muted);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ===== Deep Dive Accordion ===== */
+        .deep-dive {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            margin: 1.5rem 0;
+            overflow: hidden;
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .deep-dive:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .deep-dive-header {
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            transition: background 0.2s ease;
+        }
+
+        .deep-dive-header:hover {
+            background: var(--color-canvas-parchment);
+        }
+
+        .deep-dive-header h4 {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--color-ink);
+        }
+
+        .deep-dive-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-canvas-parchment);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            transition:
+                transform 0.3s ease,
+                background 0.3s ease;
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        .deep-dive.open .deep-dive-toggle {
+            transform: rotate(45deg);
+            background: #eef2ff;
+            color: var(--lt-indigo);
+        }
+
+        .deep-dive-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .deep-dive.open .deep-dive-content {
+            max-height: 3000px;
+        }
+
+        .deep-dive-content-inner {
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .deep-dive-content-inner p,
+        .deep-dive-content-inner li {
+            font-size: 16px !important;
+        }
+
+        /* ===== Level Expectation Cards ===== */
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .level-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .level-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .level-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .level-card.mid::before {
+            background: var(--color-primary);
+        }
+
+        .level-card.senior::before {
+            background: var(--lt-indigo);
+        }
+
+        .level-card.staff::before {
+            background: var(--lt-teal);
+        }
+
+        .level-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .level-card.mid .level-label {
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-label {
+            color: var(--lt-indigo);
+        }
+
+        .level-card.staff .level-label {
+            color: var(--lt-teal);
+        }
+
+        .level-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .level-card p {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .level-focus {
+            display: inline-block;
+            margin-top: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .level-card.mid .level-focus {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-focus {
+            background: #eef2ff;
+            color: var(--lt-indigo);
+        }
+
+        .level-card.staff .level-focus {
+            background: #ecfdf5;
+            color: var(--lt-teal);
+        }
+
+        /* ===== Author Footer Card ===== */
+        .article-footer {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+        }
+
+        .author-card {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-canvas);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            flex-shrink: 0;
+        }
+
+        .author-info h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: var(--color-ink);
+        }
+
+        .author-info .author-role {
+            color: var(--color-primary);
+            font-size: 14px;
+            font-family: var(--font-ui);
+            margin-bottom: 0.6rem;
+        }
+
+        .author-info p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+        }
+
+        .back-links-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-weight: 500;
+            font-size: 15px;
+            transition: gap 0.2s ease;
+        }
+
+        .back-link:hover {
+            gap: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* ===== Global Footer ===== */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .footer-container {
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .social-links a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        .fine-print {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink-muted-48);
+            letter-spacing: -0.12px;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 833px) {
+            .sub-nav-container {
+                padding: 0 16px;
+            }
+
+            .article-hero {
+                padding: calc(96px + 2rem) 1.5rem 3rem;
+            }
+
+            .article-body {
+                padding: 0 1.5rem 4rem;
+            }
+
+            .toc-wrapper {
+                padding: 0 1.5rem;
+            }
+
+            .entity-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .scale-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .level-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .author-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .diagram-container {
+                margin: 2rem -1rem;
+                padding: 1.5rem 1rem;
+            }
+
+            .comparison-table {
+                font-size: 14px;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 8px 10px;
+            }
+
+            .author-bar {
+                padding: 0 1.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .scale-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        /* ===== Animations ===== */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(24px);
+            transition:
+                opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1),
+                transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .reveal-element.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- 1. Global Navigation Bar -->
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="index.html" class="global-nav-logo">
+                <span class="logo-icon">[AK]</span>
+                Ajay Kotnala
+            </a>
+            <div class="global-nav-actions">
+                <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
+                    </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" aria-label="LinkedIn">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. Sticky Sub Navigation Bar -->
+    <nav class="sub-nav-frosted">
+        <div class="sub-nav-container">
+            <a href="#" class="sub-nav-title">Latency vs Throughput</a>
+            <div class="sub-nav-right">
+                <a href="./index.html" class="sub-nav-link">Primer Articles</a>
+                <a href="../index.html" class="sub-nav-link">Portfolio</a>
+                <a href="../index.html#contact" class="sub-nav-button">Get in Touch</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Article Hero -->
+    <section class="article-hero">
+        <div class="article-hero-inner reveal-element active">
+            <div class="article-meta">
+                <span class="article-category">Fundamentals</span>
+                <span class="article-date">August 2026</span>
+                <span class="article-read-time">28 min read</span>
+            </div>
+            <h1>
+                Latency vs Throughput
+                <span class="gradient-text">— Two Numbers, One Argument</span>
+            </h1>
+            <p class="article-hero-desc">
+                Everyone nods along when you say they're different. Then the dashboard shows
+                <em>50,000 requests per second</em>
+                and everyone relaxes, while a quarter of real users sit there watching a spinner. Here's what each
+                number actually measures, the one equation that binds them, and the handful of places where buying
+                more of one genuinely costs you the other.
+            </p>
+        </div>
+    </section>
+
+    <!-- Author Bar -->
+    <div class="author-bar reveal-element active">
+        <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar" />
+        <div class="author-bar-info">
+            <div class="author-bar-name">Ajay Kotnala</div>
+            <div class="author-bar-meta">Senior Solution Architect · August 2026 · 28 min read</div>
+        </div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc-wrapper">
+        <div class="toc reveal-element">
+            <h3>In This Article</h3>
+            <ol>
+                <li><a href="#introduction">The Argument Nobody Wins</a></li>
+                <li><a href="#definitions">Two Definitions That Refuse to Collapse</a></li>
+                <li><a href="#littles-law">Little's Law — The Equation That Binds Them</a></li>
+                <li><a href="#percentiles">Averages Lie: Percentiles and the Tail</a></li>
+                <li><a href="#budget">Where the Milliseconds Actually Go</a></li>
+                <li><a href="#ceiling">The Throughput Ceiling and the Queueing Cliff</a></li>
+                <li><a href="#levers">Three Levers: Batching, Pipelining, Parallelism</a></li>
+                <li><a href="#conflict">Where They Genuinely Conflict</a></li>
+                <li><a href="#no-conflict">Where They Don't — And Fixing One Fixes Both</a></li>
+                <li><a href="#measuring">Measuring Honestly — Coordinated Omission</a></li>
+                <li><a href="#playbook">The Design Playbook</a></li>
+                <li><a href="#failures">Five Ways This Goes Wrong in Production</a></li>
+                <li><a href="#envelope">Back-of-the-Envelope: Sizing a Real Service</a></li>
+                <li><a href="#interview">Interview Essentials &amp; Level Expectations</a></li>
+                <li><a href="#summary">Summary</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Article Body -->
+    <article class="article-body">
+        <!-- Section 1: Introduction -->
+        <h2 id="introduction">
+            <span class="section-number">01</span>
+            The Argument Nobody Wins
+        </h2>
+
+        <p>
+            Somewhere right now, in a war room, two engineers are having the same argument. One is pointing at a
+            dashboard showing 50,000 requests per second and saying the system is fine. The other is holding a
+            phone with a spinner on it and saying the system is very obviously not fine.
+        </p>
+        <p>
+            They're both right. That's what makes this argument so persistent — and so useful to understand
+            properly. They're measuring two different things and calling both of them "performance."
+        </p>
+        <p>
+            <strong>Latency</strong>
+            is how long one unit of work takes. <strong>Throughput</strong> is how many units of work complete per
+            unit of time. Every engineer can recite that. The trouble starts about ten seconds later, when someone
+            says "so if I double throughput, latency halves, right?" — and nobody in the room is quite sure enough
+            to say no with conviction.
+        </p>
+        <p>
+            The answer is no. Sometimes they move together. Sometimes they move in opposite directions, and you
+            chose that trade whether you knew it or not. Understanding which situation you're in is most of the
+            skill.
+        </p>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">ms</div>
+                <div class="stat-desc">Latency — Time per Request</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">req/s</div>
+                <div class="stat-desc">Throughput — Requests per Second</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">L = λW</div>
+                <div class="stat-desc">Little's Law Ties Them Together</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">p99</div>
+                <div class="stat-desc">The Number Users Actually Feel</div>
+            </div>
+        </div>
+
+        <p>
+            This piece is the long version. Not the two-sentence definition you already know, but the working model
+            — the equation that connects the two numbers, the reason percentiles matter more than averages, the
+            cliff that appears at high utilization, and the specific design decisions where you're forced to pick a
+            side.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The One-Line Version</div>
+            <p>
+                Latency is a property of a request. Throughput is a property of a system. You can improve one
+                without touching the other, and the fastest way to sound senior in a design discussion is to say
+                which one you're optimizing for and why — before anyone asks.
+            </p>
+        </div>
+
+        <!-- Section 2: Definitions -->
+        <h2 id="definitions">
+            <span class="section-number">02</span>
+            Two Definitions That Refuse to Collapse
+        </h2>
+
+        <p>
+            The mental model that has survived every whiteboard I've drawn it on is a pipe carrying water.
+        </p>
+        <p>
+            <strong>Latency is the length of the pipe.</strong>
+            It's how long a single drop of water takes to travel from one end to the other. A short pipe delivers
+            fast. Nothing about the pipe's width changes how long that journey takes.
+        </p>
+        <p>
+            <strong>Throughput is the width of the pipe.</strong>
+            It's how much water passes any cross-section per second. A wide pipe moves an enormous volume. Nothing
+            about the pipe's width shortens the trip for any individual drop.
+        </p>
+        <p>
+            This is why "we scaled out to 40 servers and latency didn't improve" is such a common and completely
+            unsurprising result. You widened the pipe. The pipe is exactly as long as it was.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 1 — The Pipe: Length is Latency, Width is Throughput</div>
+            <svg viewBox="0 0 780 320" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL1" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL1" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="21" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowL1" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                    <marker id="latArrowL1" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#4f46e5" stroke-width="1.6"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                    <marker id="thrArrowL1" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0d9488" stroke-width="1.6"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="320" fill="#fefefe" rx="12" />
+                <rect width="780" height="320" fill="url(#dotGridL1)" rx="12" />
+
+                <text x="390" y="30" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Same pipe, two completely independent measurements
+                </text>
+
+                <!-- The pipe -->
+                <rect x="170" y="95" width="470" height="95" rx="10" fill="#f0fdfa" stroke="#0d9488" stroke-width="2"
+                    filter="url(#roughenL1)" />
+
+                <!-- Drops travelling through -->
+                <circle cx="215" cy="122" r="7" fill="#99f6e4" stroke="#0d9488" stroke-width="1" />
+                <circle cx="215" cy="163" r="7" fill="#99f6e4" stroke="#0d9488" stroke-width="1" />
+                <circle cx="300" cy="142" r="7" fill="#99f6e4" stroke="#0d9488" stroke-width="1" />
+                <circle cx="300" cy="112" r="7" fill="#99f6e4" stroke="#0d9488" stroke-width="1" />
+                <circle cx="390" cy="128" r="7" fill="#c7d2fe" stroke="#4f46e5" stroke-width="1.5" />
+                <circle cx="390" cy="170" r="7" fill="#99f6e4" stroke="#0d9488" stroke-width="1" />
+                <circle cx="480" cy="115" r="7" fill="#99f6e4" stroke="#0d9488" stroke-width="1" />
+                <circle cx="480" cy="155" r="7" fill="#99f6e4" stroke="#0d9488" stroke-width="1" />
+                <circle cx="570" cy="140" r="7" fill="#99f6e4" stroke="#0d9488" stroke-width="1" />
+                <circle cx="570" cy="172" r="7" fill="#99f6e4" stroke="#0d9488" stroke-width="1" />
+
+                <text x="405" y="118" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    ← follow this one
+                </text>
+
+                <!-- In / out labels -->
+                <text x="120" y="140" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    request
+                </text>
+                <text x="120" y="155" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    in
+                </text>
+                <path d="M 128 165 L 166 165" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowL1)" />
+                <text x="700" y="140" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    response
+                </text>
+                <text x="700" y="155" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    out
+                </text>
+                <path d="M 642 165 L 674 165" fill="none" stroke="#333" stroke-width="1.5"
+                    marker-end="url(#exArrowL1)" />
+
+                <!-- Latency measure (horizontal) -->
+                <path d="M 170 225 L 640 225" fill="none" stroke="#4f46e5" stroke-width="1.6"
+                    marker-end="url(#latArrowL1)" />
+                <path d="M 170 219 L 170 231" fill="none" stroke="#4f46e5" stroke-width="1.6" />
+                <text x="405" y="248" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle" font-weight="700">
+                    LATENCY — how long one drop takes end to end
+                </text>
+
+                <!-- Throughput measure (vertical) -->
+                <path d="M 148 190 L 148 95" fill="none" stroke="#0d9488" stroke-width="1.6"
+                    marker-end="url(#thrArrowL1)" />
+                <path d="M 142 190 L 154 190" fill="none" stroke="#0d9488" stroke-width="1.6" />
+                <text x="55" y="80" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    font-weight="700">
+                    THROUGHPUT
+                </text>
+                <text x="20" y="95" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    drops crossing any line, per second
+                </text>
+
+                <text x="390" y="285" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Widening the pipe does not shorten it. Shortening the pipe does not widen it.
+                </text>
+                <text x="390" y="303" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    And the number of drops inside the pipe right now? That's concurrency — see Diagram 2.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                The pipe model is worth keeping in your head permanently: length and width are independent
+                dimensions, and the water currently inside the pipe is a third quantity entirely.
+            </p>
+        </div>
+
+        <h3>Say What You Mean by "Latency"</h3>
+
+        <p>
+            "Latency" on its own is nearly meaningless because it never says <em>measured from where</em>. Four
+            different people in the same incident review will each mean something different:
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">🌐</div>
+                <h4>End-to-End</h4>
+                <p>Click to pixel. Includes DNS, TLS, network, render. The only one the user experiences.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🚪</div>
+                <h4>Edge / Gateway</h4>
+                <p>Measured at the load balancer. Includes queueing, excludes the user's own network.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">⚙️</div>
+                <h4>Service Time</h4>
+                <p>Time inside the handler. Excludes queue wait — which is exactly where trouble hides.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🗄️</div>
+                <h4>Downstream</h4>
+                <p>Time in the DB or a dependency. The number people quote when defending their service.</p>
+            </div>
+        </div>
+
+        <p>
+            The gap between <strong>service time</strong> and <strong>gateway latency</strong> is the single most
+            common blind spot in production. Your service reports a healthy 20ms handler time. Your users see
+            300ms. The difference is 280ms of sitting in a queue that your handler-level metric never observed,
+            because the timer started when the work started — not when the request arrived.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ The Timer Starts on Arrival</div>
+            <p>
+                If your latency histogram starts its clock inside the request handler, you are measuring how fast
+                you work, not how long people wait. Queue wait is latency. Start the timer at the earliest point
+                you control — ideally when the request lands at the edge — or you will keep declaring victory
+                during outages.
+            </p>
+        </div>
+
+        <h3>And Say What You Mean by "Throughput"</h3>
+
+        <p>
+            Throughput has the same ambiguity problem, just quieter. Requests per second is the default unit, and
+            it's fine right up until requests stop being uniform. An API where one call reads a cached integer and
+            another renders a 40-page PDF does not have a meaningful "requests per second" capacity — the number
+            depends entirely on the mix.
+        </p>
+        <p>
+            Pick the unit that actually consumes your scarce resource. Sometimes that's requests. Often it's
+            bytes per second, rows scanned per second, tokens per second, messages per partition per second, or
+            simply CPU-seconds consumed per wall-clock second. If your capacity model can be broken by a change in
+            traffic mix, you picked the wrong unit.
+        </p>
+
+        <div class="comparison-table-wrapper">
+            <table class="comparison-table reveal-element">
+                <thead>
+                    <tr>
+                        <th>Dimension</th>
+                        <th>Latency</th>
+                        <th>Throughput</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>What it measures</td>
+                        <td class="lat-cell">Duration of one unit of work</td>
+                        <td class="thr-cell">Completed units per unit of time</td>
+                    </tr>
+                    <tr>
+                        <td>Typical unit</td>
+                        <td class="lat-cell">ms, µs, s</td>
+                        <td class="thr-cell">req/s, MB/s, rows/s, msg/s</td>
+                    </tr>
+                    <tr>
+                        <td>Belongs to</td>
+                        <td class="lat-cell">A request</td>
+                        <td class="thr-cell">A system</td>
+                    </tr>
+                    <tr>
+                        <td>Summarised by</td>
+                        <td class="lat-cell">Percentiles (p50 / p99 / p99.9)</td>
+                        <td class="thr-cell">A rate, plus its peak and its sustained value</td>
+                    </tr>
+                    <tr>
+                        <td>Improved by</td>
+                        <td class="lat-cell">Shorter paths, fewer hops, caches, locality, faster code</td>
+                        <td class="thr-cell">More parallelism, batching, bigger machines, more machines</td>
+                    </tr>
+                    <tr>
+                        <td>Bounded by</td>
+                        <td class="lat-cell">Physics (speed of light), serial dependencies</td>
+                        <td class="thr-cell">The narrowest resource — CPU, IO, locks, connections</td>
+                    </tr>
+                    <tr>
+                        <td>Who complains</td>
+                        <td class="lat-cell">Users, on an individual basis</td>
+                        <td class="thr-cell">Everyone at once, when it's exceeded</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Section 3: Little's Law -->
+        <h2 id="littles-law">
+            <span class="section-number">03</span>
+            Little's Law — The Equation That Binds Them
+        </h2>
+
+        <p>
+            Latency and throughput are independent dimensions, but they're not unrelated. There is exactly one
+            equation connecting them, it's astonishingly simple, and it holds for any stable system regardless of
+            how the internals work. It's called Little's Law:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Little's Law</span>
+            <pre><code>L  =  λ  ×  W
+
+L  =  average number of items in the system  (concurrency, "in flight")
+λ  =  average arrival rate                   (throughput, req/s)
+W  =  average time an item spends inside     (latency, seconds)</code></pre>
+        </div>
+
+        <p>
+            In the language we've been using: <strong>concurrency = throughput × latency</strong>. That's it.
+            That's the whole relationship. And it means you never get to pick all three numbers — pick any two and
+            the third is decided for you.
+        </p>
+        <p>
+            Work an example. A service handles 200 requests per second with a mean latency of 250ms. How many
+            requests are in flight at any given moment?
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Worked Example</span>
+            <pre><code>L = 200 req/s × 0.25 s = <span class="number">50</span> requests in flight, on average</code></pre>
+        </div>
+
+        <p>
+            Fifty. Which immediately tells you something very concrete: if this is a thread-per-request server with
+            a pool of 30 threads, it <em>cannot</em> sustain that load. Requests will queue, queue wait will get
+            added to latency, latency will rise, and by Little's Law the required concurrency rises with it — a
+            feedback loop that ends in a pile-up.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 2 — Little's Law: Pick Any Two, the Third Is Decided</div>
+            <svg viewBox="0 0 780 330" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL2" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL2" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="22" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowL2" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="330" fill="#fefefe" rx="12" />
+                <rect width="780" height="330" fill="url(#dotGridL2)" rx="12" />
+
+                <text x="390" y="30" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Concurrency = Throughput × Latency — true for any stable system
+                </text>
+
+                <!-- Throughput box -->
+                <rect x="35" y="60" width="180" height="80" rx="9" fill="#ecfdf5" stroke="#0d9488" stroke-width="1.5"
+                    filter="url(#roughenL2)" />
+                <text x="125" y="85" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    THROUGHPUT (λ)
+                </text>
+                <text x="125" y="110" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="16"
+                    text-anchor="middle" font-weight="700">
+                    200 req/s
+                </text>
+                <text x="125" y="128" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    set by your traffic, not by you
+                </text>
+
+                <text x="245" y="107" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="22"
+                    text-anchor="middle" font-weight="700">×</text>
+
+                <!-- Latency box -->
+                <rect x="275" y="60" width="180" height="80" rx="9" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"
+                    filter="url(#roughenL2)" />
+                <text x="365" y="85" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    LATENCY (W)
+                </text>
+                <text x="365" y="110" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="16"
+                    text-anchor="middle" font-weight="700">
+                    250 ms
+                </text>
+                <text x="365" y="128" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    mean, not p99 — the law uses means
+                </text>
+
+                <text x="485" y="107" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="22"
+                    text-anchor="middle" font-weight="700">=</text>
+
+                <!-- Concurrency box -->
+                <rect x="515" y="60" width="230" height="80" rx="9" fill="#f5f5f7" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughenL2)" />
+                <text x="630" y="85" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    CONCURRENCY (L)
+                </text>
+                <text x="630" y="110" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="16"
+                    text-anchor="middle" font-weight="700">
+                    50 in flight
+                </text>
+                <text x="630" y="128" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    threads, connections, sockets, memory
+                </text>
+
+                <!-- The system with 50 dots -->
+                <rect x="180" y="175" width="420" height="80" rx="9" fill="#ffffff" stroke="#333" stroke-width="1.5"
+                    stroke-dasharray="4,3" filter="url(#roughenL2)" />
+                <text x="390" y="193" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    a snapshot of the system: 50 requests are inside it right now
+                </text>
+                <g fill="#c7d2fe" stroke="#4f46e5" stroke-width="0.8">
+                    <circle cx="205" cy="212" r="5" /><circle cx="227" cy="212" r="5" /><circle cx="249" cy="212"
+                        r="5" /><circle cx="271" cy="212" r="5" /><circle cx="293" cy="212" r="5" />
+                    <circle cx="315" cy="212" r="5" /><circle cx="337" cy="212" r="5" /><circle cx="359" cy="212"
+                        r="5" /><circle cx="381" cy="212" r="5" /><circle cx="403" cy="212" r="5" />
+                    <circle cx="425" cy="212" r="5" /><circle cx="447" cy="212" r="5" /><circle cx="469" cy="212"
+                        r="5" /><circle cx="491" cy="212" r="5" /><circle cx="513" cy="212" r="5" />
+                    <circle cx="535" cy="212" r="5" /><circle cx="557" cy="212" r="5" /><circle cx="579" cy="212"
+                        r="5" />
+                    <circle cx="205" cy="232" r="5" /><circle cx="227" cy="232" r="5" /><circle cx="249" cy="232"
+                        r="5" /><circle cx="271" cy="232" r="5" /><circle cx="293" cy="232" r="5" />
+                    <circle cx="315" cy="232" r="5" /><circle cx="337" cy="232" r="5" /><circle cx="359" cy="232"
+                        r="5" /><circle cx="381" cy="232" r="5" /><circle cx="403" cy="232" r="5" />
+                    <circle cx="425" cy="232" r="5" /><circle cx="447" cy="232" r="5" /><circle cx="469" cy="232"
+                        r="5" /><circle cx="491" cy="232" r="5" /><circle cx="513" cy="232" r="5" />
+                    <circle cx="535" cy="232" r="5" /><circle cx="557" cy="232" r="5" /><circle cx="579" cy="232"
+                        r="5" />
+                </g>
+                <path d="M 630 145 L 500 172" fill="none" stroke="#333" stroke-width="1.2" stroke-dasharray="3,3"
+                    marker-end="url(#exArrowL2)" />
+
+                <text x="390" y="285" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    A pool of 30 threads cannot hold 50 in-flight requests.
+                </text>
+                <text x="390" y="305" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    The other 20 wait — and waiting is latency, which raises L further. That's the pile-up.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Little's Law is the fastest sanity check in capacity planning: two numbers you already have give
+                you the third, and the third is usually the one that's about to break.
+            </p>
+        </div>
+
+        <p>
+            Run the law backwards and it becomes a design tool. Suppose you want to guarantee a 100ms p50 on a
+            service that must handle 1,000 req/s. Little's Law says you need to sustain 100 concurrent requests. If
+            each in-flight request holds a database connection, you need a pool of at least 100 — and you'd better
+            check whether your database will accept 100 connections from every one of your app instances.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Sizing a Pool From Little's Law</span>
+            <pre><code><span class="comment">// Target: 1,000 req/s at 100ms mean latency.</span>
+<span class="comment">// L = λ × W = 1000 × 0.100 = 100 concurrent requests.</span>
+
+<span class="keyword">int</span> targetRps        = <span class="number">1000</span>;
+<span class="keyword">double</span> meanLatencyS  = <span class="number">0.100</span>;
+<span class="keyword">int</span> concurrency      = (<span class="type">int</span>) <span class="type">Math</span>.ceil(targetRps * meanLatencyS);   <span class="comment">// 100</span>
+
+<span class="comment">// Headroom for latency drift: if p50 doubles under load, so does demand.</span>
+<span class="keyword">int</span> poolSize         = concurrency * <span class="number">2</span>;                             <span class="comment">// 200</span>
+
+<span class="comment">// The queue must be BOUNDED. An unbounded queue converts a capacity</span>
+<span class="comment">// problem into a latency problem and then into an out-of-memory problem.</span>
+<span class="type">BlockingQueue</span>&lt;Runnable&gt; queue = <span class="keyword">new</span> <span class="type">ArrayBlockingQueue</span>&lt;&gt;(<span class="number">200</span>);
+
+<span class="type">ThreadPoolExecutor</span> pool = <span class="keyword">new</span> <span class="type">ThreadPoolExecutor</span>(
+        poolSize, poolSize,
+        <span class="number">60</span>L, <span class="type">TimeUnit</span>.SECONDS,
+        queue,
+        <span class="keyword">new</span> <span class="type">ThreadPoolExecutor</span>.AbortPolicy());   <span class="comment">// shed load, don't hoard it</span></code></pre>
+        </div>
+
+        <div class="callout callout-throughput">
+            <div class="callout-label">⚡ Queue Depth Is a Latency Decision</div>
+            <p>
+                Apply the law to the queue itself and it tells you how deep the queue is allowed to be. If you're
+                draining 500 items/second and your latency budget for queue wait is 200ms, the maximum tolerable
+                queue depth is 500 × 0.2 = 100 items. Anything deeper than that is, by definition, a queue that
+                blows your SLO — so cap it there and reject the overflow. A queue is not storage. It's a delay
+                line, and its length is measured in milliseconds.
+            </p>
+        </div>
+
+        <div class="deep-dive">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-littles-caveats')">
+                <h4>When Little's Law doesn't apply (and the two caveats that trip people up)</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content" id="dd-littles-caveats">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        <strong>Caveat one: it requires a stable system.</strong> "Stable" means arrivals equal
+                        departures over the observation window — nothing is accumulating. During an overload,
+                        arrivals exceed departures, the queue grows without bound, and the law describes an average
+                        that never settles. That's not a flaw in the law; it's the law telling you your system is
+                        not in a steady state, which is itself the diagnosis.
+                    </p>
+                    <p>
+                        <strong>Caveat two: it's about means, not percentiles.</strong> Little's Law uses mean
+                        latency. You cannot plug in your p99 and get a meaningful concurrency number. This bites
+                        people constantly because p99 is the number they track and the mean is the number they
+                        stopped looking at. Keep both.
+                    </p>
+                    <p>
+                        The upside is how few assumptions it makes. Little's Law doesn't care about arrival
+                        distribution, service-time distribution, scheduling order, or the number of servers. It
+                        holds for a single-threaded event loop and a 5,000-node cluster equally. Very few results
+                        in systems are that portable.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 4: Percentiles -->
+        <h2 id="percentiles">
+            <span class="section-number">04</span>
+            Averages Lie: Percentiles and the Tail
+        </h2>
+
+        <p>
+            Here's a question worth sitting with. Your service has an average latency of 80ms. Is that good?
+        </p>
+        <p>
+            You cannot answer. An 80ms average is equally consistent with "every single request takes almost
+            exactly 80ms" and with "95% of requests take 20ms and 5% take 1.2 seconds." Those are wildly different
+            systems. One is boring. The other has a queue problem, a GC problem, or a hot shard, and a meaningful
+            slice of your users are actively unhappy.
+        </p>
+        <p>
+            Latency distributions in real systems are almost never symmetric. They're right-skewed — a dense pile
+            of fast responses and a long, thin tail dragging out to the right. The mean gets pulled toward the
+            tail, which means it describes neither the typical request nor the bad one. It is, quite literally, a
+            number that describes nobody.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 3 — The Shape of Real Latency (and Why the Mean Describes Nobody)</div>
+            <svg viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL3" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL3" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="23" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="340" fill="#fefefe" rx="12" />
+                <rect width="780" height="340" fill="url(#dotGridL3)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Request count by response time — the classic right-skewed shape
+                </text>
+
+                <!-- Axes -->
+                <path d="M 70 270 L 730 270" fill="none" stroke="#333" stroke-width="1.5" />
+                <path d="M 70 270 L 70 60" fill="none" stroke="#333" stroke-width="1.5" />
+                <text x="45" y="165" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle" transform="rotate(-90 45 165)">
+                    number of requests
+                </text>
+                <text x="400" y="300" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    response time →
+                </text>
+
+                <!-- Bars -->
+                <g fill="#c7d2fe" stroke="#4f46e5" stroke-width="1" filter="url(#roughenL3)">
+                    <rect x="80" y="262" width="26" height="8" />
+                    <rect x="110" y="240" width="26" height="30" />
+                    <rect x="140" y="200" width="26" height="70" />
+                    <rect x="170" y="160" width="26" height="110" />
+                    <rect x="200" y="140" width="26" height="130" />
+                    <rect x="230" y="150" width="26" height="120" />
+                    <rect x="260" y="170" width="26" height="100" />
+                    <rect x="290" y="190" width="26" height="80" />
+                    <rect x="320" y="208" width="26" height="62" />
+                    <rect x="350" y="222" width="26" height="48" />
+                    <rect x="380" y="234" width="26" height="36" />
+                    <rect x="410" y="242" width="26" height="28" />
+                    <rect x="440" y="249" width="26" height="21" />
+                    <rect x="470" y="254" width="26" height="16" />
+                    <rect x="500" y="258" width="26" height="12" />
+                    <rect x="530" y="261" width="26" height="9" />
+                    <rect x="560" y="263" width="26" height="7" />
+                    <rect x="590" y="265" width="26" height="5" />
+                    <rect x="620" y="266" width="26" height="4" />
+                    <rect x="650" y="267" width="26" height="3" />
+                    <rect x="680" y="268" width="26" height="2" />
+                </g>
+
+                <!-- p50 marker -->
+                <path d="M 213 130 L 213 275" fill="none" stroke="#0d9488" stroke-width="1.6" stroke-dasharray="4,3" />
+                <text x="213" y="122" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">p50 · 40ms</text>
+
+                <!-- mean marker -->
+                <path d="M 285 100 L 285 275" fill="none" stroke="#e11d48" stroke-width="1.6" stroke-dasharray="4,3" />
+                <text x="285" y="92" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">mean · 80ms</text>
+
+                <!-- p99 marker -->
+                <path d="M 573 130 L 573 275" fill="none" stroke="#4f46e5" stroke-width="1.6" stroke-dasharray="4,3" />
+                <text x="573" y="122" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">p99 · 620ms</text>
+
+                <!-- p999 marker -->
+                <path d="M 693 155 L 693 275" fill="none" stroke="#4f46e5" stroke-width="1.4" stroke-dasharray="3,3" />
+                <text x="690" y="147" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">p99.9 · 2.4s</text>
+
+                <text x="470" y="60" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    this tail is thin — and it is where your angriest users live
+                </text>
+                <path d="M 600 66 L 660 80" fill="none" stroke="#86868b" stroke-width="1" stroke-dasharray="2,2" />
+
+                <text x="390" y="322" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    The mean sits between the bulk and the tail — it describes almost none of the actual requests.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                p50 says what a typical request feels. p99 says what your worst 1% feels. The mean says something
+                about neither, which is why it is the least useful of the three and the most widely reported.
+            </p>
+        </div>
+
+        <h3>Reading the Percentile Ladder</h3>
+
+        <ul>
+            <li>
+                <strong>p50 (median)</strong> — the typical experience. Good for spotting broad regressions:
+                if p50 moves, something changed for everyone.
+            </li>
+            <li>
+                <strong>p90 / p95</strong> — the "slightly unlucky" experience. Usually still dominated by normal
+                variance in your workload.
+            </li>
+            <li>
+                <strong>p99</strong> — the standard SLO anchor. One request in a hundred is at least this slow.
+                On a page that makes 20 API calls, hitting the p99 at least once is nearly a coin flip.
+            </li>
+            <li>
+                <strong>p99.9 / p99.99</strong> — where GC pauses, connection re-establishment, cold caches,
+                failovers, and noisy neighbours live. Your heaviest users hit this constantly, because heavy usage
+                means more requests means more chances to draw from the tail.
+            </li>
+            <li>
+                <strong>max</strong> — noisy and mostly useless as a target, but genuinely valuable as a
+                debugging clue. A max of 30 seconds when your timeout is 5 seconds means your timeout isn't
+                working.
+            </li>
+        </ul>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ You Cannot Average Percentiles</div>
+            <p>
+                Taking the p99 from each of your 40 servers and averaging them does not give you the fleet p99. It
+                gives you a number with no statistical meaning whatsoever. Percentiles are not additive and they
+                are not averageable. To get a real fleet-wide percentile you must merge the underlying
+                distributions — export histograms (HdrHistogram, t-digest, Prometheus native histograms) and
+                compute the percentile from the merged data.
+            </p>
+            <p>
+                This is not pedantry. A fleet where 39 servers are healthy and one is melting will show a
+                perfectly acceptable "average p99" while 1/40th of your traffic times out.
+            </p>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Recording Latency So Percentiles Stay Honest</span>
+            <pre><code><span class="comment">// HdrHistogram keeps the full distribution in fixed memory at a known</span>
+<span class="comment">// precision, so percentiles are computed from data — never estimated</span>
+<span class="comment">// from a mean and a standard deviation that the data doesn't have.</span>
+
+<span class="keyword">private final</span> <span class="type">Recorder</span> recorder =
+        <span class="keyword">new</span> <span class="type">Recorder</span>(<span class="type">TimeUnit</span>.MINUTES.toMicros(<span class="number">1</span>), <span class="number">3</span>);   <span class="comment">// 3 significant digits</span>
+
+<span class="keyword">public</span> <span class="type">Response</span> handle(<span class="type">Request</span> req) {
+    <span class="comment">// Start the clock at ARRIVAL — including any time already spent queued.</span>
+    <span class="keyword">long</span> startMicros = req.arrivalTimeMicros();
+    <span class="keyword">try</span> {
+        <span class="keyword">return</span> doWork(req);
+    } <span class="keyword">finally</span> {
+        recorder.recordValue(nowMicros() - startMicros);
+    }
+}
+
+<span class="comment">// Export the histogram itself, not pre-computed percentiles —</span>
+<span class="comment">// so the aggregator can merge across instances correctly.</span>
+<span class="keyword">public</span> <span class="type">Histogram</span> snapshot() {
+    <span class="keyword">return</span> recorder.getIntervalHistogram();
+}</code></pre>
+        </div>
+
+        <h3>Tail Amplification: Why p99 Isn't a Rare Event</h3>
+
+        <p>
+            The reason tail latency gets so much attention in large systems is arithmetic, and it's brutal.
+        </p>
+        <p>
+            Imagine a request that fans out to 100 backend services — a search page, a feed, a dashboard, a
+            recommendation build. Each backend has a p99 of 1 second, meaning each one has a 99% chance of
+            responding faster than that. The parent request only completes when the slowest child completes.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Tail Amplification Math</span>
+            <pre><code>P(all 100 children finish under 1s) = 0.99<span class="number">^100</span> ≈ <span class="number">0.366</span>
+
+So P(at least one child is in its slow 1%) ≈ <span class="number">63%</span>
+
+A "1-in-100" event happens to nearly TWO OUT OF THREE parent requests.</code></pre>
+        </div>
+
+        <p>
+            That result — from Dean and Barroso's work on tail latency at scale — is the single most important
+            thing to internalise about fan-out architectures. Your users don't experience your services'
+            percentiles. They experience the maximum across every dependency their request touched. The more you
+            decompose a system, the more aggressively the tail dominates.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 4 — Tail Amplification: The Slowest Child Owns the Parent</div>
+            <svg viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL4" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL4" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="24" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowL4" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#888" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="340" fill="#fefefe" rx="12" />
+                <rect width="780" height="340" fill="url(#dotGridL4)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    One page render → 100 backend calls → the parent waits for the worst one
+                </text>
+
+                <!-- Parent -->
+                <rect x="40" y="105" width="130" height="70" rx="9" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"
+                    filter="url(#roughenL4)" />
+                <text x="105" y="132" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">Page Request</text>
+                <text x="105" y="152" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">fans out to 100</text>
+
+                <!-- children -->
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle">
+                    <rect x="270" y="55" width="120" height="34" rx="7" fill="#ecfdf5" stroke="#0d9488"
+                        stroke-width="1.3" filter="url(#roughenL4)" />
+                    <text x="330" y="77" fill="#0d9488">svc-01 · 38ms ✓</text>
+
+                    <rect x="270" y="99" width="120" height="34" rx="7" fill="#ecfdf5" stroke="#0d9488"
+                        stroke-width="1.3" filter="url(#roughenL4)" />
+                    <text x="330" y="121" fill="#0d9488">svc-02 · 41ms ✓</text>
+
+                    <rect x="270" y="143" width="120" height="34" rx="7" fill="#ecfdf5" stroke="#0d9488"
+                        stroke-width="1.3" filter="url(#roughenL4)" />
+                    <text x="330" y="165" fill="#0d9488">svc-03 · 35ms ✓</text>
+
+                    <rect x="270" y="187" width="120" height="34" rx="7" fill="#fff1f2" stroke="#e11d48"
+                        stroke-width="2" filter="url(#roughenL4)" />
+                    <text x="330" y="209" fill="#e11d48" font-weight="700">svc-47 · 1,180ms</text>
+
+                    <rect x="270" y="231" width="120" height="34" rx="7" fill="#ecfdf5" stroke="#0d9488"
+                        stroke-width="1.3" filter="url(#roughenL4)" />
+                    <text x="330" y="253" fill="#0d9488">svc-99 · 44ms ✓</text>
+                </g>
+                <text x="330" y="285" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">… 95 more, all healthy …</text>
+
+                <path d="M 172 128 L 265 72" fill="none" stroke="#888" stroke-width="1.2" marker-end="url(#exArrowL4)" />
+                <path d="M 172 134 L 265 116" fill="none" stroke="#888" stroke-width="1.2"
+                    marker-end="url(#exArrowL4)" />
+                <path d="M 172 142 L 265 160" fill="none" stroke="#888" stroke-width="1.2"
+                    marker-end="url(#exArrowL4)" />
+                <path d="M 172 150 L 265 204" fill="none" stroke="#e11d48" stroke-width="1.6"
+                    marker-end="url(#exArrowL4)" />
+                <path d="M 172 158 L 265 248" fill="none" stroke="#888" stroke-width="1.2"
+                    marker-end="url(#exArrowL4)" />
+
+                <!-- Result panel -->
+                <rect x="440" y="70" width="300" height="200" rx="9" fill="#ffffff" stroke="#333" stroke-width="1.5"
+                    stroke-dasharray="4,3" filter="url(#roughenL4)" />
+                <text x="590" y="95" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">
+                    Chance the parent hits a slow child
+                </text>
+                <text x="590" y="112" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">
+                    each child independently has a p99 of 1 second
+                </text>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11">
+                    <text x="470" y="145" fill="#333">1 call</text>
+                    <rect x="560" y="135" width="4" height="12" fill="#e11d48" />
+                    <text x="640" y="145" fill="#333">1.0%</text>
+
+                    <text x="470" y="175" fill="#333">10 calls</text>
+                    <rect x="560" y="165" width="18" height="12" fill="#e11d48" />
+                    <text x="640" y="175" fill="#333">9.6%</text>
+
+                    <text x="470" y="205" fill="#333">50 calls</text>
+                    <rect x="560" y="195" width="60" height="12" fill="#e11d48" />
+                    <text x="640" y="205" fill="#333">39.5%</text>
+
+                    <text x="470" y="235" fill="#333">100 calls</text>
+                    <rect x="560" y="225" width="96" height="12" fill="#e11d48" />
+                    <text x="665" y="235" fill="#e11d48" font-weight="700">63.4%</text>
+                </g>
+
+                <text x="390" y="315" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Every service on this page met its SLO. The page did not. That is tail amplification.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                The more you decompose a request, the more the parent's latency is governed by the tail of its
+                dependencies rather than their medians. Fan-out turns rare events into routine ones.
+            </p>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Defending Against the Tail</div>
+            <p>
+                You don't fix tail amplification by making every backend uniformly faster — that's expensive and
+                only shifts the number. You fix it structurally: <strong>hedged requests</strong> (send a duplicate
+                to a second replica once you pass p95, take whichever answers first), <strong>tight per-call
+                timeouts with a fallback</strong>, <strong>returning partial results</strong> when a non-critical
+                widget is late, and simply <strong>fanning out to fewer things</strong>. Reducing 100 calls to 20
+                takes the "at least one slow" probability from 63% to 18% without making anything faster.
+            </p>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Hedged Request (Tail Tolerance)</span>
+            <pre><code><span class="comment">// Fire to replica A. If it hasn't answered by the p95 mark, fire the same</span>
+<span class="comment">// request at replica B and take whichever completes first. Costs ~5% extra</span>
+<span class="comment">// load; frequently cuts p99 by more than half.</span>
+
+<span class="type">CompletableFuture</span>&lt;Result&gt; hedged(<span class="type">Query</span> q, <span class="type">Duration</span> hedgeAfter) {
+    <span class="type">CompletableFuture</span>&lt;Result&gt; primary = replicaA.callAsync(q);
+
+    <span class="type">CompletableFuture</span>&lt;Result&gt; backup = <span class="keyword">new</span> <span class="type">CompletableFuture</span>&lt;&gt;();
+    scheduler.schedule(() -&gt; {
+        <span class="keyword">if</span> (!primary.isDone()) {                <span class="comment">// only hedge if still waiting</span>
+            replicaB.callAsync(q).whenComplete((r, e) -&gt;
+                    { <span class="keyword">if</span> (e == <span class="keyword">null</span>) backup.complete(r); });
+        }
+    }, hedgeAfter.toMillis(), <span class="type">TimeUnit</span>.MILLISECONDS);
+
+    <span class="keyword">return</span> primary.applyToEither(backup, <span class="type">Function</span>.identity());
+}</code></pre>
+        </div>
+
+        <!-- Section 5: Latency budget -->
+        <h2 id="budget">
+            <span class="section-number">05</span>
+            Where the Milliseconds Actually Go
+        </h2>
+
+        <p>
+            Latency is the sum of everything on the critical path, and the critical path is usually longer than
+            the mental model people carry around. Before optimizing anything, it's worth knowing the raw cost of
+            the primitives — because a surprising amount of "slow code" is actually fast code doing an unnecessary
+            network round trip.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Operation</th>
+                    <th>Typical Time</th>
+                    <th>Relative Feel</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>L1 cache reference</td>
+                    <td><code>~1 ns</code></td>
+                    <td>Free</td>
+                </tr>
+                <tr>
+                    <td>Main memory reference</td>
+                    <td><code>~100 ns</code></td>
+                    <td>Effectively free</td>
+                </tr>
+                <tr>
+                    <td>Compress 1 KB</td>
+                    <td><code>~2 µs</code></td>
+                    <td>Cheap</td>
+                </tr>
+                <tr>
+                    <td>SSD / NVMe random read</td>
+                    <td><code>~50–150 µs</code></td>
+                    <td>Noticeable in aggregate</td>
+                </tr>
+                <tr>
+                    <td>Round trip within a datacenter</td>
+                    <td><code>~0.5 ms</code></td>
+                    <td>Adds up fast in a chain</td>
+                </tr>
+                <tr>
+                    <td>Disk seek (spinning)</td>
+                    <td><code>~10 ms</code></td>
+                    <td>A generation behind</td>
+                </tr>
+                <tr>
+                    <td>Round trip, same continent</td>
+                    <td><code>~30–70 ms</code></td>
+                    <td>Dominates everything</td>
+                </tr>
+                <tr>
+                    <td>Round trip, transcontinental</td>
+                    <td><code>~150–250 ms</code></td>
+                    <td>Physics, not engineering</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p>
+            That last group is the one worth burning into memory. Light travels through fibre at roughly
+            200,000 km/s — about two-thirds of its speed in vacuum, because of the refractive index of glass. That
+            works out to roughly <strong>1ms of round-trip time for every 100km of distance</strong>. London to
+            New York is about 5,600km, so the theoretical floor for a round trip is around 56ms, and in practice
+            you'll see 70–80ms once routing reality intrudes.
+        </p>
+        <p>
+            No amount of clever code beats that. If your architecture requires three sequential round trips between
+            continents, you have built a 250ms floor into your product, and the only fixes are structural: move the
+            data closer, remove the round trips, or overlap them.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 5 — A Single Request's Latency Budget, Stage by Stage</div>
+            <svg viewBox="0 0 780 400" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL5" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL5" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="25" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="400" fill="#fefefe" rx="12" />
+                <rect width="780" height="400" fill="url(#dotGridL5)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Same request, two very different days — median (teal) vs p99 (rose)
+                </text>
+
+                <!-- scale legend -->
+                <text x="250" y="52" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    scale: 1ms ≈ 2.6px
+                </text>
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9">
+                    <!-- Row 1 -->
+                    <text x="20" y="80" fill="#333">DNS + TLS (reused conn)</text>
+                    <rect x="230" y="70" width="3" height="12" rx="2" fill="#5eead4" stroke="#0d9488"
+                        stroke-width="0.8" />
+                    <rect x="230" y="84" width="8" height="12" rx="2" fill="#fda4af" stroke="#e11d48"
+                        stroke-width="0.8" />
+                    <text x="600" y="80" fill="#0d9488">1ms</text>
+                    <text x="650" y="92" fill="#e11d48">3ms</text>
+
+                    <!-- Row 2 -->
+                    <text x="20" y="118" fill="#333">Client → edge network</text>
+                    <rect x="230" y="108" width="94" height="12" rx="2" fill="#5eead4" stroke="#0d9488"
+                        stroke-width="0.8" filter="url(#roughenL5)" />
+                    <rect x="230" y="122" width="130" height="12" rx="2" fill="#fda4af" stroke="#e11d48"
+                        stroke-width="0.8" filter="url(#roughenL5)" />
+                    <text x="600" y="118" fill="#0d9488">36ms</text>
+                    <text x="650" y="130" fill="#e11d48">50ms</text>
+
+                    <!-- Row 3 -->
+                    <text x="20" y="156" fill="#333">LB / thread-pool queue wait</text>
+                    <rect x="230" y="146" width="10" height="12" rx="2" fill="#5eead4" stroke="#0d9488"
+                        stroke-width="0.8" />
+                    <rect x="230" y="160" width="320" height="12" rx="2" fill="#fda4af" stroke="#e11d48"
+                        stroke-width="1.4" filter="url(#roughenL5)" />
+                    <text x="600" y="156" fill="#0d9488">4ms</text>
+                    <text x="650" y="168" fill="#e11d48" font-weight="700">123ms ⚠</text>
+
+                    <!-- Row 4 -->
+                    <text x="20" y="194" fill="#333">Application compute</text>
+                    <rect x="230" y="184" width="52" height="12" rx="2" fill="#5eead4" stroke="#0d9488"
+                        stroke-width="0.8" filter="url(#roughenL5)" />
+                    <rect x="230" y="198" width="60" height="12" rx="2" fill="#fda4af" stroke="#e11d48"
+                        stroke-width="0.8" filter="url(#roughenL5)" />
+                    <text x="600" y="194" fill="#0d9488">20ms</text>
+                    <text x="650" y="206" fill="#e11d48">23ms</text>
+
+                    <!-- Row 5 -->
+                    <text x="20" y="232" fill="#333">Cache lookup (Redis)</text>
+                    <rect x="230" y="222" width="4" height="12" rx="2" fill="#5eead4" stroke="#0d9488"
+                        stroke-width="0.8" />
+                    <rect x="230" y="236" width="16" height="12" rx="2" fill="#fda4af" stroke="#e11d48"
+                        stroke-width="0.8" />
+                    <text x="600" y="232" fill="#0d9488">1.5ms</text>
+                    <text x="650" y="244" fill="#e11d48">6ms</text>
+
+                    <!-- Row 6 -->
+                    <text x="20" y="270" fill="#333">Database query</text>
+                    <rect x="230" y="260" width="47" height="12" rx="2" fill="#5eead4" stroke="#0d9488"
+                        stroke-width="0.8" filter="url(#roughenL5)" />
+                    <rect x="230" y="274" width="182" height="12" rx="2" fill="#fda4af" stroke="#e11d48"
+                        stroke-width="1.2" filter="url(#roughenL5)" />
+                    <text x="600" y="270" fill="#0d9488">18ms</text>
+                    <text x="650" y="282" fill="#e11d48">70ms</text>
+
+                    <!-- Row 7 -->
+                    <text x="20" y="308" fill="#333">Serialize + response</text>
+                    <rect x="230" y="298" width="8" height="12" rx="2" fill="#5eead4" stroke="#0d9488"
+                        stroke-width="0.8" />
+                    <rect x="230" y="312" width="21" height="12" rx="2" fill="#fda4af" stroke="#e11d48"
+                        stroke-width="0.8" />
+                    <text x="600" y="308" fill="#0d9488">3ms</text>
+                    <text x="650" y="320" fill="#e11d48">8ms</text>
+                </g>
+
+                <path d="M 20 336 L 740 336" fill="none" stroke="#ccc" stroke-width="1" />
+                <text x="20" y="356" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    font-weight="700">
+                    p50 total ≈ 83ms — dominated by the user's own network
+                </text>
+                <text x="20" y="376" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    font-weight="700">
+                    p99 total ≈ 283ms — dominated by QUEUE WAIT, which no code profiler will show you
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                The shape of the budget changes completely between p50 and p99. At the median you're bounded by
+                physics and real work; at the tail you're bounded by waiting. Optimizing the compute row would
+                barely move either number.
+            </p>
+        </div>
+
+        <p>
+            This is the practical payoff of drawing the budget: it tells you where optimization is even
+            <em>possible</em>. In the example above, someone spending a sprint shaving the application compute from
+            20ms to 12ms would improve p50 by under 10% and p99 by almost nothing. The queue wait is the story, and
+            the queue wait is a capacity and admission-control problem, not a code problem.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Serial vs Parallel on the Critical Path</div>
+            <p>
+                Only work that is <em>serial</em> adds to latency. Three 20ms dependency calls issued sequentially
+                cost 60ms; issued concurrently they cost about 22ms. Before optimizing any individual call, look
+                at whether the calls need to be ordered at all. Converting sequential fan-out to parallel fan-out
+                is usually the single highest-leverage latency change available, and it costs you nothing in
+                throughput.
+            </p>
+        </div>
+
+        <!-- Section 6: The ceiling -->
+        <h2 id="ceiling">
+            <span class="section-number">06</span>
+            The Throughput Ceiling and the Queueing Cliff
+        </h2>
+
+        <p>
+            Now for the part that connects everything, and the reason so many production incidents feel like they
+            came out of nowhere.
+        </p>
+        <p>
+            Every system has a maximum throughput, set by its narrowest resource — CPU, disk IO, network, a lock, a
+            connection pool, a single-threaded coordinator. Below that ceiling, throughput scales roughly with
+            offered load and latency stays flat and boring. That's the regime everyone tests in.
+        </p>
+        <p>
+            The trouble is what happens as you approach the ceiling. Latency does not rise gently and
+            proportionally. It rises <em>hyperbolically</em>. Basic queueing theory gives the shape: for a simple
+            single-server queue, the average time in system is
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Queueing Response Time</span>
+            <pre><code>W  =  S / (1 − ρ)
+
+W = average time in system (service + waiting)
+S = service time (the actual work)
+ρ = utilization (0 → 1), i.e. arrival rate ÷ capacity</code></pre>
+        </div>
+
+        <p>
+            Look at what that denominator does. At 50% utilization, latency is 2× the raw service time. At 90% it's
+            10×. At 99% it's 100×. The work being done hasn't changed at all — the 20ms of computation is still
+            20ms. Everything else is queueing.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 6 — The Hockey Stick: Latency vs Utilization</div>
+            <svg viewBox="0 0 780 360" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL6" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL6" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="26" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="360" fill="#fefefe" rx="12" />
+                <rect width="780" height="360" fill="url(#dotGridL6)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Service time is a constant 20ms. Everything above the line is pure waiting.
+                </text>
+
+                <!-- safe / danger zones -->
+                <rect x="90" y="55" width="488" height="235" fill="#ecfdf5" opacity="0.55" />
+                <rect x="578" y="55" width="122" height="235" fill="#fff1f2" opacity="0.6" />
+                <text x="330" y="75" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    operating zone — latency is flat and predictable
+                </text>
+                <text x="639" y="75" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    the cliff
+                </text>
+
+                <!-- Axes -->
+                <path d="M 90 290 L 730 290" fill="none" stroke="#333" stroke-width="1.5" />
+                <path d="M 90 290 L 90 55" fill="none" stroke="#333" stroke-width="1.5" />
+
+                <!-- x ticks -->
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#86868b"
+                    text-anchor="middle">
+                    <text x="90" y="308">0%</text>
+                    <text x="212" y="308">20%</text>
+                    <text x="334" y="308">40%</text>
+                    <text x="456" y="308">60%</text>
+                    <text x="578" y="308">80%</text>
+                    <text x="669" y="308">95%</text>
+                    <text x="700" y="308">100%</text>
+                    <text x="400" y="330" font-size="10" fill="#333">utilization (offered load ÷ capacity) →</text>
+                </g>
+
+                <!-- y ticks -->
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#86868b" text-anchor="end">
+                    <text x="84" y="293">0</text>
+                    <text x="84" y="238">100ms</text>
+                    <text x="84" y="183">200ms</text>
+                    <text x="84" y="128">300ms</text>
+                    <text x="84" y="73">400ms</text>
+                </g>
+                <text x="34" y="180" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" transform="rotate(-90 34 180)">mean latency</text>
+
+                <!-- The curve -->
+                <path d="M 90 279 L 273 274 L 395 268 L 456 262 L 517 253 L 578 235 L 609 217 L 639 180 L 657 133 L 669 70"
+                    fill="none" stroke="#4f46e5" stroke-width="2.5" filter="url(#roughenL6)" stroke-linecap="round"
+                    stroke-linejoin="round" />
+
+                <!-- annotated points -->
+                <circle cx="395" cy="268" r="4" fill="#4f46e5" />
+                <text x="395" y="258" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">50% → 40ms</text>
+
+                <circle cx="517" cy="253" r="4" fill="#4f46e5" />
+                <text x="512" y="243" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">70% → 67ms</text>
+
+                <circle cx="639" cy="180" r="4.5" fill="#e11d48" />
+                <text x="682" y="176" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">90% → 200ms</text>
+
+                <circle cx="669" cy="70" r="4.5" fill="#e11d48" />
+                <text x="700" y="62" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">95% → 400ms</text>
+
+                <!-- knee callout -->
+                <path d="M 600 120 L 622 200" fill="none" stroke="#e11d48" stroke-width="1.2" stroke-dasharray="3,3" />
+                <text x="560" y="112" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">the knee</text>
+
+                <text x="390" y="350" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Between 70% and 95% utilization you add 25% more load and pay 6× the latency.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                The curve is why "we were fine at 70% and fell over at 92%" is such a common incident summary.
+                Utilization is not a linear dial — the last 20% costs more than the first 70%.
+            </p>
+        </div>
+
+        <p>
+            This explains an enormous amount of real-world behaviour that otherwise looks irrational:
+        </p>
+
+        <ul>
+            <li>
+                <strong>Why the "efficient" cluster is the fragile one.</strong> Running at 90% utilization looks
+                like good stewardship of budget. It also means you're operating on the steep part of the curve,
+                where a 5% traffic bump produces a latency cliff, not a latency bump.
+            </li>
+            <li>
+                <strong>Why incidents escalate so quickly.</strong> Higher latency means requests hold resources
+                longer, which raises effective utilization, which raises latency further. The curve feeds itself.
+            </li>
+            <li>
+                <strong>Why retries make outages worse.</strong> A retry storm adds load precisely when
+                utilization is already past the knee, on a curve where added load is catastrophically expensive.
+            </li>
+            <li>
+                <strong>Why variance matters as much as the mean.</strong> The formula above assumes randomness in
+                arrivals. If traffic is bursty — and real traffic is always bursty — you spend time far above your
+                average utilization even when the average looks safe.
+            </li>
+        </ul>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Target 60–70%, Not 90%</div>
+            <p>
+                For any latency-sensitive service, the practical target for steady-state utilization is roughly
+                60–70% of measured capacity. That headroom is not waste — it's what keeps you on the flat part of
+                the curve when a burst arrives, a node is lost, or a deploy temporarily halves your fleet. Batch
+                and offline systems are the exception: with no user waiting, running near 100% is exactly right,
+                because there the whole point is throughput.
+            </p>
+        </div>
+
+        <h3>Past the Ceiling, Throughput Goes Down</h3>
+
+        <p>
+            One more counterintuitive thing. Beyond saturation, many systems don't plateau — they
+            <em>regress</em>. Throughput actually falls as load increases. Context switching, lock contention,
+            cache thrashing, GC pressure from a larger live set, coherency traffic between cores: all of it grows
+            superlinearly with concurrency. The Universal Scalability Law captures this formally, adding a
+            coherency term that eventually overwhelms the gains from parallelism.
+        </p>
+        <p>
+            Practically, this means an overloaded system can be doing <em>less</em> useful work than the same
+            system under moderate load, while consuming every resource you have. Which is why load shedding isn't
+            a defeatist tactic. Rejecting 10% of requests fast, so the other 90% complete normally, delivers more
+            successful work than accepting 100% and having everything time out.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Admission Control (Concurrency Limiter)</span>
+            <pre><code><span class="comment">// Cap in-flight work at the concurrency Little's Law says you can hold</span>
+<span class="comment">// while still meeting your latency target. Reject beyond it — fast.</span>
+
+<span class="keyword">private final</span> <span class="type">Semaphore</span> inFlight = <span class="keyword">new</span> <span class="type">Semaphore</span>(<span class="number">200</span>);   <span class="comment">// L = λ × W, plus headroom</span>
+
+<span class="keyword">public</span> <span class="type">Response</span> handle(<span class="type">Request</span> req) {
+    <span class="keyword">if</span> (!inFlight.tryAcquire()) {
+        <span class="comment">// Shed immediately. A fast 503 costs the client ~1ms and lets them</span>
+        <span class="comment">// back off. A slow timeout costs them 30s AND holds our resources.</span>
+        <span class="keyword">return</span> <span class="type">Response</span>.status(<span class="number">503</span>).header(<span class="string">"Retry-After"</span>, <span class="string">"1"</span>).build();
+    }
+    <span class="keyword">try</span> {
+        <span class="keyword">return</span> doWork(req);
+    } <span class="keyword">finally</span> {
+        inFlight.release();
+    }
+}</code></pre>
+        </div>
+
+        <div class="deep-dive">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-usl')">
+                <h4>Why adding servers stops helping — Amdahl, and then the Universal Scalability Law</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content" id="dd-usl">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        <strong>Amdahl's Law</strong> says speedup is capped by the serial fraction of the work. If
+                        5% of a request cannot be parallelized, infinite parallelism gets you a 20× speedup and not
+                        one bit more. Most systems have a serial fraction bigger than engineers assume: a shared
+                        sequence generator, a leader node, a single write master, one lock around a hot map.
+                    </p>
+                    <p>
+                        The <strong>Universal Scalability Law</strong> adds a second, nastier term: coherency cost.
+                        Beyond contention (waiting for shared resources), nodes must also agree with each other —
+                        cache-line invalidation between cores, replica synchronisation between machines, gossip
+                        between cluster members. Contention flattens the curve; coherency bends it back
+                        <em>down</em>. That's the mathematical reason a 64-core box can be slower than a 32-core
+                        box on the same workload.
+                    </p>
+                    <p>
+                        The operational takeaway: measure throughput across increasing concurrency and find where
+                        the curve peaks. That peak is your real capacity. Configure your limits below it and stop
+                        there — running past the peak buys you nothing and costs you everything.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 7: Three levers -->
+        <h2 id="levers">
+            <span class="section-number">07</span>
+            Three Levers: Batching, Pipelining, Parallelism
+        </h2>
+
+        <p>
+            When someone says "we improved throughput," they almost always pulled one of exactly three levers. Each
+            one has a distinct effect on latency, and knowing which is which is most of the analysis.
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">📦</div>
+                <h4>Batching</h4>
+                <p>Amortize fixed cost over many items. Throughput up, latency up. The classic trade.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🔗</div>
+                <h4>Pipelining</h4>
+                <p>Overlap stages so nothing idles. Throughput up, latency roughly unchanged.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🧵</div>
+                <h4>Parallelism</h4>
+                <p>Do independent work at once. Throughput up; latency down only if one item can be split.</p>
+            </div>
+        </div>
+
+        <h3>Batching — The Trade You Make on Purpose</h3>
+
+        <p>
+            Batching works because most operations have a fixed cost that has nothing to do with how much data
+            you're moving: a network round trip, a syscall, an fsync, a transaction commit, a lock acquisition. Do
+            one thing at a time and you pay that fixed cost once per item. Do a hundred at a time and you pay it
+            once per hundred.
+        </p>
+        <p>
+            The gains are frequently enormous — one or two orders of magnitude. And the cost is completely
+            predictable: the first item in a batch has to wait for the batch to fill up. You've deliberately added
+            latency to buy throughput.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">The Batching Trade, Concretely</span>
+            <pre><code>ONE ROW AT A TIME
+  1 round trip (0.5ms) + 1 fsync (1ms) per row
+  → ~1.5ms per row  →  ~660 rows/sec
+  → latency per row: 1.5ms                    <span class="comment">// excellent</span>
+
+BATCH OF 500
+  1 round trip (0.5ms) + 1 fsync (1ms) + 500 × 0.02ms work
+  → ~11.5ms for 500 rows  →  ~43,000 rows/sec  <span class="comment">// 65× throughput</span>
+  → latency for the first row: up to 11.5ms + fill wait</code></pre>
+        </div>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 7 — Batch Size: Throughput Saturates, Latency Never Stops Rising</div>
+            <svg viewBox="0 0 780 350" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL7" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL7" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="27" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="350" fill="#fefefe" rx="12" />
+                <rect width="780" height="350" fill="url(#dotGridL7)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    Both curves rise. Only one of them is a benefit.
+                </text>
+
+                <!-- sweet spot band -->
+                <rect x="235" y="55" width="120" height="230" fill="#eef2ff" opacity="0.8" />
+                <text x="295" y="72" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">sweet spot</text>
+                <text x="295" y="86" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">most of the gain,</text>
+                <text x="295" y="98" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">little of the pain</text>
+
+                <!-- Axes -->
+                <path d="M 90 285 L 720 285" fill="none" stroke="#333" stroke-width="1.5" />
+                <path d="M 90 285 L 90 55" fill="none" stroke="#333" stroke-width="1.5" />
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" fill="#86868b"
+                    text-anchor="middle">
+                    <text x="90" y="303">1</text>
+                    <text x="200" y="303">10</text>
+                    <text x="310" y="303">50</text>
+                    <text x="420" y="303">100</text>
+                    <text x="530" y="303">500</text>
+                    <text x="640" y="303">1000</text>
+                    <text x="400" y="325" font-size="10" fill="#333">batch size (log scale) →</text>
+                </g>
+
+                <!-- Throughput curve (teal, saturating) -->
+                <path d="M 90 270 C 160 205, 230 145, 310 128 C 420 112, 540 105, 700 102" fill="none" stroke="#0d9488"
+                    stroke-width="2.5" filter="url(#roughenL7)" stroke-linecap="round" />
+                <text x="560" y="94" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    font-weight="700">THROUGHPUT — saturates</text>
+
+                <!-- Latency curve (indigo, rising) -->
+                <path d="M 90 278 C 220 272, 330 258, 430 228 C 540 194, 620 140, 700 72" fill="none" stroke="#4f46e5"
+                    stroke-width="2.5" filter="url(#roughenL7)" stroke-linecap="round" stroke-dasharray="7,4" />
+                <text x="600" y="130" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    font-weight="700">LATENCY — keeps climbing</text>
+
+                <circle cx="310" cy="128" r="4.5" fill="#0d9488" />
+                <circle cx="310" cy="262" r="4.5" fill="#4f46e5" />
+
+                <text x="390" y="343" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Past the knee you are paying real latency for throughput you were already getting.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                Batch size has diminishing returns on throughput and linear costs on latency. The right batch size
+                is the smallest one that reaches the plateau — not the largest one your buffer allows.
+            </p>
+        </div>
+
+        <p>
+            The universal fix for batching's latency cost is a <strong>time bound</strong>: flush when the batch is
+            full <em>or</em> when a timer expires, whichever comes first. This caps the worst-case wait at
+            something you chose, rather than something dictated by how quiet traffic happens to be. It's the same
+            idea whether you're writing a Kafka producer, a metrics agent, or a database writer.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Config — Size Bound AND Time Bound</span>
+            <pre><code><span class="comment"># Kafka producer: batch up to 64KB, but never make the first</span>
+<span class="comment"># message in a batch wait more than 10ms to leave.</span>
+batch.size  = 65536
+linger.ms   = 10
+
+<span class="comment"># linger.ms = 0   → lowest latency, worst throughput (one record per request)</span>
+<span class="comment"># linger.ms = 100 → great throughput, 100ms floor added to every message</span>
+<span class="comment"># The number IS your latency-vs-throughput dial. Set it deliberately.</span></code></pre>
+        </div>
+
+        <h3>Pipelining — The Lever With No Downside</h3>
+
+        <p>
+            Pipelining is the one people forget, and it's the closest thing to a free lunch in this whole topic.
+            Instead of waiting for a response before sending the next request, you keep the wire full — multiple
+            requests in flight, responses arriving as they complete.
+        </p>
+        <p>
+            An assembly line is the intuition: each station works continuously on a different unit. The time for
+            any single unit to traverse the line (latency) doesn't change. The rate at which finished units come
+            off the end (throughput) goes up dramatically, because nothing idles.
+        </p>
+        <p>
+            HTTP/2 multiplexing, Redis pipelining, TCP's sliding window, database statement batching, CPU
+            instruction pipelines — all the same idea. If your client is doing request-wait-request-wait against a
+            service with a 20ms RTT, you're capped at 50 operations per second per connection no matter how fast
+            the server is. Pipelining removes that cap without adding a millisecond to any individual operation.
+        </p>
+
+        <h3>Parallelism — Helps Latency Only If You Can Split the Work</h3>
+
+        <p>
+            Parallelism is doing independent work simultaneously on separate resources, and its effect on latency
+            depends entirely on <em>what</em> you parallelize.
+        </p>
+        <p>
+            Running 8 requests on 8 cores instead of 1 core gives you 8× throughput and identical latency — each
+            request still takes exactly as long as it did. This is horizontal scaling, and it is a pure throughput
+            play.
+        </p>
+        <p>
+            Splitting <em>one</em> request into 8 concurrent sub-tasks is different: that reduces the latency of
+            that request, bounded by Amdahl's Law and by the coordination overhead of splitting and rejoining. This
+            is the scatter-gather pattern, and it genuinely buys latency — but as Diagram 4 showed, it also
+            exposes you to the tail of every shard you touch.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Lever</th>
+                    <th>Effect on Throughput</th>
+                    <th>Effect on Latency</th>
+                    <th>Real Cost</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Batching</td>
+                    <td class="thr-cell">Large increase, then plateau</td>
+                    <td class="lat-cell">Increases — by design</td>
+                    <td>Fill wait; bigger blast radius per failure</td>
+                </tr>
+                <tr>
+                    <td>Pipelining</td>
+                    <td class="thr-cell">Large increase</td>
+                    <td class="lat-cell">Roughly unchanged</td>
+                    <td>Head-of-line blocking; ordering complexity</td>
+                </tr>
+                <tr>
+                    <td>Parallelism (across requests)</td>
+                    <td class="thr-cell">Scales with resources</td>
+                    <td class="lat-cell">Unchanged</td>
+                    <td>Cost per node; coordination overhead</td>
+                </tr>
+                <tr>
+                    <td>Parallelism (within one request)</td>
+                    <td class="thr-cell">Neutral or slightly worse</td>
+                    <td class="lat-cell">Decreases</td>
+                    <td>Amdahl's ceiling; exposure to every shard's tail</td>
+                </tr>
+                <tr>
+                    <td>Caching</td>
+                    <td class="thr-cell">Increases (offloads the source)</td>
+                    <td class="lat-cell">Decreases on hits</td>
+                    <td>Staleness; the failure modes of caching</td>
+                </tr>
+                <tr>
+                    <td>Compression</td>
+                    <td class="thr-cell">Increases on constrained links</td>
+                    <td class="lat-cell">Either way — CPU vs bytes</td>
+                    <td>CPU time traded for transfer time</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Section 8: Conflict -->
+        <h2 id="conflict">
+            <span class="section-number">08</span>
+            Where They Genuinely Conflict
+        </h2>
+
+        <p>
+            Most of the time, latency and throughput are simply different measurements of the same healthy system.
+            But there is a specific and recognisable family of decisions where improving one directly costs you the
+            other. These are worth knowing by name, because in every one of them the default configuration has
+            already made the choice for you.
+        </p>
+
+        <h3>1. Nagle's Algorithm — A 40-Year-Old Default Still Adding Delay</h3>
+
+        <p>
+            TCP has a rule, added in 1984, that says: don't send a small packet if there's already an
+            unacknowledged small packet in flight. Buffer the data and send it as one larger packet when the ACK
+            arrives. The goal was to stop tiny writes from flooding the network with 40 bytes of header for every 1
+            byte of payload — a real throughput and efficiency win.
+        </p>
+        <p>
+            Combine it with delayed ACK on the other side (which waits up to ~40ms before acknowledging, hoping to
+            piggyback on outgoing data) and you get the classic interaction: one side is waiting for an ACK before
+            sending, the other is waiting for data before ACKing. Your 1ms request just became a 40ms request, and
+            nothing is wrong with your code.
+        </p>
+        <p>
+            This is why practically every latency-sensitive protocol implementation sets
+            <code>TCP_NODELAY</code>. It's a pure trade: slightly more packets on the wire, dramatically lower
+            latency for small messages.
+        </p>
+
+        <h3>2. Group Commit — Durability Batched Across Transactions</h3>
+
+        <p>
+            Databases face this constantly. An <code>fsync</code> to durable storage is expensive and its cost
+            barely changes with size. Committing each transaction individually gives every transaction the lowest
+            possible latency and caps you at a few hundred commits per second. Grouping commits — waiting a few
+            milliseconds to collect transactions and syncing them together — takes you into the tens of thousands
+            per second, at the cost of a small, deliberate delay on every commit.
+        </p>
+        <p>
+            You'll find the same dial everywhere under different names:
+            <code>innodb_flush_log_at_trx_commit</code>, <code>commit_delay</code>,
+            <code>synchronous_commit</code>, WAL flush intervals. They are all the same question: how much latency
+            will you add to buy how much throughput, and how much durability are you willing to risk?
+        </p>
+
+        <h3>3. Queue Depth and Buffer Size — The Bufferbloat Trap</h3>
+
+        <p>
+            Big buffers absorb bursts, which keeps utilization high and prevents the sender from stalling. That's a
+            genuine throughput win. It's also how you build a system with terrible latency and perfectly healthy
+            dashboards.
+        </p>
+        <p>
+            A deep queue means a request can sit for hundreds of milliseconds before anyone looks at it. Worse, if
+            it sits long enough, the client has already timed out and retried — so the work you eventually perform
+            is work nobody is waiting for anymore. You're burning capacity producing responses that go straight
+            into a closed socket.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Buffers Don't Add Capacity</div>
+            <p>
+                A buffer converts a rejection into a delay. That's genuinely useful for a short burst — a spike
+                arrives, the queue absorbs it, the queue drains. It is actively harmful for sustained overload,
+                where the queue simply grows until it becomes the dominant term in your latency and then runs you
+                out of memory.
+            </p>
+            <p>
+                The fix is a bounded queue sized by your latency budget (Little's Law again), plus deadline
+                propagation: stamp each request with its expiry, and drop it when it's dequeued past that deadline
+                instead of doing work nobody will read.
+            </p>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">Java — Drop Work That's Already Expired</span>
+            <pre><code><span class="comment">// A request that has been queued past its deadline is worthless: the</span>
+<span class="comment">// caller has given up. Serving it consumes capacity for zero benefit.</span>
+
+<span class="keyword">public</span> <span class="type">Response</span> handle(<span class="type">Request</span> req) {
+    <span class="keyword">long</span> queuedMs = now() - req.arrivalTimeMillis();
+
+    <span class="keyword">if</span> (queuedMs &gt; req.deadlineMillis()) {
+        expiredCounter.increment();
+        <span class="keyword">return</span> <span class="type">Response</span>.status(<span class="number">503</span>).build();   <span class="comment">// abandon it, cheaply</span>
+    }
+
+    <span class="comment">// Pass the REMAINING budget downstream so the DB doesn't spend</span>
+    <span class="comment">// 2 seconds on a query whose caller expires in 300ms.</span>
+    <span class="keyword">long</span> remaining = req.deadlineMillis() - queuedMs;
+    <span class="keyword">return</span> doWork(req, <span class="type">Duration</span>.ofMillis(remaining));
+}</code></pre>
+        </div>
+
+        <h3>4. Compression and Encoding</h3>
+
+        <p>
+            Compression trades CPU time for bytes on the wire. On a constrained link, that's a throughput win and
+            often a latency win too — less data means less transfer time. On a fast local network with a
+            CPU-saturated server, it's the opposite: you added compute to the critical path to save transfer time
+            that was already negligible.
+        </p>
+        <p>
+            The right answer depends on the ratio between your CPU headroom and your bandwidth headroom, which is
+            why the same compression setting can be correct at the CDN edge and wrong between two services in the
+            same rack.
+        </p>
+
+        <h3>5. Garbage Collection and Runtime Tuning</h3>
+
+        <p>
+            Every managed runtime gives you this dial explicitly. Throughput collectors maximise application work
+            per unit of GC effort, accepting longer stop-the-world pauses. Low-latency collectors (ZGC, Shenandoah,
+            G1 with tight pause goals) do more total work — concurrent marking, read/write barriers, extra CPU — to
+            keep individual pauses in the single-digit milliseconds.
+        </p>
+        <p>
+            You will pay 10–20% more CPU for the low-latency collector. If a user is waiting, that's an obviously
+            good trade. If it's a nightly batch job, it's just wasted money. The JVM flag you pick is a
+            latency-versus-throughput decision, stated as plainly as it ever gets.
+        </p>
+
+        <div class="deep-dive">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-headofline')">
+                <h4>Head-of-line blocking: the conflict hiding inside pipelining</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content" id="dd-headofline">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Pipelining raises throughput by keeping multiple requests in flight, but if the channel
+                        delivers in strict order, one slow item at the front blocks everything behind it. That's
+                        head-of-line blocking, and it's a latency cost hidden inside a throughput optimization.
+                    </p>
+                    <p>
+                        HTTP/1.1 pipelining had it at the application layer — a slow response stalled the whole
+                        connection, which is why browsers opened six connections per host instead. HTTP/2 fixed
+                        that with multiplexed streams, but the problem simply moved down a layer: TCP itself
+                        guarantees ordered delivery, so a single lost packet stalls every stream sharing that
+                        connection. HTTP/3 over QUIC solves it properly by giving each stream independent loss
+                        recovery.
+                    </p>
+                    <p>
+                        The same pattern shows up far from HTTP: a Kafka consumer blocked on one poisoned message,
+                        a single-threaded event loop stuck in a long callback, an ordered work queue where one
+                        expensive job delays a thousand cheap ones. Whenever you see "throughput is fine but some
+                        requests wait forever," look for something enforcing order that doesn't need to.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 9: No conflict -->
+        <h2 id="no-conflict">
+            <span class="section-number">09</span>
+            Where They Don't — And Fixing One Fixes Both
+        </h2>
+
+        <p>
+            It would be a mistake to leave this thinking latency and throughput are permanently at war. In
+            practice, most of the time they aren't — and a large share of real performance work improves both at
+            once, because both were suffering from the same underlying problem.
+        </p>
+
+        <ul>
+            <li>
+                <strong>Removing a bottleneck.</strong> Add the missing index and the query drops from 800ms to
+                4ms. Latency improves 200×; the database now serves far more queries per second with the same
+                hardware. Nobody traded anything.
+            </li>
+            <li>
+                <strong>Fixing an N+1 query.</strong> Replacing 200 sequential round trips with one join cuts
+                latency dramatically <em>and</em> removes 199 round trips of load from the database. Both numbers
+                improve, and the second one improves for every other user of that database too.
+            </li>
+            <li>
+                <strong>Adding a cache.</strong> Hits return in microseconds instead of milliseconds, and every
+                hit is load the origin never sees. Latency down, effective throughput up.
+            </li>
+            <li>
+                <strong>Reducing payload size.</strong> Less to serialize, less to transfer, less to parse. Faster
+                for the individual request and cheaper for the system.
+            </li>
+            <li>
+                <strong>Just running below the knee.</strong> Adding capacity to a saturated system lowers
+                utilization, which — per Diagram 6 — collapses queue wait. Latency improves sharply even though
+                you "only" added throughput capacity.
+            </li>
+        </ul>
+
+        <p>
+            That last one deserves emphasis because it's the source of the most common misconception in this whole
+            topic. People observe "we added servers and latency improved" and conclude that throughput and latency
+            are the same lever. They aren't — what happened is that you moved back down the utilization curve, and
+            the queue wait that had been inflating latency disappeared. Once you're below the knee, adding more
+            servers stops improving latency entirely. The relationship isn't linear; it's a cliff you either are or
+            aren't standing on.
+        </p>
+
+        <div class="callout callout-throughput">
+            <div class="callout-label">⚡ The Diagnostic Question</div>
+            <p>
+                When latency is bad, ask one question first: <strong>is the system near saturation?</strong> If
+                yes, your latency problem is a capacity problem — add resources or shed load, and don't bother
+                profiling the code yet. If no, your latency problem is a critical-path problem — profile, count
+                the round trips, look for serial work that could be parallel. These two problems have completely
+                different fixes, and applying the wrong one wastes weeks.
+            </p>
+        </div>
+
+        <!-- Section 10: Measuring -->
+        <h2 id="measuring">
+            <span class="section-number">10</span>
+            Measuring Honestly — Coordinated Omission
+        </h2>
+
+        <p>
+            Everything above assumes your numbers are real. Often they aren't, and the way they're wrong is
+            systematic rather than random — it always makes the system look better than it is.
+        </p>
+        <p>
+            The most important instance has a name: <strong>coordinated omission</strong>, coined by Gil Tene. It
+            describes what happens when your load generator's send rate is coupled to the system's response time.
+        </p>
+        <p>
+            Picture a load test with 100 virtual users, each looping: send a request, wait for the response, send
+            the next. Now the server stalls for 5 seconds. During that stall, how many requests does your load
+            generator send? None — all 100 users are politely waiting. When the stall clears, you record 100
+            requests that took about 5 seconds each and carry on.
+        </p>
+        <p>
+            But in production, traffic does not wait politely. At 1,000 req/s, a 5-second stall means 5,000
+            requests arrived during the stall, and the last one waited nearly 5 seconds on top of its own service
+            time. Your load test recorded 100 slow samples. Reality would have produced 5,000, many of them far
+            slower. Your p99 is not slightly optimistic — it's fiction.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 8 — Closed vs Open Load Models (and the Samples That Vanish)</div>
+            <svg viewBox="0 0 780 380" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL8" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL8" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="28" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+                <rect width="780" height="380" fill="#fefefe" rx="12" />
+                <rect width="780" height="380" fill="url(#dotGridL8)" rx="12" />
+
+                <text x="390" y="28" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    text-anchor="middle">
+                    The server stalls for 5 seconds. What does each load model record?
+                </text>
+
+                <!-- The stall band -->
+                <rect x="300" y="55" width="180" height="270" fill="#fff1f2" opacity="0.75" />
+                <text x="390" y="72" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">SERVER STALLED (5s)</text>
+
+                <!-- CLOSED model -->
+                <text x="30" y="115" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    font-weight="700">CLOSED LOOP</text>
+                <text x="30" y="131" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    "100 users, each waits for its reply"
+                </text>
+                <path d="M 30 160 L 740 160" fill="none" stroke="#333" stroke-width="1.2" />
+                <g fill="#c7d2fe" stroke="#4f46e5" stroke-width="1">
+                    <circle cx="60" cy="160" r="5" /><circle cx="105" cy="160" r="5" /><circle cx="150" cy="160"
+                        r="5" /><circle cx="195" cy="160" r="5" /><circle cx="240" cy="160" r="5" />
+                    <circle cx="285" cy="160" r="5" />
+                    <circle cx="500" cy="160" r="5" /><circle cx="545" cy="160" r="5" /><circle cx="590" cy="160"
+                        r="5" /><circle cx="635" cy="160" r="5" /><circle cx="680" cy="160" r="5" />
+                </g>
+                <text x="390" y="150" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">nothing sent — the generator waited too</text>
+                <text x="390" y="182" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    result: ~100 samples at ~5s. Reported p99: comfortably wrong.
+                </text>
+
+                <!-- OPEN model -->
+                <text x="30" y="235" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12"
+                    font-weight="700">OPEN LOOP</text>
+                <text x="30" y="251" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8">
+                    "1,000 req/s arrive whether you're ready or not"
+                </text>
+                <path d="M 30 285 L 740 285" fill="none" stroke="#333" stroke-width="1.2" />
+                <g fill="#99f6e4" stroke="#0d9488" stroke-width="1">
+                    <circle cx="60" cy="285" r="5" /><circle cx="105" cy="285" r="5" /><circle cx="150" cy="285"
+                        r="5" /><circle cx="195" cy="285" r="5" /><circle cx="240" cy="285" r="5" />
+                    <circle cx="285" cy="285" r="5" />
+                </g>
+                <g fill="#fda4af" stroke="#e11d48" stroke-width="1">
+                    <circle cx="315" cy="285" r="5" /><circle cx="345" cy="285" r="5" /><circle cx="375" cy="285"
+                        r="5" /><circle cx="405" cy="285" r="5" /><circle cx="435" cy="285" r="5" />
+                    <circle cx="465" cy="285" r="5" />
+                </g>
+                <g fill="#99f6e4" stroke="#0d9488" stroke-width="1">
+                    <circle cx="500" cy="285" r="5" /><circle cx="545" cy="285" r="5" /><circle cx="590" cy="285"
+                        r="5" /><circle cx="635" cy="285" r="5" /><circle cx="680" cy="285" r="5" />
+                </g>
+                <text x="390" y="272" fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">5,000 requests still arrived — and queued</text>
+                <text x="390" y="308" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9"
+                    text-anchor="middle">
+                    result: thousands of samples from 5s down to 0. This is what users experienced.
+                </text>
+
+                <text x="390" y="352" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle">
+                    Coordinated omission: the samples that would have looked worst are the exact ones never taken.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                A closed-loop load generator backs off exactly when the system is struggling, deleting the evidence
+                of the struggle. Unless your users also pause when your service is slow, test with an open model.
+            </p>
+        </div>
+
+        <h3>A Short Checklist for Measuring Both Numbers Properly</h3>
+
+        <ul>
+            <li>
+                <strong>Use an open-model load generator</strong> for anything user-facing — one that maintains a
+                target arrival rate independent of response times (wrk2, Gatling's open workload model, k6's
+                constant-arrival-rate executor), or one that explicitly corrects for coordinated omission.
+            </li>
+            <li>
+                <strong>Start the clock at arrival</strong>, not at the start of processing. Queue wait is
+                latency.
+            </li>
+            <li>
+                <strong>Export histograms, not percentiles.</strong> Percentiles computed per-instance cannot be
+                aggregated; distributions can.
+            </li>
+            <li>
+                <strong>Report throughput and latency together, always.</strong> "p99 = 40ms" is meaningless
+                without the load it was measured at. Every latency number should carry its throughput, and every
+                throughput number should carry its latency.
+            </li>
+            <li>
+                <strong>Measure the knee, not just one point.</strong> Run a load sweep and plot latency against
+                throughput. The interesting output isn't a number — it's the shape, and where it bends.
+            </li>
+            <li>
+                <strong>Count errors as latency.</strong> A request that times out at 30 seconds and gets dropped
+                from your latency stats makes your p99 look wonderful. Failed requests are the slowest requests;
+                excluding them inverts the truth.
+            </li>
+        </ul>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The Load Sweep Is the Deliverable</div>
+            <p>
+                A single load test at one concurrency level tells you almost nothing. Sweep from 10% to 120% of
+                expected capacity, and plot latency (p50, p99) against achieved throughput. You'll get the curve
+                from Diagram 6 for your own system, drawn from your own data: the flat region, the knee, and the
+                point where throughput stops rising. That chart answers capacity planning, autoscaler thresholds,
+                and concurrency limits all at once — and it's a far stronger artifact to bring to a design review
+                than any single number.
+            </p>
+        </div>
+
+        <!-- Section 11: Playbook -->
+        <h2 id="playbook">
+            <span class="section-number">11</span>
+            The Design Playbook
+        </h2>
+
+        <p>
+            All of this collapses into one question you should be able to answer about any component you design:
+            <strong>is a human waiting on this?</strong>
+        </p>
+        <p>
+            If yes, latency is the primary metric and throughput is a constraint you must satisfy. If no,
+            throughput is the primary metric and latency only matters as a deadline. Systems get into trouble when
+            a single path tries to serve both, because the correct configuration for each is genuinely opposite.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 9 — Which Number Are You Optimizing?</div>
+            <svg viewBox="0 0 780 420" xmlns="http://www.w3.org/2000/svg" style="max-width: 780px">
+                <defs>
+                    <pattern id="dotGridL9" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <filter id="roughenL9" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="29" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="exArrowL9" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                </defs>
+                <rect width="780" height="420" fill="#fefefe" rx="12" />
+                <rect width="780" height="420" fill="url(#dotGridL9)" rx="12" />
+
+                <!-- Q1 -->
+                <rect x="255" y="30" width="270" height="56" rx="9" fill="#ffffff" stroke="#333" stroke-width="1.5"
+                    filter="url(#roughenL9)" />
+                <text x="390" y="55" fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">Is a human waiting on this response?</text>
+                <text x="390" y="73" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">(or a caller who is, transitively)</text>
+
+                <path d="M 300 88 L 190 122" fill="none" stroke="#333" stroke-width="1.4"
+                    marker-end="url(#exArrowL9)" />
+                <text x="225" y="105" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    font-weight="700">YES</text>
+                <path d="M 480 88 L 590 122" fill="none" stroke="#333" stroke-width="1.4"
+                    marker-end="url(#exArrowL9)" />
+                <text x="535" y="105" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    font-weight="700">NO</text>
+
+                <!-- Latency branch -->
+                <rect x="35" y="125" width="310" height="230" rx="9" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.8"
+                    filter="url(#roughenL9)" />
+                <text x="190" y="150" fill="#4f46e5" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="700">OPTIMIZE LATENCY</text>
+                <text x="190" y="168" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">SLO on p99, throughput is a constraint</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5" fill="#333">
+                    <text x="55" y="195">· run at 60–70% utilization, not 90%</text>
+                    <text x="55" y="216">· no batching on the request path</text>
+                    <text x="55" y="237">· TCP_NODELAY, keep-alive, HTTP/2 or 3</text>
+                    <text x="55" y="258">· parallel fan-out, never sequential</text>
+                    <text x="55" y="279">· tight timeouts + hedging + fallbacks</text>
+                    <text x="55" y="300">· cache aggressively; move data closer</text>
+                    <text x="55" y="321">· bounded queues; shed instead of stalling</text>
+                    <text x="55" y="342">· low-pause GC, pay the CPU premium</text>
+                </g>
+
+                <!-- Throughput branch -->
+                <rect x="435" y="125" width="310" height="230" rx="9" fill="#ecfdf5" stroke="#0d9488" stroke-width="1.8"
+                    filter="url(#roughenL9)" />
+                <text x="590" y="150" fill="#0d9488" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13"
+                    text-anchor="middle" font-weight="700">OPTIMIZE THROUGHPUT</text>
+                <text x="590" y="168" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8"
+                    text-anchor="middle">SLO on completion deadline, latency is slack</text>
+                <g font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9.5" fill="#333">
+                    <text x="455" y="195">· run hot — 90%+ utilization is correct</text>
+                    <text x="455" y="216">· batch as large as memory allows</text>
+                    <text x="455" y="237">· compress; trade CPU for bytes</text>
+                    <text x="455" y="258">· deep queues are fine, even good</text>
+                    <text x="455" y="279">· retry generously, checkpoint progress</text>
+                    <text x="455" y="300">· sequential IO over random IO</text>
+                    <text x="455" y="321">· throughput GC, big heaps, long pauses OK</text>
+                    <text x="455" y="342">· spot/preemptible capacity is a fit</text>
+                </g>
+
+                <!-- Both -->
+                <rect x="180" y="378" width="420" height="30" rx="8" fill="#fff7ed" stroke="#d97706" stroke-width="1.5"
+                    filter="url(#roughenL9)" />
+                <text x="390" y="397" fill="#b45309" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">
+                    Answer is "both"? Split the path — a fast lane and a bulk lane, isolated resources.
+                </text>
+            </svg>
+            <p class="diagram-caption">
+                When one service must serve both interactive and bulk traffic, the answer is almost never a
+                compromise setting — it's two paths with separate pools, separate queues, and separate configs.
+            </p>
+        </div>
+
+        <h3>The Fast Lane / Bulk Lane Pattern</h3>
+
+        <p>
+            The "both" case is common enough to deserve its own treatment. A single API serves a mobile app (needs
+            80ms p99) and a partner's nightly reconciliation job (needs to move 40 million records before
+            morning). Tune for latency and the batch job crawls. Tune for throughput and the app feels broken.
+            Compromise and you get a system that's mediocre at both, which is the usual outcome.
+        </p>
+        <p>
+            The right move is isolation. Same code, different execution paths:
+        </p>
+
+        <ul>
+            <li>
+                <strong>Separate thread pools or instance groups</strong>, so a batch surge cannot consume the
+                capacity the interactive path depends on. This is bulkheading, and it's the single most valuable
+                structural defence you can add.
+            </li>
+            <li>
+                <strong>Separate queues with separate depths</strong> — shallow for interactive (a shallow queue
+                is a latency guarantee), deep for bulk (a deep queue is a throughput buffer).
+            </li>
+            <li>
+                <strong>Separate configuration</strong> — batching, compression, and timeouts set independently
+                per lane.
+            </li>
+            <li>
+                <strong>Priority with a floor</strong>, if lanes must share a resource: interactive wins, but bulk
+                gets a guaranteed minimum share so it can't be starved indefinitely.
+            </li>
+            <li>
+                <strong>Replicas, not one cluster</strong>, when the storage layer is shared — analytical reads on
+                a read replica, interactive reads on the primary path.
+            </li>
+        </ul>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Say It Out Loud in the Design Review</div>
+            <p>
+                "This is a latency-optimized path; it runs at 65% utilization and does not batch. The export path
+                is throughput-optimized; it runs hot, batches at 5,000 rows, and has a 4-hour deadline rather than
+                a p99." Two sentences, and everyone in the room now knows what the system is for and which
+                dashboard should page someone. That clarity is worth more than any individual optimization.
+            </p>
+        </div>
+
+        <!-- Section 12: Failure gallery -->
+        <h2 id="failures">
+            <span class="section-number">12</span>
+            Five Ways This Goes Wrong in Production
+        </h2>
+
+        <p>
+            Theory is easier to remember when it's attached to a scar. Here are the five patterns I've seen most
+            often — each one is this article's material, expressed as an incident.
+        </p>
+
+        <h3>1. The Green Dashboard During an Outage</h3>
+        <p>
+            Throughput looks normal. Error rate is near zero. Average latency is fine. Users are furious. The
+            cause is almost always one of three things: latency is measured from inside the handler and misses
+            queue wait; the dashboard shows a mean that a fat tail is hiding behind; or timed-out requests are
+            excluded from the latency stats, so the slowest requests are silently deleted before the percentile is
+            computed. Fix the measurement before you touch the system.
+        </p>
+
+        <h3>2. The Retry Storm</h3>
+        <p>
+            A dependency slows down. Clients time out and retry. Retries add load to a system already past the
+            knee, where added load is exponentially expensive. Latency climbs further, more clients time out, more
+            retries arrive. The system is now serving several times its normal request volume, almost none of
+            which produces a useful response. Defences: exponential backoff with jitter, retry budgets (cap
+            retries at a small percentage of total traffic), circuit breakers, and never retrying a request whose
+            deadline has already passed.
+        </p>
+
+        <h3>3. The p99 That Is Actually a GC Pause</h3>
+        <p>
+            Your p50 is 15ms. Your p99 is 900ms. The application profiler shows nothing — because the pause isn't
+            in your code, it's the runtime stopping the world. Every request unlucky enough to be in flight during
+            a collection eats the full pause. The signature is a p99 that clusters around a specific value rather
+            than spreading out, and correlates with heap size rather than with load. Fix by reducing allocation
+            rate, right-sizing the heap, or switching to a low-pause collector — and check that the same pattern
+            isn't coming from your service's dependencies too.
+        </p>
+
+        <h3>4. The Autoscaler That Oscillates</h3>
+        <p>
+            Scaling on CPU alone means you scale <em>after</em> utilization is already high — which, per the
+            hockey-stick curve, means you scale after latency has already degraded. New instances take minutes to
+            become useful (start, warm caches, JIT, fill connection pools), during which latency worsens further.
+            Then the burst passes, the fleet is oversized, it scales down, and the cycle repeats. Better: scale on
+            a signal that leads rather than lags — queue depth, in-flight concurrency, or request rate per
+            instance — with asymmetric thresholds (scale up fast, scale down slowly) and enough warm headroom to
+            cover the startup delay.
+        </p>
+
+        <h3>5. The Connection Pool That Became the Bottleneck</h3>
+        <p>
+            Everything is fast in isolation. Under load, latency triples with no CPU, memory, or IO pressure
+            anywhere. The bottleneck is a pool of 20 database connections and Little's Law: at 20ms of database
+            time per request, 20 connections cap you at 1,000 requests per second, full stop. Beyond that,
+            requests wait for a connection — and waiting is latency that appears in no query log and no profiler.
+            Any fixed-size resource on the request path is a throughput ceiling, and every throughput ceiling
+            becomes a latency problem the moment you reach it.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ The Common Thread</div>
+            <p>
+                Four of these five failures share a root cause: <strong>waiting that nobody measured</strong>.
+                Queue wait, connection-pool wait, GC pause, retry backlog. None of them appear in a CPU profile.
+                All of them are latency. If you instrument one thing after reading this, instrument the time
+                between "request arrived" and "work started" — it is the most under-monitored number in most
+                production systems.
+            </p>
+        </div>
+
+        <!-- Section 13: Envelope -->
+        <h2 id="envelope">
+            <span class="section-number">13</span>
+            Back-of-the-Envelope: Sizing a Real Service
+        </h2>
+
+        <p>
+            Let's put the whole model to work on a concrete problem, the way you would on a whiteboard.
+        </p>
+        <p>
+            <strong>The requirement.</strong> A product API must handle 5,000 requests per second at peak, with a
+            p99 under 250ms. Profiling shows each request consumes about 20ms of CPU and makes one database call
+            taking about 18ms.
+        </p>
+
+        <h3>Step 1 — Find the throughput ceiling per core</h3>
+
+        <div class="code-block">
+            <span class="code-block-label">Capacity</span>
+            <pre><code>Service demand per request  = 20ms CPU
+Max throughput per core     = 1 / 0.020  = 50 req/s   <span class="comment">// at 100% utilization</span>
+CPU-seconds needed/second   = 5000 × 0.020 = 100 core-seconds/s
+
+So: 100 cores fully saturated. Which we will NOT do.</code></pre>
+        </div>
+
+        <h3>Step 2 — Apply the utilization curve</h3>
+
+        <p>
+            Running those 100 cores at 100% puts us at the far right of the hockey stick, where latency is
+            unbounded. Target 70% instead:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Headroom</span>
+            <pre><code>Cores needed  = 100 / 0.70 = ~143 cores
+              → 18 instances × 8 cores = 144 cores
+
+Expected mean latency at ρ = 0.70:
+  W = S / (1 − ρ) = 20ms / 0.30 = ~67ms of app time
+  + 18ms database + ~10ms network/serialization ≈ <span class="number">95ms</span> mean
+
+At ρ = 0.90 the same fleet would give:
+  W = 20 / 0.10 = 200ms of app time  →  ~230ms mean  <span class="comment">// p99 blows the SLO</span></code></pre>
+        </div>
+
+        <h3>Step 3 — Use Little's Law for every pool on the path</h3>
+
+        <div class="code-block">
+            <span class="code-block-label">Concurrency</span>
+            <pre><code>Fleet-wide in-flight requests:
+  L = λ × W = 5000 × 0.095 = ~475 concurrent requests
+  → per instance (18 of them): ~27 concurrent
+
+Database connections:
+  Each request holds a connection for ~18ms
+  L = 5000 × 0.018 = 90 connections needed fleet-wide
+  → ~5 per instance; provision 10 for headroom, and confirm
+    the database will accept 18 × 10 = 180 total connections</code></pre>
+        </div>
+
+        <h3>Step 4 — Set the limits that protect the SLO</h3>
+
+        <div class="code-block">
+            <span class="code-block-label">Guardrails</span>
+            <pre><code>Per-instance concurrency limit:  27 × 2 = ~55 in flight, then shed (503)
+Queue depth (Little's Law):      drain 280 req/s/instance × 0.05s
+                                 = ~14 slots of queue, hard cap
+Request timeout:                 250ms — matches the SLO, not 30s
+Database statement timeout:      150ms — must be less than the request timeout
+Autoscale signal:                in-flight concurrency &gt; 35 per instance
+                                 (leads CPU by ~90 seconds)</code></pre>
+        </div>
+
+        <div class="callout callout-throughput">
+            <div class="callout-label">⚡ What This Exercise Buys You</div>
+            <p>
+                Every number above came from three inputs — 5,000 req/s, 20ms of CPU, 18ms of database — plus
+                Little's Law and the utilization curve. No load test required to get the shape right. The load test
+                then validates it and corrects the constants.
+            </p>
+            <p>
+                That's the real value of holding this model properly: you can size a system, defend the headroom,
+                and pick your timeouts before you've written a line of it — and you can explain <em>why</em> 18
+                instances rather than 13, which is the question that actually gets asked.
+            </p>
+        </div>
+
+        <!-- Section 14: Interview -->
+        <h2 id="interview">
+            <span class="section-number">14</span>
+            Interview Essentials &amp; Level Expectations
+        </h2>
+
+        <p>
+            Latency versus throughput comes up in almost every system design interview, usually not as a question
+            but as a judgement call embedded in something else. Here's what tends to separate the answers.
+        </p>
+
+        <div class="level-grid reveal-element">
+            <div class="level-card mid">
+                <div class="level-label">Mid-Level (E4)</div>
+                <h4>Know the Difference</h4>
+                <p>
+                    Define both precisely with units. Explain why adding servers doesn't necessarily reduce
+                    latency. Know that p99 matters more than the mean and be able to say why. Recognize caching
+                    and indexing as things that improve both at once.
+                </p>
+                <span class="level-focus">80% Concepts · 20% Trade-offs</span>
+            </div>
+            <div class="level-card senior">
+                <div class="level-label">Senior (E5)</div>
+                <h4>Own the Trade-offs</h4>
+                <p>
+                    Apply Little's Law without prompting to size pools and queues. Explain the utilization curve
+                    and justify running at 70%. Name a concrete conflict — batching, group commit, Nagle, GC
+                    choice — and say which side you'd pick for the system on the board. Volunteer that a latency
+                    number is meaningless without its throughput.
+                </p>
+                <span class="level-focus">50% Design · 50% Depth</span>
+            </div>
+            <div class="level-card staff">
+                <div class="level-label">Staff+ (E6)</div>
+                <h4>Operate at Scale</h4>
+                <p>
+                    Reason about tail amplification across fan-out and design structural defences (hedging,
+                    partial results, deadline propagation). Catch coordinated omission in someone else's
+                    benchmark. Design fast-lane/bulk-lane isolation and defend the resource split. Set org-wide
+                    SLO conventions so "p99" means the same thing in every team's dashboard.
+                </p>
+                <span class="level-focus">30% Design · 70% Depth</span>
+            </div>
+        </div>
+
+        <h3>Questions Worth Rehearsing</h3>
+
+        <ul>
+            <li>
+                <em>"We doubled our servers and latency didn't improve. Why?"</em> — You widened the pipe; the
+                pipe is the same length. Unless you were above the knee, in which case it should have improved,
+                and the fact that it didn't means the bottleneck is somewhere the new servers don't help — a
+                shared database, a lock, a downstream dependency.
+            </li>
+            <li>
+                <em>"How many threads should this service have?"</em> — Little's Law: L = λ × W. Then bound the
+                queue, and shed beyond it.
+            </li>
+            <li>
+                <em>"Our p99 is terrible but CPU is at 40%. Where do we look?"</em> — Not at CPU. Look for
+                waiting: queue depth, connection pool saturation, GC pauses, a slow dependency, lock contention.
+            </li>
+            <li>
+                <em>"Should we batch these writes?"</em> — What's the latency budget, and is anyone waiting? If
+                yes, batch with a tight <code>linger</code> bound. If no, batch as large as memory allows.
+            </li>
+            <li>
+                <em>"Is 99.9% of requests under 100ms a good SLO?"</em> — Depends on fan-out. If a page makes 50
+                such calls, roughly 5% of pages will contain at least one slow call.
+            </li>
+        </ul>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Senior Signal</div>
+            <p>
+                State the trade before you're asked. An interviewer who hears "we'll batch the writes" will probe
+                for the latency cost. An interviewer who hears "we'll batch the writes with a 10ms linger — that
+                caps the added latency at 10ms and gets us most of the throughput gain, and since this is an
+                async ingest path nobody is waiting on it anyway" has already had the follow-up answered, and has
+                also learned that you know which lane you're in.
+            </p>
+        </div>
+
+        <!-- Section 15: Summary -->
+        <h2 id="summary">
+            <span class="section-number">15</span>
+            Summary
+        </h2>
+
+        <p>
+            Latency and throughput are not two views of the same thing, and they're not enemies either. They're
+            two independent dimensions bound by one equation, sitting on top of a curve that punishes you sharply
+            for running too close to capacity.
+        </p>
+        <p>
+            Almost everything worth knowing here compresses into four ideas. Latency is the length of the pipe and
+            throughput is its width. Concurrency is the product of the two, so you only ever get to choose two of
+            the three. The mean hides the tail, and in a fan-out architecture the tail is what your users
+            experience. And the last 20% of utilization costs more than the first 70% — which is why headroom is a
+            feature, not waste.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Concept</th>
+                    <th>One-Line Recall</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Latency</td>
+                    <td>Time for one unit of work — the length of the pipe</td>
+                </tr>
+                <tr>
+                    <td>Throughput</td>
+                    <td>Units completed per second — the width of the pipe</td>
+                </tr>
+                <tr>
+                    <td>Little's Law</td>
+                    <td>L = λ × W; concurrency = throughput × latency; pick any two</td>
+                </tr>
+                <tr>
+                    <td>Percentiles</td>
+                    <td>p99, not the mean — and never average percentiles across hosts</td>
+                </tr>
+                <tr>
+                    <td>Tail amplification</td>
+                    <td>100 calls at p99=1s → 63% of parents hit a slow one</td>
+                </tr>
+                <tr>
+                    <td>Utilization curve</td>
+                    <td>W = S / (1 − ρ); the knee sits around 70–80%</td>
+                </tr>
+                <tr>
+                    <td>Batching</td>
+                    <td>Throughput up, latency up — always bound it with a timer</td>
+                </tr>
+                <tr>
+                    <td>Pipelining</td>
+                    <td>Throughput up, latency flat — the closest thing to free</td>
+                </tr>
+                <tr>
+                    <td>Queue depth</td>
+                    <td>A latency decision in disguise; size it from Little's Law and cap it</td>
+                </tr>
+                <tr>
+                    <td>Coordinated omission</td>
+                    <td>Closed-loop load tests delete the worst samples; use an open model</td>
+                </tr>
+                <tr>
+                    <td>Fast lane / bulk lane</td>
+                    <td>When you need both, isolate the paths — don't compromise the config</td>
+                </tr>
+                <tr>
+                    <td>Load shedding</td>
+                    <td>A fast 503 preserves more useful work than a slow timeout</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Final Thought</div>
+            <p>
+                The engineers who reason well about performance aren't the ones who memorized both definitions —
+                everyone has those. They're the ones who, when someone says "the system is fast," immediately ask
+                <em>fast for whom, at what load, and measured from where</em>. Three questions. They'll find more
+                real problems than any profiler.
+            </p>
+        </div>
+
+        <div class="callout" style="margin-top: 2rem;">
+            <div class="callout-label">Related Reading</div>
+            <p>
+                The companion primer on
+                <a href="availability-vs-consistency.html" style="color: var(--lt-indigo); font-weight: 600;">availability
+                    vs consistency</a>
+                picks up where this one leaves off — coordination is the serial work that makes strong consistency
+                expensive, which is exactly the ELSE branch of PACELC. And
+                <a href="performance-vs-scalability.html" style="color: var(--lt-indigo); font-weight: 600;">performance
+                    vs scalability</a>
+                takes the utilization curve one step further: what happens to these numbers when you add machines
+                rather than load. And
+                <a href="sql-or-nosql.html" style="color: var(--lt-indigo); font-weight: 600;">SQL or NoSQL</a>
+                applies all of it to the database tier, where the connection-pool maths from §03 usually turns out
+                to be the binding constraint.
+            </p>
+            <p>
+                This primer also pairs naturally with the deep dives on
+                <a href="../DeepDives/caching-system-design.html" style="color: var(--lt-indigo); font-weight: 600;">caching</a>
+                (latency reduction and its failure modes),
+                <a href="../DeepDives/concurrency-system-design.html"
+                    style="color: var(--lt-indigo); font-weight: 600;">concurrency</a>
+                (where in-flight work comes from), and
+                <a href="../DeepDives/api-rate-limiting-system-design.html"
+                    style="color: var(--lt-indigo); font-weight: 600;">rate limiting</a>
+                (deciding what to admit when you're past the knee).
+            </p>
+        </div>
+    </article>
+
+    <!-- Author Footer -->
+    <div class="article-footer">
+        <div class="author-card reveal-element">
+            <img src="../ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar" />
+            <div class="author-info">
+                <h4>Ajay Kotnala</h4>
+                <div class="author-role">Senior Solution Architect</div>
+                <p>
+                    15+ years designing cloud-native, event-driven architectures at enterprise scale. Passionate
+                    about system design, API-first thinking, and making complex systems feel simple.
+                </p>
+            </div>
+        </div>
+        <div class="back-links-row">
+            <a href="../index.html" class="back-link">← Back to Portfolio</a>
+            <a href="./index.html" class="back-link">Back to Primer Articles →</a>
+        </div>
+    </div>
+
+    <!-- Global Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-bottom">
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank">LinkedIn</a>
+                    <a href="https://github.com/ajaykotnala" target="_blank">GitHub</a>
+                    <a href="https://medium.com/@ajay.kotnalajpr" target="_blank">Medium</a>
+                </div>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll Progress Bar
+        window.addEventListener("scroll", () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrollTop / docHeight) * 100;
+            document.getElementById("progressBar").style.width = progress + "%";
+        });
+
+        // Intersection Observer for scroll-reveal animations
+        document.addEventListener("DOMContentLoaded", () => {
+            const observerOptions = {
+                threshold: 0.12,
+                rootMargin: "0px 0px -40px 0px",
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("active");
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll(".reveal-element").forEach((el) => {
+                observer.observe(el);
+            });
+        });
+
+        // Deep Dive Accordion
+        function toggleDeepDive(id) {
+            const content = document.getElementById(id);
+            if (!content) return;
+            const panel = content.closest(".deep-dive");
+            if (panel) panel.classList.toggle("open");
+        }
+
+        // Smooth scroll for TOC and anchor links
+        document.querySelectorAll('.toc a, a[href^="#"]').forEach((anchor) => {
+            anchor.addEventListener("click", function (e) {
+                const targetId = this.getAttribute("href");
+                if (targetId.startsWith("#")) {
+                    e.preventDefault();
+                    const target = document.querySelector(targetId);
+                    if (target) {
+                        const offset = 110;
+                        const targetPosition = target.getBoundingClientRect().top + window.scrollY - offset;
+                        window.scrollTo({ top: targetPosition, behavior: "smooth" });
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

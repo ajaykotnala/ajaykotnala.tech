@@ -1,0 +1,167 @@
+<svg style="max-width: 780px" viewbox="0 0 780 420" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p3-03-ride-hailing-fig10-dotGridFifo" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p3-03-ride-hailing-fig10-roughenFifo" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="11" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<filter height="102%" id="p3-03-ride-hailing-fig10-roughenLightFifo" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="13" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p3-03-ride-hailing-fig10-exArrowFifo" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p3-03-ride-hailing-fig10-exArrowFifoRed" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#c62828" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p3-03-ride-hailing-fig10-exArrowFifoGreen" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0ba360" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="420" rx="12" width="780"></rect>
+<rect fill="url(#p3-03-ride-hailing-fig10-dotGridFifo)" height="420" rx="12" width="780"></rect>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="13" font-weight="600" text-anchor="middle" x="390" y="28">
+                    FIFO vs PRIORITY QUEUE — FAIRNESS vs RESPONSIVENESS
+                </text>
+<!-- LEFT: Strict FIFO (Bad) -->
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="13" font-weight="700" text-anchor="middle" x="195" y="55">
+                    ❌ Strict FIFO — one lane
+                </text>
+<rect fill="#ffebee" filter="url(#p3-03-ride-hailing-fig10-roughenFifo)" height="250" rx="10" stroke="#c62828" stroke-width="1.5" width="340" x="25" y="65"></rect>
+<!-- Queue visualization - single pipe -->
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="195" y="90">
+                    Single queue, strict ordering
+                </text>
+<!-- Queue items -->
+<rect fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="28" rx="4" stroke="#0ba360" width="40" x="40" y="105"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="60" y="123">
+                    R1
+                </text>
+<rect fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="28" rx="4" stroke="#0ba360" width="40" x="85" y="105"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="105" y="123">
+                    R2
+                </text>
+<!-- Slow/stuck match -->
+<rect fill="#ffcdd2" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="38" rx="4" stroke="#c62828" stroke-width="2" width="55" x="130" y="100"></rect>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="8" font-weight="700" text-anchor="middle" x="157" y="116">
+                    R3 🐌
+                </text>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="7" text-anchor="middle" x="157" y="130">
+                    slow match
+                </text>
+<!-- Blocked items behind -->
+<rect fill="#f5f5f7" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="28" rx="4" stroke="#ccc" width="30" x="190" y="105"></rect>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="7" text-anchor="middle" x="205" y="123">
+                    R4
+                </text>
+<rect fill="#f5f5f7" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="28" rx="4" stroke="#ccc" width="30" x="225" y="105"></rect>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="7" text-anchor="middle" x="240" y="123">
+                    R5
+                </text>
+<rect fill="#f5f5f7" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="28" rx="4" stroke="#ccc" width="30" x="260" y="105"></rect>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="7" text-anchor="middle" x="275" y="123">
+                    …
+                </text>
+<rect fill="#f5f5f7" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="28" rx="4" stroke="#ccc" width="55" x="295" y="105"></rect>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="7" text-anchor="middle" x="322" y="123">
+                    100k
+                </text>
+<!-- Block indicator -->
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="230" y="155">
+                    ⬆ ALL BLOCKED behind R3
+                </text>
+<!-- Result box -->
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="130" rx="8" stroke="#c62828" stroke-dasharray="4,2" width="300" x="45" y="170"></rect>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="10" font-weight="600" text-anchor="middle" x="195" y="195">
+                    Head-of-line blocking
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="195" y="218">
+                    One pathological no-driver match
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="195" y="238">
+                    blocks 100k riders behind it
+                </text>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="195" y="260">
+                    Avg wait: 4min → 12min+ during surge
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="195" y="280">
+                    Rider who waited 8min still behind fresh request
+                </text>
+<!-- RIGHT: Priority Queue (Great) -->
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="13" font-weight="700" text-anchor="middle" x="585" y="55">
+                    ✓ Dual-lane priority queue
+                </text>
+<rect fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig10-roughenFifo)" height="250" rx="10" stroke="#0ba360" stroke-width="2" width="340" x="415" y="65"></rect>
+<!-- Priority lane -->
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="10" font-weight="600" text-anchor="middle" x="585" y="88">
+                    Priority lane (long waits / high tier)
+                </text>
+<rect fill="#c8e6c9" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="32" rx="6" stroke="#0ba360" stroke-width="1.5" width="310" x="430" y="95"></rect>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="22" rx="3" stroke="#0ba360" width="35" x="440" y="100"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="7" text-anchor="middle" x="457" y="115">
+                    R7⏰
+                </text>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="22" rx="3" stroke="#0ba360" width="35" x="480" y="100"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="7" text-anchor="middle" x="497" y="115">
+                    R12⭐
+                </text>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="22" rx="3" stroke="#0ba360" width="35" x="520" y="100"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="7" text-anchor="middle" x="537" y="115">
+                    R4⏰
+                </text>
+<path d="M 690 111 C 710 111, 720 111, 740 111" fill="none" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" marker-end="url(#p3-03-ride-hailing-fig10-exArrowFifoGreen)" stroke="#0ba360" stroke-width="2"></path>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="8" text-anchor="end" x="730" y="106">
+                    match
+                </text>
+<!-- Normal FIFO lane -->
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="10" font-weight="600" text-anchor="middle" x="585" y="148">
+                    Normal FIFO (within cell)
+                </text>
+<rect fill="#eef6ff" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="32" rx="6" stroke="#0066cc" stroke-width="1.5" width="310" x="430" y="155"></rect>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="22" rx="3" stroke="#0066cc" width="30" x="440" y="160"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="7" text-anchor="middle" x="455" y="175">
+                    R8
+                </text>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="22" rx="3" stroke="#0066cc" width="30" x="475" y="160"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="7" text-anchor="middle" x="490" y="175">
+                    R9
+                </text>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="22" rx="3" stroke="#0066cc" width="30" x="510" y="160"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="7" text-anchor="middle" x="525" y="175">
+                    R10
+                </text>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="22" rx="3" stroke="#0066cc" width="30" x="545" y="160"></rect>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="7" text-anchor="middle" x="560" y="175">
+                    …
+                </text>
+<path d="M 690 171 C 710 171, 720 171, 740 171" fill="none" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" marker-end="url(#p3-03-ride-hailing-fig10-exArrowFifo)" stroke="#0066cc" stroke-width="1.5"></path>
+<!-- Result box -->
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="100" rx="8" stroke="#0ba360" stroke-dasharray="4,2" width="300" x="435" y="200"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="10" font-weight="600" text-anchor="middle" x="585" y="222">
+                    Priority scoring per ride
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="585" y="244">
+                    wait_time × 0.4 + rider_tier × 0.3 + proximity × 0.3
+                </text>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="585" y="264">
+                    Rider waiting 8min promoted to priority lane
+                </text>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="585" y="284">
+                    Avg wait drops: 12min → 3.5min during surge
+                </text>
+<!-- Bottom: trade-off banner -->
+<rect fill="#f0faf5" filter="url(#p3-03-ride-hailing-fig10-roughenLightFifo)" height="70" rx="10" stroke="#3cba92" width="730" x="25" y="335"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="11" font-weight="600" text-anchor="middle" x="390" y="358">
+                    💬 Interview talking point
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="390" y="378">
+                    Pure FIFO = maximally fair but fragile. Priority = better UX, but opens fairness debates.
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="390" y="395">
+                    Compromise: FIFO within a geohash cell, priority across cells — discuss the trade-off with your
+                    interviewer.
+                </text>
+</svg>

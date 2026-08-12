@@ -1,0 +1,55 @@
+<svg style="max-width:760px;" viewbox="0 0 760 380" xmlns="http://www.w3.org/2000/svg"><defs><pattern height="20" id="p3-01-proximity-matching-fig03-dotGrid" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern><marker id="p3-01-proximity-matching-fig03-exArrow" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker><filter height="102%" id="p3-01-proximity-matching-fig03-roughenLight" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="5" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter><filter height="104%" id="p3-01-proximity-matching-fig03-roughen" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="2" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter><marker id="p3-01-proximity-matching-fig03-exArrowPink" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#e8445a" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker></defs>
+<rect fill="#fefefe" height="380" rx="12" width="760"></rect>
+<rect fill="url(#p3-01-proximity-matching-fig03-dotGrid)" height="380" rx="12" width="760"></rect>
+<!-- Feed Builder -->
+<rect fill="#e3f2fd" filter="url(#p3-01-proximity-matching-fig03-roughen)" height="85" rx="10" stroke="#0066cc" stroke-width="2" width="150" x="30" y="60"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="600" text-anchor="middle" x="105" y="95">Feed Builder</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="105" y="115">Background Job</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="105" y="132">⏱ Scheduled / Triggered</text>
+<!-- Arrow: Builder → Geo Index -->
+<path d="M 180 100 C 195 98, 210 102, 233 100" fill="none" filter="url(#p3-01-proximity-matching-fig03-roughenLight)" marker-end="url(#p3-01-proximity-matching-fig03-exArrow)" stroke="#333" stroke-linecap="round" stroke-width="2"></path>
+<!-- Geo Spatial Index -->
+<rect fill="#fff3e0" filter="url(#p3-01-proximity-matching-fig03-roughen)" height="95" rx="10" stroke="#e56b47" stroke-width="2" width="145" x="238" y="55"></rect>
+<text fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="600" text-anchor="middle" x="310" y="90">Geo Index</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="310" y="110">Geohash + Filters</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="310" y="127">PostGIS / Redis GEO</text>
+<!-- Arrow: Geo Index → Cache -->
+<path d="M 383 100 C 400 98, 418 102, 435 100" fill="none" filter="url(#p3-01-proximity-matching-fig03-roughenLight)" marker-end="url(#p3-01-proximity-matching-fig03-exArrow)" stroke="#333" stroke-linecap="round" stroke-width="2"></path>
+<!-- Feed Cache -->
+<rect fill="#fce4ec" filter="url(#p3-01-proximity-matching-fig03-roughen)" height="95" rx="10" stroke="#e8445a" stroke-width="2" width="145" x="440" y="55"></rect>
+<text fill="#e8445a" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="600" text-anchor="middle" x="512" y="90">Feed Cache</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="512" y="110">Redis / Memcached</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="512" y="127">TTL: ~1hr</text>
+<!-- Arrow: Cache → Client -->
+<path d="M 585 100 C 602 98, 618 102, 635 100" fill="none" filter="url(#p3-01-proximity-matching-fig03-roughenLight)" marker-end="url(#p3-01-proximity-matching-fig03-exArrowPink)" stroke="#e8445a" stroke-linecap="round" stroke-width="2"></path>
+<!-- Client -->
+<rect fill="#eef6ff" filter="url(#p3-01-proximity-matching-fig03-roughen)" height="75" rx="10" stroke="#333" stroke-width="2" width="95" x="640" y="65"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="18" text-anchor="middle" x="687" y="100">📱</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="687" y="120">GET /feed</text>
+<!-- Swipe DB Connection -->
+<rect fill="#f5f5f7" filter="url(#p3-01-proximity-matching-fig03-roughen)" height="85" rx="10" stroke="#333" stroke-width="1.5" width="150" x="30" y="215"></rect>
+<text fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="600" text-anchor="middle" x="105" y="248">Swipe DB</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="105" y="268">Previously Swiped IDs</text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="105" y="285">Bloom Filter</text>
+<!-- Arrow: Builder ↕ Swipe DB -->
+<path d="M 105 145 C 107 165, 103 190, 105 213" fill="none" filter="url(#p3-01-proximity-matching-fig03-roughenLight)" marker-end="url(#p3-01-proximity-matching-fig03-exArrowPink)" stroke="#e56b47" stroke-dasharray="5,3" stroke-linecap="round" stroke-width="1.5"></path>
+<!-- Feed Invalidation Triggers Box -->
+<rect fill="#fefaf6" filter="url(#p3-01-proximity-matching-fig03-roughen)" height="140" rx="10" stroke="#e0e0e0" stroke-dasharray="6,4" stroke-width="1.5" width="345" x="238" y="215"></rect>
+<text fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" font-weight="600" text-anchor="middle" x="410" y="242">Feed Invalidation Triggers</text>
+<text alignment-baseline="middle" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" x="273" y="268">⚡ User changes location significantly</text>
+<text alignment-baseline="middle" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" x="273" y="288">⚡ User updates filter preferences</text>
+<text alignment-baseline="middle" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" x="273" y="308">⚡ Cache TTL expires (~1 hour)</text>
+<text alignment-baseline="middle" fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" x="273" y="328">⚡ Suggested user changes profile</text>
+</svg>

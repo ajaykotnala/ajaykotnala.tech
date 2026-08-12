@@ -1,0 +1,45 @@
+<svg style="max-width: 780px" viewbox="0 0 780 300" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p2-02-caching-fig03-dotGridK3" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p2-02-caching-fig03-roughenK3" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="13" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p2-02-caching-fig03-exArrowK3" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#e11d48" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="300" rx="12" width="780"></rect>
+<rect fill="url(#p2-02-caching-fig03-dotGridK3)" height="300" rx="12" width="780"></rect>
+<path d="M 50 100 L 730 100" fill="none" stroke="#ccc" stroke-dasharray="4,4" stroke-width="1.5"></path>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="130" y="90">
+                    t = 0s
+                </text>
+<text fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" font-weight="700" text-anchor="middle" x="620" y="90">
+                    t = 60s — TTL expires
+                </text>
+<rect fill="#dcfce7" filter="url(#p2-02-caching-fig03-roughenK3)" height="24" rx="5" stroke="#16a34a" stroke-width="1.2" width="500" x="60" y="115"></rect>
+<text fill="#15803d" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="310" y="132">
+                    100K req/s, all served from cache — database untouched
+                </text>
+<rect fill="#fff1f2" filter="url(#p2-02-caching-fig03-roughenK3)" height="90" rx="8" stroke="#e11d48" stroke-width="1.5" width="150" x="580" y="150"></rect>
+<text fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="655" y="175">
+                    100,000
+                </text>
+<text fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="655" y="192">
+                    simultaneous
+                </text>
+<text fill="#e11d48" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="700" text-anchor="middle" x="655" y="209">
+                    misses
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="655" y="226">
+                    all racing to rebuild
+                </text>
+<path d="M 620 145 L 620 118" fill="none" marker-end="url(#p2-02-caching-fig03-exArrowK3)" stroke="#e11d48" stroke-width="2"></path>
+<rect fill="#fff7ed" filter="url(#p2-02-caching-fig03-roughenK3)" height="30" rx="6" stroke="#d97706" stroke-width="1.2" width="420" x="180" y="255"></rect>
+<text fill="#d97706" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="390" y="275">
+                    Database receives 100,000 concurrent queries at once
+                </text>
+</svg>

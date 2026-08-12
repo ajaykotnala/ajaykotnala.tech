@@ -1,0 +1,107 @@
+<svg style="max-width: 780px" viewbox="0 0 780 420" xmlns="http://www.w3.org/2000/svg"><defs><pattern height="20" id="p3-02-ticketing-fig07-dotGrid" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern><marker id="p3-02-ticketing-fig07-exArrowRed" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#C4242D" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker><marker id="p3-02-ticketing-fig07-exArrow" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker><filter height="102%" id="p3-02-ticketing-fig07-roughenLight" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="5" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter><filter height="104%" id="p3-02-ticketing-fig07-roughen" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="2" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter></defs>
+<rect fill="#fefefe" height="420" rx="12" width="780"></rect>
+<rect fill="url(#p3-02-ticketing-fig07-dotGrid)" height="420" rx="12" width="780"></rect>
+<!-- Client -->
+<rect fill="#eef6ff" filter="url(#p3-02-ticketing-fig07-roughen)" height="70" rx="10" stroke="#333" stroke-width="2" width="100" x="30" y="50"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" font-weight="600" text-anchor="middle" x="80" y="82">
+                    🔍 Client
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="80" y="102">
+                    "Tayler Swft"
+                </text>
+<!-- Arrow to Search Service -->
+<path d="M 130 85 C 155 83, 175 87, 200 85" fill="none" filter="url(#p3-02-ticketing-fig07-roughenLight)" marker-end="url(#p3-02-ticketing-fig07-exArrow)" stroke="#333" stroke-width="2"></path>
+<!-- Search Service -->
+<rect fill="#fce4ec" filter="url(#p3-02-ticketing-fig07-roughen)" height="90" rx="10" stroke="#C4242D" stroke-width="2" width="130" x="207" y="40"></rect>
+<text fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="600" text-anchor="middle" x="272" y="73">
+                    Search
+                </text>
+<text fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="13" font-weight="600" text-anchor="middle" x="272" y="93">
+                    Service
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="272" y="118">
+                    Fuzzy · Paginate
+                </text>
+<!-- Arrow to Cache -->
+<path d="M 272 130 C 272 150, 272 165, 272 182" fill="none" filter="url(#p3-02-ticketing-fig07-roughenLight)" marker-end="url(#p3-02-ticketing-fig07-exArrowRed)" stroke="#C4242D" stroke-width="2"></path>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" x="290" y="157">
+                    check cache
+                </text>
+<!-- Search Cache -->
+<rect fill="#fff3e0" filter="url(#p3-02-ticketing-fig07-roughen)" height="65" rx="10" stroke="#e56b47" stroke-width="2" width="130" x="207" y="185"></rect>
+<text fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" font-weight="600" text-anchor="middle" x="272" y="215">
+                    Search Cache
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="272" y="235">
+                    Redis · TTL 24h
+                </text>
+<!-- Arrow (miss) to Elasticsearch -->
+<path d="M 337 218 C 360 216, 385 220, 410 218" fill="none" filter="url(#p3-02-ticketing-fig07-roughenLight)" marker-end="url(#p3-02-ticketing-fig07-exArrow)" stroke="#333" stroke-dasharray="5,3" stroke-width="1.5"></path>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" x="373" y="208">
+                    miss
+                </text>
+<!-- Elasticsearch -->
+<rect fill="#e3f2fd" filter="url(#p3-02-ticketing-fig07-roughen)" height="130" rx="10" stroke="#0066cc" stroke-width="2" width="160" x="417" y="50"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="16" font-weight="600" text-anchor="middle" x="497" y="90">
+                    Elasticsearch
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="497" y="118">
+                    Inverted Index
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="497" y="135">
+                    Fuzzy Matching
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="497" y="152">
+                    Shard-Level Cache
+                </text>
+<!-- CDC Pipeline -->
+<rect fill="#e8f5e9" filter="url(#p3-02-ticketing-fig07-roughen)" height="65" rx="10" stroke="#2e7d32" stroke-dasharray="5,3" stroke-width="2" width="160" x="417" y="250"></rect>
+<text fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="12" font-weight="600" text-anchor="middle" x="497" y="278">
+                    CDC Pipeline
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="497" y="298">
+                    Debezium / Kafka
+                </text>
+<!-- Arrow: CDC → ES -->
+<path d="M 497 250 C 497 230, 497 210, 497 182" fill="none" filter="url(#p3-02-ticketing-fig07-roughenLight)" marker-end="url(#p3-02-ticketing-fig07-exArrow)" stroke="#2e7d32" stroke-dasharray="5,3" stroke-width="2"></path>
+<text fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" x="515" y="220">
+                    sync
+                </text>
+<!-- PostgreSQL -->
+<ellipse cx="497" cy="355" fill="#e8f5e9" filter="url(#p3-02-ticketing-fig07-roughen)" rx="55" ry="16" stroke="#333" stroke-width="1.5"></ellipse>
+<path d="M 442 355 L 442 390" filter="url(#p3-02-ticketing-fig07-roughenLight)" stroke="#333" stroke-width="1.5"></path>
+<path d="M 552 355 L 552 390" filter="url(#p3-02-ticketing-fig07-roughenLight)" stroke="#333" stroke-width="1.5"></path>
+<ellipse cx="497" cy="390" fill="#e8f5e9" filter="url(#p3-02-ticketing-fig07-roughen)" rx="55" ry="16" stroke="#333" stroke-width="1.5"></ellipse>
+<rect fill="#e8f5e9" height="35" stroke="none" width="110" x="442" y="355"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="600" text-anchor="middle" x="497" y="378">
+                    PostgreSQL
+                </text>
+<!-- Arrow: PG → CDC -->
+<path d="M 497 340 C 497 330, 497 320, 497 315" fill="none" filter="url(#p3-02-ticketing-fig07-roughenLight)" marker-end="url(#p3-02-ticketing-fig07-exArrow)" stroke="#2e7d32" stroke-width="2"></path>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" x="515" y="332">
+                    WAL
+                </text>
+<!-- Fuzzy match demo -->
+<rect fill="#fdf5f6" filter="url(#p3-02-ticketing-fig07-roughen)" height="65" rx="10" stroke="#C4242D" stroke-width="1.5" width="135" x="620" y="75"></rect>
+<text fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="600" text-anchor="middle" x="687" y="97">
+                    Fuzzy Match
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="687" y="115">
+                    "Tayler Swft"
+                </text>
+<text fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="687" y="130">
+                    → Taylor Swift ✓
+                </text>
+</svg>

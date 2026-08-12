@@ -1,0 +1,117 @@
+<svg style="max-width: 780px" viewbox="0 0 780 420" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p2-04-event-streaming-fig01-dotGrid1" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p2-04-event-streaming-fig01-roughen1" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="2" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<filter height="102%" id="p2-04-event-streaming-fig01-roughenLight1" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="5" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p2-04-event-streaming-fig01-exArrow1" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p2-04-event-streaming-fig01-exArrowTeal1" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#00796b" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="420" rx="12" width="780"></rect>
+<rect fill="url(#p2-04-event-streaming-fig01-dotGrid1)" height="420" rx="12" width="780"></rect>
+<!-- Stage labels -->
+<text fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" font-weight="700" text-anchor="middle" x="130" y="35">
+                    Stage 1
+                </text>
+<text fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" font-weight="700" text-anchor="middle" x="390" y="35">
+                    Stage 2
+                </text>
+<text fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" font-weight="700" text-anchor="middle" x="650" y="35">
+                    Stage 3
+                </text>
+<!-- Stage 1: Single queue -->
+<rect fill="#f5f5f7" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="330" rx="10" stroke="#ccc" stroke-dasharray="6,4" stroke-width="1.5" width="180" x="40" y="55"></rect>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" x="130" y="80">
+                    Single Queue
+                </text>
+<rect fill="#e0f2f1" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="40" rx="8" stroke="#00796b" stroke-width="1.5" width="120" x="70" y="100"></rect>
+<text fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" x="130" y="125">
+                    Producers
+                </text>
+<path d="M 130 140 L 130 165" fill="none" filter="url(#p2-04-event-streaming-fig01-roughenLight1)" marker-end="url(#p2-04-event-streaming-fig01-exArrow1)" stroke="#333" stroke-width="2"></path>
+<rect fill="#fff3e0" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="80" rx="8" stroke="#333" stroke-width="2" width="120" x="70" y="170"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" x="130" y="200">
+                    One Topic
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="130" y="220">
+                    Bottleneck!
+                </text>
+<path d="M 130 250 L 130 275" fill="none" filter="url(#p2-04-event-streaming-fig01-roughenLight1)" marker-end="url(#p2-04-event-streaming-fig01-exArrow1)" stroke="#333" stroke-width="2"></path>
+<rect fill="#eef6ff" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="40" rx="8" stroke="#0066cc" stroke-width="1.5" width="120" x="70" y="280"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="130" y="305">
+                    1 Consumer
+                </text>
+<!-- Arrow stage 1 → 2 -->
+<path d="M 222 220 L 268 220" fill="none" filter="url(#p2-04-event-streaming-fig01-roughenLight1)" marker-end="url(#p2-04-event-streaming-fig01-exArrowTeal1)" stroke="#00796b" stroke-width="2.5"></path>
+<!-- Stage 2: Partitioned -->
+<rect fill="#f5f5f7" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="330" rx="10" stroke="#ccc" stroke-dasharray="6,4" stroke-width="1.5" width="220" x="280" y="55"></rect>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" x="390" y="80">
+                    Partitioned by order_id
+                </text>
+<rect fill="#e0f2f1" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="35" rx="8" stroke="#00796b" stroke-width="1.5" width="180" x="300" y="100"></rect>
+<text fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="390" y="122">
+                    Producers → hash(order_id)
+                </text>
+<rect fill="#e8f5e9" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="55" rx="6" stroke="#2e7d32" stroke-width="1.5" width="55" x="300" y="155"></rect>
+<text fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="327" y="188">
+                    P0
+                </text>
+<rect fill="#e8f5e9" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="55" rx="6" stroke="#2e7d32" stroke-width="1.5" width="55" x="362" y="155"></rect>
+<text fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="389" y="188">
+                    P1
+                </text>
+<rect fill="#e8f5e9" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="55" rx="6" stroke="#2e7d32" stroke-width="1.5" width="55" x="424" y="155"></rect>
+<text fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="451" y="188">
+                    P2
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="390" y="240">
+                    Order per partition = ordered events
+                </text>
+<rect fill="#eef6ff" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="35" rx="8" stroke="#0066cc" stroke-width="1.5" width="180" x="300" y="260"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="390" y="282">
+                    N consumers ∥ throughput
+                </text>
+<!-- Arrow stage 2 → 3 -->
+<path d="M 502 220 L 548 220" fill="none" filter="url(#p2-04-event-streaming-fig01-roughenLight1)" marker-end="url(#p2-04-event-streaming-fig01-exArrowTeal1)" stroke="#00796b" stroke-width="2.5"></path>
+<!-- Stage 3: Consumer groups -->
+<rect fill="#f5f5f7" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="330" rx="10" stroke="#ccc" stroke-dasharray="6,4" stroke-width="1.5" width="200" x="560" y="55"></rect>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" x="660" y="80">
+                    Consumer Groups
+                </text>
+<rect fill="#e0f2f1" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="45" rx="8" stroke="#00796b" stroke-width="2" width="160" x="580" y="100"></rect>
+<text fill="#00796b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="660" y="120">
+                    order-events topic
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="8" text-anchor="middle" x="660" y="135">
+                    P0 · P1 · P2
+                </text>
+<rect fill="#fff3e0" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="32" rx="6" stroke="#00a896" stroke-width="1.5" width="160" x="580" y="165"></rect>
+<text fill="#00a896" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="660" y="185">
+                    Group: dispatch
+                </text>
+<rect fill="#eef6ff" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="32" rx="6" stroke="#0066cc" stroke-width="1.5" width="160" x="580" y="205"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="660" y="225">
+                    Group: billing
+                </text>
+<rect fill="#e8f5e9" filter="url(#p2-04-event-streaming-fig01-roughen1)" height="32" rx="6" stroke="#2e7d32" stroke-width="1.5" width="160" x="580" y="245"></rect>
+<text fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="660" y="265">
+                    Group: analytics
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="660" y="310">
+                    Each group gets ALL messages
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="660" y="328">
+                    Scale groups independently
+                </text>
+</svg>

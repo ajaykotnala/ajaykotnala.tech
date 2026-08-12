@@ -1,0 +1,225 @@
+# Book manifest — single source of chapter order, status and word targets.
+#
+# Drives:
+#   tools/wordcount.py   actual vs target, remaining gap
+#   book/Book.txt        Leanpub chapter order (generated)
+#   site/                Astro content collection ordering
+#
+# status: extracted | drafting | review | done
+#   extracted = migrated from HTML, not yet reworked for the book
+#
+# Scope: Solid (~88,000 words). Code language: dual Java + TypeScript in Part I.
+
+title: "TBD — see plan Part 6"
+subtitle: "Design Patterns, Deep Dives, and Systems at Scale"
+author: "Ajay Kotnala"
+trim: "7x10"
+target_words: 88000
+
+parts:
+  - id: p1
+    title: "Design Patterns"
+    blurb: "How individual objects are built and related."
+    target_words: 24000
+    chapters:
+      - slug: p1-01-creational
+        title: "Creational Patterns"
+        status: extracted
+        words: 1942
+        target_words: 5200
+        covers: [Singleton, Factory Method, Abstract Factory, Prototype, Builder]
+        todo:
+          - "Back-fill TypeScript listings (currently Java only)"
+          - "Redraw fig01 language-neutral — it is currently Python"
+      - slug: p1-02-structural
+        title: "Structural Patterns"
+        status: extracted
+        words: 2319
+        target_words: 5600
+        covers: [Adapter, Decorator, Proxy, Facade, Composite]
+        todo:
+          - "Back-fill Java listings (currently TypeScript only)"
+          - "Add Bridge and Flyweight — previously advertised, never written"
+      - slug: p1-03-behavioural
+        title: "Behavioural Patterns"
+        status: extracted
+        words: 2443
+        target_words: 6200
+        covers: [Strategy, Observer, State, Chain of Responsibility]
+        todo:
+          - "Back-fill Java listings (currently TypeScript only)"
+          - "Add Command, Iterator, Mediator — previously advertised, never written"
+      - slug: p1-04-choosing
+        title: "Choosing Between Patterns"
+        status: planned
+        words: 0
+        target_words: 3500
+        todo:
+          - "The hardest and most valuable chapter: which one, and why not the other"
+      - slug: p1-05-when-patterns-hurt
+        title: "When Patterns Hurt"
+        status: planned
+        words: 0
+        target_words: 2500
+        todo:
+          - "Harvest the existing per-pattern 'Avoid when' boxes into one argument"
+
+  - id: p2
+    title: "Deep Dives"
+    blurb: "How a single component behaves under load."
+    target_words: 38000
+    chapters:
+      - slug: p2-01-concurrency
+        title: "Concurrency: Correctness, Coordination, Scarcity"
+        status: extracted
+        words: 3785
+        target_words: 4500
+      - slug: p2-02-caching
+        title: "Caching"
+        status: extracted
+        words: 4339
+        target_words: 5000
+        todo: ["Cross-reference contention framing shared with rate limiting"]
+      - slug: p2-03-rate-limiting
+        title: "Rate Limiting"
+        status: extracted
+        words: 9183
+        target_words: 5500
+        todo: ["Split: limiter mechanics here, quotas and cost control next"]
+      - slug: p2-04-quotas-and-cost
+        title: "Quotas & Cost Control"
+        status: planned
+        words: 0
+        target_words: 4000
+        todo: ["Receives the budget-enforcement half of the rate limiting chapter"]
+      - slug: p2-05-event-streaming
+        title: "Messaging & Event Streaming"
+        status: extracted
+        words: 3682
+        target_words: 5500
+        todo:
+          - "Add queueing theory, Little's Law, backpressure"
+          - "Listings are API payloads only — add consumer/producer code"
+      - slug: p2-06-data-storage
+        title: "Data Storage & Replication"
+        status: review
+        words: 4456
+        target_words: 6000
+        figures: 5
+        covers:
+          - "Access patterns before SQL/NoSQL"
+          - "B-tree vs LSM storage engines"
+          - "Indexes, leftmost prefix, covering indexes"
+          - "Isolation levels and the four anomalies"
+          - "Lost update — pessimistic vs optimistic locking (Java)"
+          - "Leader-follower replication, sync/async/semi-sync"
+          - "Quorums: R + W > N, read repair, anti-entropy, sloppy quorum"
+          - "Multi-leader and conflict resolution (LWW, CRDTs, region ownership)"
+          - "Failure modes: read-your-writes, lag under load, hot shard"
+          - "Range vs hash partitioning, consistent hashing"
+          - "Local vs global secondary indexes in a partitioned store"
+          - "Expand-contract schema migration"
+        todo:
+          - "Topic coverage is complete; remaining 1,500 words are depth, not gaps"
+          - "Resolve two placeholder cross-reference links ([caching chapter](#), [concurrency chapter](#)) once check_links.py lands"
+          - "Verify the 0.2ms/400ms opening figures on real hardware, or restate purely as the O(n) vs O(log n) claim"
+      - slug: p2-07-consistency
+        title: "Consistency, CAP & PACELC"
+        status: planned
+        words: 0
+        target_words: 3500
+        todo: ["Prerequisite for cache staleness and swipe consistency discussions"]
+      - slug: p2-08-idempotency
+        title: "Idempotency & Delivery Semantics"
+        status: planned
+        words: 0
+        target_words: 3000
+      - slug: p2-09-resilience
+        title: "Resilience Patterns"
+        status: planned
+        words: 0
+        target_words: 3500
+        todo: ["Timeouts, retries with jitter, circuit breakers, bulkheads, load shedding"]
+      - slug: p2-10-observability
+        title: "Observability"
+        status: planned
+        words: 0
+        target_words: 3000
+        todo: ["Harvest the per-chapter observability subsections already written"]
+
+  - id: p3
+    title: "System Designs"
+    blurb: "How components compose into whole applications."
+    target_words: 26000
+    chapters:
+      - slug: p3-00-method
+        title: "A Method for System Design"
+        status: planned
+        words: 0
+        target_words: 2500
+        todo:
+          - "All three existing designs follow one 7-step skeleton that is never taught"
+      - slug: p3-01-url-shortener
+        title: "URL Shortener"
+        status: planned
+        words: 0
+        target_words: 3500
+        todo: ["Canonical warm-up; currently missing"]
+      - slug: p3-02-proximity-matching
+        title: "Proximity Matching"
+        status: extracted
+        words: 2304
+        target_words: 4500
+        source_product: Tinder
+        todo: ["Add implementation code", "Genericize product name in title"]
+      - slug: p3-03-ticketing
+        title: "Ticketing at Scale"
+        status: extracted
+        words: 3194
+        target_words: 4500
+        source_product: BookMyShow
+        todo: ["Add seat-locking implementation code", "Link back to p2-01-concurrency"]
+      - slug: p3-04-ride-hailing
+        title: "Ride Hailing"
+        status: extracted
+        words: 2311
+        target_words: 4500
+        source_product: BookMyRide
+        todo:
+          - "Prose-starved: 13 figures for 2,311 words"
+          - "Rewrite 13 captions that read 'Excalidraw · …'"
+          - "Link back to p2-05-event-streaming"
+      - slug: p3-05-news-feed
+        title: "News Feed & Fanout"
+        status: planned
+        words: 0
+        target_words: 3500
+
+  - id: back
+    title: "Back Matter"
+    target_words: 0
+    chapters:
+      - slug: b-01-estimation
+        title: "Back-of-the-Envelope Cheat Sheet"
+        status: planned
+        words: 0
+        target_words: 1500
+        todo: ["Harvest the four duplicated estimation sections in Part II"]
+      - slug: b-02-glossary
+        title: "Glossary"
+        status: planned
+        words: 0
+        target_words: 1500
+      - slug: b-03-further-reading
+        title: "Further Reading"
+        status: planned
+        words: 0
+        target_words: 800
+
+# Cross-cutting work not owned by a single chapter.
+global_todo:
+  - "Front matter: preface, who this book is for, prerequisites, reading paths"
+  - "Cite the Uber $6,000 / annual-budget claims in p2-03"
+  - "Decide dual-language print presentation (primary + delta recommended)"
+  - "Grayscale legibility audit of all 62 figures at 7x10 trim"
+  - "Connective tissue: contention framing across concurrency, caching, rate limiting"

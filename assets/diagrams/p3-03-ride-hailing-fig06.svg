@@ -1,0 +1,75 @@
+<svg style="max-width: 780px" viewbox="0 0 780 400" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p3-03-ride-hailing-fig06-dotGrid" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p3-03-ride-hailing-fig06-roughen" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="2" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<filter height="102%" id="p3-03-ride-hailing-fig06-roughenLight" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="5" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p3-03-ride-hailing-fig06-exArrow" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p3-03-ride-hailing-fig06-exArrowGreen" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0ba360" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p3-03-ride-hailing-fig06-exArrowBlue" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="400" rx="12" width="780"></rect>
+<rect fill="url(#p3-03-ride-hailing-fig06-dotGrid)" height="400" rx="12" width="780"></rect>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="14" font-weight="700" text-anchor="middle" x="390" y="35">
+                    ❌ Table scan on every match
+                </text>
+<rect fill="#ffebee" filter="url(#p3-03-ride-hailing-fig06-roughen)" height="120" rx="10" stroke="#c62828" stroke-width="1.5" width="300" x="40" y="55"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle" x="190" y="85">
+                    2M writes/sec → DB meltdown
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="190" y="105">
+                    O(n) distance calc per driver
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="190" y="125">
+                    Stale rows, $200k/day Dynamo
+                </text>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="14" font-weight="700" text-anchor="middle" x="390" y="210">
+                    ✓ Redis GEO + geo-partitioned queue
+                </text>
+<rect fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig06-roughen)" height="130" rx="10" stroke="#0ba360" stroke-width="2" width="300" x="40" y="230"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle" x="190" y="260">
+                    GEOADD overwrites last position
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="190" y="280">
+                    GEOSEARCH in O(log N + M)
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="190" y="300">
+                    Companion ZSET for stale cleanup
+                </text>
+<rect fill="#eef6ff" filter="url(#p3-03-ride-hailing-fig06-roughen)" height="305" rx="10" stroke="#0066cc" stroke-width="1.5" width="320" x="420" y="55"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="12" font-weight="600" text-anchor="middle" x="580" y="85">
+                    Concert surge (100k)
+                </text>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig06-roughen)" height="35" rx="6" stroke="#3cba92" width="260" x="450" y="105"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="580" y="127">
+                    queue:geo:lat-lon-cell
+                </text>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig06-roughen)" height="35" rx="6" stroke="#3cba92" width="260" x="450" y="155"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="580" y="177">
+                    Matching workers scale out
+                </text>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig06-roughen)" height="35" rx="6" stroke="#3cba92" width="260" x="450" y="205"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="580" y="227">
+                    Offset commit after match
+                </text>
+<rect fill="#fff" filter="url(#p3-03-ride-hailing-fig06-roughen)" height="35" rx="6" stroke="#3cba92" width="260" x="450" y="255"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="10" text-anchor="middle" x="580" y="277">
+                    Priority lane for long waits
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="580" y="330">
+                    No dropped POST /rides during crash
+                </text>
+</svg>

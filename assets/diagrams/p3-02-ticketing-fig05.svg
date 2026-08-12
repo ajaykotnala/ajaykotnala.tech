@@ -1,0 +1,104 @@
+<svg style="max-width: 780px" viewbox="0 0 780 380" xmlns="http://www.w3.org/2000/svg"><defs><pattern height="20" id="p3-02-ticketing-fig05-dotGrid" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern><marker id="p3-02-ticketing-fig05-exArrowRed" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#C4242D" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker><marker id="p3-02-ticketing-fig05-exArrow" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker><filter height="102%" id="p3-02-ticketing-fig05-roughenLight" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="5" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter><filter height="104%" id="p3-02-ticketing-fig05-roughen" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="2" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter></defs>
+<rect fill="#fefefe" height="380" rx="12" width="780"></rect>
+<rect fill="url(#p3-02-ticketing-fig05-dotGrid)" height="380" rx="12" width="780"></rect>
+<!-- Clients -->
+<rect fill="#eef6ff" filter="url(#p3-02-ticketing-fig05-roughen)" height="50" rx="10" stroke="#333" stroke-width="1.5" width="80" x="30" y="50"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" x="70" y="80">
+                    Client 1
+                </text>
+<rect fill="#eef6ff" filter="url(#p3-02-ticketing-fig05-roughen)" height="50" rx="10" stroke="#333" stroke-width="1.5" width="80" x="30" y="115"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" x="70" y="145">
+                    Client 2
+                </text>
+<rect fill="#eef6ff" filter="url(#p3-02-ticketing-fig05-roughen)" height="50" rx="10" stroke="#333" stroke-width="1.5" width="80" x="30" y="180"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" text-anchor="middle" x="70" y="210">
+                    Client N
+                </text>
+<!-- Arrows to LB -->
+<path d="M 110 75 L 158 120" fill="none" filter="url(#p3-02-ticketing-fig05-roughenLight)" marker-end="url(#p3-02-ticketing-fig05-exArrow)" stroke="#333" stroke-width="1.5"></path>
+<path d="M 110 140 L 158 140" fill="none" filter="url(#p3-02-ticketing-fig05-roughenLight)" marker-end="url(#p3-02-ticketing-fig05-exArrow)" stroke="#333" stroke-width="1.5"></path>
+<path d="M 110 205 L 158 160" fill="none" filter="url(#p3-02-ticketing-fig05-roughenLight)" marker-end="url(#p3-02-ticketing-fig05-exArrow)" stroke="#333" stroke-width="1.5"></path>
+<!-- Load Balancer -->
+<rect fill="#fff3e0" filter="url(#p3-02-ticketing-fig05-roughen)" height="70" rx="10" stroke="#e56b47" stroke-width="2" width="85" x="165" y="105"></rect>
+<text fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="600" text-anchor="middle" x="207" y="138">
+                    Load
+                </text>
+<text fill="#e56b47" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="600" text-anchor="middle" x="207" y="155">
+                    Balancer
+                </text>
+<!-- Arrows to Event Services -->
+<path d="M 250 125 L 298 90" fill="none" filter="url(#p3-02-ticketing-fig05-roughenLight)" marker-end="url(#p3-02-ticketing-fig05-exArrow)" stroke="#333" stroke-width="1.5"></path>
+<path d="M 250 155 L 298 175" fill="none" filter="url(#p3-02-ticketing-fig05-roughenLight)" marker-end="url(#p3-02-ticketing-fig05-exArrow)" stroke="#333" stroke-width="1.5"></path>
+<!-- Event Service 1 -->
+<rect fill="#e8f5e9" filter="url(#p3-02-ticketing-fig05-roughen)" height="65" rx="10" stroke="#2e7d32" stroke-width="2" width="110" x="305" y="55"></rect>
+<text fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="600" text-anchor="middle" x="360" y="85">
+                    Event Svc ①
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="360" y="102">
+                    Stateless
+                </text>
+<!-- Event Service 2 -->
+<rect fill="#e8f5e9" filter="url(#p3-02-ticketing-fig05-roughen)" height="65" rx="10" stroke="#2e7d32" stroke-width="2" width="110" x="305" y="145"></rect>
+<text fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="600" text-anchor="middle" x="360" y="175">
+                    Event Svc ②
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" text-anchor="middle" x="360" y="192">
+                    Stateless
+                </text>
+<!-- Arrows to Cache -->
+<path d="M 415 87 L 478 110" fill="none" filter="url(#p3-02-ticketing-fig05-roughenLight)" marker-end="url(#p3-02-ticketing-fig05-exArrowRed)" stroke="#C4242D" stroke-width="2"></path>
+<path d="M 415 177 L 478 150" fill="none" filter="url(#p3-02-ticketing-fig05-roughenLight)" marker-end="url(#p3-02-ticketing-fig05-exArrowRed)" stroke="#C4242D" stroke-width="2"></path>
+<!-- Redis Cache -->
+<rect fill="#fce4ec" filter="url(#p3-02-ticketing-fig05-roughen)" height="95" rx="10" stroke="#C4242D" stroke-width="2" width="130" x="485" y="85"></rect>
+<text fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" font-weight="600" text-anchor="middle" x="550" y="118">
+                    Redis
+                </text>
+<text fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="14" font-weight="600" text-anchor="middle" x="550" y="138">
+                    Cache
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" text-anchor="middle" x="550" y="160">
+                    Read-Through
+                </text>
+<!-- Cache miss arrow to DB -->
+<path d="M 550 180 C 550 210, 550 230, 550 255" fill="none" filter="url(#p3-02-ticketing-fig05-roughenLight)" marker-end="url(#p3-02-ticketing-fig05-exArrow)" stroke="#333" stroke-dasharray="5,3" stroke-width="1.5"></path>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="9" x="575" y="220">
+                    miss
+                </text>
+<!-- PostgreSQL -->
+<ellipse cx="550" cy="260" fill="#e8f5e9" filter="url(#p3-02-ticketing-fig05-roughen)" rx="55" ry="16" stroke="#333" stroke-width="1.5"></ellipse>
+<path d="M 495 260 L 495 300" filter="url(#p3-02-ticketing-fig05-roughenLight)" stroke="#333" stroke-width="1.5"></path>
+<path d="M 605 260 L 605 300" filter="url(#p3-02-ticketing-fig05-roughenLight)" stroke="#333" stroke-width="1.5"></path>
+<ellipse cx="550" cy="300" fill="#e8f5e9" filter="url(#p3-02-ticketing-fig05-roughen)" rx="55" ry="16" stroke="#333" stroke-width="1.5"></ellipse>
+<rect fill="#e8f5e9" height="40" stroke="none" width="110" x="495" y="260"></rect>
+<text fill="#333" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="600" text-anchor="middle" x="550" y="285">
+                    PostgreSQL
+                </text>
+<!-- Invalidation triggers -->
+<rect fill="#fefaf6" filter="url(#p3-02-ticketing-fig05-roughen)" height="80" rx="10" stroke="#e0e0e0" stroke-dasharray="6,4" stroke-width="1.5" width="240" x="30" y="280"></rect>
+<text fill="#C4242D" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="11" font-weight="600" text-anchor="middle" x="150" y="305">
+                    Cache Invalidation
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" x="48" y="325">
+                    ⚡ Event data updated by admin
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" x="48" y="345">
+                    ⚡ TTL expiration (long for static)
+                </text>
+<!-- Cache hit label -->
+<rect fill="#e8f5e9" filter="url(#p3-02-ticketing-fig05-roughen)" height="30" rx="6" stroke="#2e7d32" stroke-width="1.5" width="80" x="625" y="105"></rect>
+<text fill="#2e7d32" font-family="'Segoe Print', 'Comic Neue', cursive" font-size="10" font-weight="600" text-anchor="middle" x="665" y="125">
+                    ~99% hits
+                </text>
+</svg>

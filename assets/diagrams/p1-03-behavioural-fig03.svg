@@ -1,0 +1,54 @@
+<svg font-family="'Fira Code',monospace" viewbox="0 0 660 178" xmlns="http://www.w3.org/2000/svg">
+<rect fill="#f1ead8" height="178" width="660"></rect>
+<defs>
+<marker id="p1-03-behavioural-fig03-st1" markerheight="8" markerwidth="8" orient="auto" refx="6" refy="3">
+<path d="M0,0 L0,6 L8,3z" fill="#c0392b"></path>
+</marker>
+<marker id="p1-03-behavioural-fig03-st2" markerheight="8" markerwidth="8" orient="auto" refx="6" refy="3">
+<path d="M0,0 L0,6 L8,3z" fill="#3d3728"></path>
+</marker>
+</defs>
+<!-- Context -->
+<rect fill="#f9f5ee" height="84" rx="1" stroke="#3d3728" stroke-width="1.5" width="155" x="18" y="56"></rect>
+<rect fill="#1e1a12" height="26" rx="1" width="155" x="18" y="56"></rect>
+<rect fill="#1e1a12" height="12" width="155" x="18" y="70"></rect>
+<text fill="#f9f5ee" font-family="'Playfair Display',serif" font-size="11" font-style="italic" font-weight="700" text-anchor="middle" x="95" y="70">DocumentContext</text>
+<line stroke="#d5c9ac" stroke-width="0.8" x1="18" x2="173" y1="82" y2="82"></line>
+<text fill="#c0392b" font-size="8.5" x="30" y="98">-state: DocumentLifecycleState</text>
+<line stroke="#d5c9ac" stroke-width="0.5" x1="18" x2="173" y1="104" y2="104"></line>
+<text fill="#dcdcaa" font-size="8.5" x="30" y="118">draft() / submitForReview()</text>
+<text fill="#dcdcaa" font-size="8.5" x="30" y="131">publish() / setState()</text>
+<!-- Arrow context → interface -->
+<line marker-end="url(#p1-03-behavioural-fig03-st1)" stroke="#c0392b" stroke-width="1.5" x1="173" x2="218" y1="98" y2="98"></line>
+<text fill="#c0392b" font-size="7.5" font-style="italic" x="188" y="91">delegates</text>
+<!-- State interface -->
+<rect fill="#f9f5ee" height="84" rx="1" stroke="#3d3728" stroke-width="1.5" width="172" x="218" y="38"></rect>
+<rect fill="#1e1a12" height="26" rx="1" width="172" x="218" y="38"></rect>
+<rect fill="#1e1a12" height="12" width="172" x="218" y="52"></rect>
+<text fill="#d5c9ac" font-size="7.5" letter-spacing="0.5" text-anchor="middle" x="262" y="48">«interface»</text>
+<text fill="#f9f5ee" font-family="'Playfair Display',serif" font-size="10.5" font-style="italic" font-weight="700" text-anchor="middle" x="304" y="60">DocumentLifecycleState</text>
+<line stroke="#d5c9ac" stroke-width="0.8" x1="218" x2="390" y1="64" y2="64"></line>
+<text fill="#b5cea8" font-size="8.5" x="230" y="80">draft(ctx)</text>
+<text fill="#b5cea8" font-size="8.5" x="230" y="94">submitForReview(ctx)</text>
+<text fill="#b5cea8" font-size="8.5" x="230" y="108">publish(ctx)</text>
+<!-- Three state boxes -->
+<rect fill="#f9f5ee" height="44" rx="1" stroke="#3d3728" stroke-width="1" width="135" x="428" y="14"></rect>
+<text fill="#1e1a12" font-family="'Playfair Display',serif" font-size="9.5" font-style="italic" text-anchor="middle" x="495" y="30">DraftState</text>
+<text fill="#8a7f68" font-size="7.5" text-anchor="middle" x="495" y="46">initial state — editable</text>
+<rect fill="#f9f5ee" height="44" rx="1" stroke="#3d3728" stroke-width="1" width="135" x="428" y="76"></rect>
+<text fill="#1e1a12" font-family="'Playfair Display',serif" font-size="9.5" font-style="italic" text-anchor="middle" x="495" y="92">ModerationState</text>
+<text fill="#8a7f68" font-size="7.5" text-anchor="middle" x="495" y="108">locked — review pending</text>
+<rect fill="#f9f5ee" height="30" rx="1" stroke="#3d3728" stroke-width="1" width="135" x="428" y="138"></rect>
+<text fill="#1e1a12" font-family="'Playfair Display',serif" font-size="9.5" font-style="italic" text-anchor="middle" x="495" y="152">PublishedState</text>
+<text fill="#8a7f68" font-size="7.5" text-anchor="middle" x="495" y="163">sealed — no more
+                    changes</text>
+<!-- Implements arrows -->
+<line marker-end="url(#p1-03-behavioural-fig03-st2)" stroke="#3d3728" stroke-dasharray="4,2" stroke-width="1" x1="390" x2="428" y1="65" y2="36"></line>
+<line marker-end="url(#p1-03-behavioural-fig03-st2)" stroke="#3d3728" stroke-dasharray="4,2" stroke-width="1" x1="390" x2="428" y1="80" y2="98"></line>
+<line marker-end="url(#p1-03-behavioural-fig03-st2)" stroke="#3d3728" stroke-dasharray="4,2" stroke-width="1" x1="390" x2="428" y1="100" y2="153"></line>
+<!-- Transition arrows between states -->
+<path d="M495 58 Q540 68 495 76" fill="none" marker-end="url(#p1-03-behavioural-fig03-st1)" stroke="#c0392b" stroke-dasharray="4,2" stroke-width="1.5"></path>
+<text fill="#c0392b" font-size="7.5" font-style="italic" x="546" y="70">submitForReview()</text>
+<path d="M495 120 Q540 130 495 138" fill="none" marker-end="url(#p1-03-behavioural-fig03-st1)" stroke="#c0392b" stroke-dasharray="4,2" stroke-width="1.5"></path>
+<text fill="#c0392b" font-size="7.5" font-style="italic" x="548" y="132">publish()</text>
+</svg>

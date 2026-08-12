@@ -1,0 +1,112 @@
+<svg style="max-width: 820px" viewbox="0 0 820 560" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="20" id="p3-03-ride-hailing-fig04-dotGrid" patternunits="userSpaceOnUse" width="20">
+<circle cx="10" cy="10" fill="#d0d0d0" r="0.8"></circle>
+</pattern>
+<filter height="104%" id="p3-03-ride-hailing-fig04-roughen" width="104%" x="-2%" y="-2%">
+<feturbulence basefrequency="0.03" numoctaves="3" result="noise" seed="2" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1.5" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<filter height="102%" id="p3-03-ride-hailing-fig04-roughenLight" width="102%" x="-1%" y="-1%">
+<feturbulence basefrequency="0.04" numoctaves="2" result="noise" seed="5" type="turbulence"></feturbulence>
+<fedisplacementmap in="SourceGraphic" in2="noise" scale="1" xchannelselector="R" ychannelselector="G"></fedisplacementmap>
+</filter>
+<marker id="p3-03-ride-hailing-fig04-exArrow" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#333" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p3-03-ride-hailing-fig04-exArrowGreen" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0ba360" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+<marker id="p3-03-ride-hailing-fig04-exArrowBlue" markerheight="10" markerwidth="10" orient="auto" refx="10" refy="6" viewbox="0 0 12 12">
+<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</marker>
+</defs>
+<rect fill="#fefefe" height="560" rx="12" width="820"></rect>
+<rect fill="url(#p3-03-ride-hailing-fig04-dotGrid)" height="560" rx="12" width="820"></rect>
+<rect fill="#eef6ff" filter="url(#p3-03-ride-hailing-fig04-roughen)" height="130" rx="14" stroke="#333" stroke-width="2" width="95" x="25" y="80"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="20" text-anchor="middle" x="72" y="145">
+                    🧳
+                </text>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle" x="72" y="168">
+                    Rider
+                </text>
+<rect fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig04-roughen)" height="130" rx="14" stroke="#0ba360" stroke-width="2" width="95" x="25" y="340"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="20" text-anchor="middle" x="72" y="405">
+                    🚗
+                </text>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle" x="72" y="428">
+                    Driver
+                </text>
+<rect fill="#e3f2fd" filter="url(#p3-03-ride-hailing-fig04-roughen)" height="100" rx="10" stroke="#0066cc" stroke-width="2" width="120" x="155" y="210"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="13" font-weight="600" text-anchor="middle" x="215" y="252">
+                    API Gateway
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="215" y="272">
+                    Auth · JWT
+                </text>
+<path d="M 120 145 C 135 175, 145 210, 155 235" fill="none" filter="url(#p3-03-ride-hailing-fig04-roughenLight)" marker-end="url(#p3-03-ride-hailing-fig04-exArrow)" stroke="#333" stroke-width="2"></path>
+<path d="M 120 405 C 135 340, 145 290, 155 265" fill="none" filter="url(#p3-03-ride-hailing-fig04-roughenLight)" marker-end="url(#p3-03-ride-hailing-fig04-exArrowGreen)" stroke="#0ba360" stroke-width="2"></path>
+<rect fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig04-roughen)" height="95" rx="10" stroke="#0ba360" stroke-width="2" width="130" x="310" y="70"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="13" font-weight="600" text-anchor="middle" x="375" y="108">
+                    Ride Service
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="375" y="128">
+                    Fare · Ride state
+                </text>
+<rect fill="#fff8e1" filter="url(#p3-03-ride-hailing-fig04-roughen)" height="95" rx="10" stroke="#3cba92" stroke-width="2" width="130" x="310" y="195"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="12" font-weight="600" text-anchor="middle" x="375" y="233">
+                    Location Svc
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="375" y="253">
+                    Driver pings
+                </text>
+<rect fill="#f0faf5" filter="url(#p3-03-ride-hailing-fig04-roughen)" height="95" rx="10" stroke="#0ba360" stroke-width="2" width="130" x="310" y="320"></rect>
+<text fill="#0ba360" font-family="'Segoe Print', cursive" font-size="12" font-weight="600" text-anchor="middle" x="375" y="358">
+                    Matching
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="375" y="378">
+                    Rank · Lock
+                </text>
+<rect fill="#fff3e0" filter="url(#p3-03-ride-hailing-fig04-roughen)" height="70" rx="10" stroke="#3cba92" stroke-width="1.5" width="130" x="310" y="445"></rect>
+<text fill="#3cba92" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle" x="375" y="478">
+                    Notifications
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="375" y="495">
+                    APNS / FCM
+                </text>
+<path d="M 275 235 C 292 180, 300 130, 310 115" fill="none" filter="url(#p3-03-ride-hailing-fig04-roughenLight)" marker-end="url(#p3-03-ride-hailing-fig04-exArrowBlue)" stroke="#0066cc" stroke-width="1.5"></path>
+<path d="M 275 260 C 292 240, 300 225, 310 242" fill="none" filter="url(#p3-03-ride-hailing-fig04-roughenLight)" marker-end="url(#p3-03-ride-hailing-fig04-exArrowGreen)" stroke="#0ba360" stroke-width="1.5"></path>
+<rect fill="#fce4ec" filter="url(#p3-03-ride-hailing-fig04-roughen)" height="80" rx="10" stroke="#333" stroke-width="1.5" width="115" x="480" y="100"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle" x="537" y="135">
+                    Maps API
+                </text>
+<rect fill="#ffebee" filter="url(#p3-03-ride-hailing-fig04-roughen)" height="95" rx="10" stroke="#c62828" stroke-width="2" width="115" x="480" y="210"></rect>
+<text fill="#c62828" font-family="'Segoe Print', cursive" font-size="12" font-weight="600" text-anchor="middle" x="537" y="248">
+                    Redis GEO
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="9" text-anchor="middle" x="537" y="268">
+                    GEOADD · GEOSEARCH
+                </text>
+<rect fill="#e3f2fd" filter="url(#p3-03-ride-hailing-fig04-roughen)" height="80" rx="10" stroke="#0066cc" stroke-width="1.5" width="115" x="480" y="340"></rect>
+<text fill="#0066cc" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle" x="537" y="375">
+                    Kafka / SQS
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="537" y="392">
+                    Geo partitions
+                </text>
+<ellipse cx="680" cy="130" fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig04-roughen)" rx="50" ry="16" stroke="#333" stroke-width="1.8"></ellipse>
+<path d="M 630 130 L 630 175" stroke="#333" stroke-width="1.8"></path>
+<path d="M 730 130 L 730 175" stroke="#333" stroke-width="1.8"></path>
+<ellipse cx="680" cy="175" fill="#e8f5e9" filter="url(#p3-03-ride-hailing-fig04-roughen)" rx="50" ry="16" stroke="#333" stroke-width="1.8"></ellipse>
+<rect fill="#e8f5e9" height="45" stroke="none" width="100" x="630" y="130"></rect>
+<text fill="#333" font-family="'Segoe Print', cursive" font-size="11" text-anchor="middle" x="680" y="158">
+                    PostgreSQL
+                </text>
+<text fill="#86868b" font-family="'Segoe Print', cursive" font-size="8" text-anchor="middle" x="680" y="172">
+                    Fare · Ride
+                </text>
+<path d="M 440 117 C 455 117, 468 118, 478 120" fill="none" marker-end="url(#p3-03-ride-hailing-fig04-exArrow)" stroke="#333" stroke-width="1.5"></path>
+<path d="M 440 242 C 455 242, 468 242, 478 252" fill="none" marker-end="url(#p3-03-ride-hailing-fig04-exArrowGreen)" stroke="#0ba360" stroke-width="1.5"></path>
+<path d="M 440 367 C 455 367, 468 360, 478 355" fill="none" marker-end="url(#p3-03-ride-hailing-fig04-exArrowBlue)" stroke="#0066cc" stroke-width="1.5"></path>
+<path d="M 595 140 C 615 140, 635 138, 628 145" fill="none" marker-end="url(#p3-03-ride-hailing-fig04-exArrow)" stroke="#333" stroke-width="1.5"></path>
+</svg>
