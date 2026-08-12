@@ -293,6 +293,28 @@
             text-decoration: underline;
         }
 
+        /* Coming soon card */
+        .article-card.upcoming {
+            border-style: dashed;
+            background: transparent;
+            cursor: default;
+        }
+
+        .article-card.upcoming:hover {
+            transform: none;
+            box-shadow: none;
+            border-color: var(--color-divider-soft);
+        }
+
+        .article-card.upcoming .article-badge {
+            background: var(--color-hairline);
+            color: var(--color-ink-muted-48);
+        }
+
+        .article-card.upcoming .article-title {
+            color: var(--color-body-muted);
+        }
+
         /* Footer */
         footer {
             background: var(--color-canvas-parchment);
@@ -348,7 +370,8 @@
             <h1 class="hero-title">Deep Dives</h1>
             <div class="hero-subtitle">Technical Deep Dives</div>
             <p class="hero-description">
-                Comprehensive technical deep dives into distributed systems, event streaming, and enterprise architecture patterns.
+                Comprehensive technical deep dives into distributed systems, event streaming, and enterprise
+                architecture patterns.
             </p>
         </div>
     </section>
@@ -363,7 +386,8 @@
                     <span class="article-badge">Event Streaming</span>
                     <h3 class="article-title">Apache Kafka Deep Dive</h3>
                     <p class="article-description">
-                        HLD/LLD guide for interviews — partitions, consumer groups, replication, hot partitions, and when to choose Kafka over traditional queues.
+                        HLD/LLD guide for interviews — partitions, consumer groups, replication, hot partitions, and
+                        when to choose Kafka over traditional queues.
                     </p>
                     <div class="article-meta">
                         <div class="article-tags">
@@ -382,7 +406,8 @@
                     <p class="article-description">
                         Concurrency Problems Decoded :
                         Correctness, Coordination & Scarcity
-                        Two users click "Book" on the same airline seat at the same instant. Both get a confirmation email. 
+                        Two users click "Book" on the same airline seat at the same instant. Both get a confirmation
+                        email.
                     </p>
                     <div class="article-meta">
                         <div class="article-tags">
@@ -400,7 +425,9 @@
                     <span class="article-badge caching">Caching</span>
                     <h3 class="article-title">The Hidden Complexity of Caching</h3>
                     <p class="article-description">
-                        Storing something closer to where you need it is ancient common sense. The gap between adding a cache and thinking carefully about a cache is where production incidents live — thundering herds, hot keys, and stale bank balances.
+                        Storing something closer to where you need it is ancient common sense. The gap between adding a
+                        cache and thinking carefully about a cache is where production incidents live — thundering
+                        herds, hot keys, and stale bank balances.
                     </p>
                     <div class="article-meta">
                         <div class="article-tags">
@@ -432,6 +459,23 @@
                         <span class="read-link">Read article →</span>
                     </div>
                 </a>
+
+                <!-- Placeholder for the next deepdives piece -->
+                <div class="article-card upcoming">
+                    <span class="article-badge">In Progress</span>
+                    <h3 class="article-title">More deep dives on the way</h3>
+                    <p class="article-description">
+                        Time Series Database, Elastic search, DynamoDB — same format: one
+                        concept, taken all the way down.
+                    </p>
+                    <div class="article-meta">
+                        <div class="article-tags">
+                            <span class="tech-tag">Search</span>
+                            <span class="tech-tag">Data Management</span>
+                            <span class="tech-tag">High Throughtput</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
@@ -443,4 +487,5 @@
         </div>
     </footer>
 </body>
+
 </html>

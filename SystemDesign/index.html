@@ -293,6 +293,28 @@
             text-decoration: underline;
         }
 
+         /* Coming soon card */
+         .article-card.upcoming {
+            border-style: dashed;
+            background: transparent;
+            cursor: default;
+        }
+
+        .article-card.upcoming:hover {
+            transform: none;
+            box-shadow: none;
+            border-color: var(--color-divider-soft);
+        }
+
+        .article-card.upcoming .article-badge {
+            background: var(--color-hairline);
+            color: var(--color-ink-muted-48);
+        }
+
+        .article-card.upcoming .article-title {
+            color: var(--color-body-muted);
+        }
+
         /* Footer */
         footer {
             background: var(--color-canvas-parchment);
@@ -348,7 +370,8 @@
             <h1 class="hero-title">System Designs</h1>
             <div class="hero-subtitle">Large-Scale System Architecture</div>
             <p class="hero-description">
-                In-depth system design analyses for real-world applications covering scalability, consistency, and distributed systems patterns.
+                In-depth system design analyses for real-world applications covering scalability, consistency, and
+                distributed systems patterns.
             </p>
         </div>
     </section>
@@ -363,7 +386,8 @@
                     <span class="article-badge tinder">Social Platform</span>
                     <h3 class="article-title">Designing Tinder at Scale</h3>
                     <p class="article-description">
-                        Feed generation, swipe consistency, geo-spatial indexing, and scaling to 20M daily active users — a full system design deep dive.
+                        Feed generation, swipe consistency, geo-spatial indexing, and scaling to 20M daily active users
+                        — a full system design deep dive.
                     </p>
                     <div class="article-meta">
                         <div class="article-tags">
@@ -380,7 +404,8 @@
                     <span class="article-badge show">Booking Platform</span>
                     <h3 class="article-title">BookMyShow System Design</h3>
                     <p class="article-description">
-                        Event ticketing system design covering seat locking, payment flows, high-concurrency handling, and distributed caching strategies.
+                        Event ticketing system design covering seat locking, payment flows, high-concurrency handling,
+                        and distributed caching strategies.
                     </p>
                     <div class="article-meta">
                         <div class="article-tags">
@@ -397,7 +422,8 @@
                     <span class="article-badge ride">Ride Hailing</span>
                     <h3 class="article-title">Designing BookMyRide at Scale</h3>
                     <p class="article-description">
-                        On-demand ride hailing HLD/LLD — fare quotes, Redis geospatial matching, distributed driver locks, peak-demand queues, and geo-sharded scaling.
+                        On-demand ride hailing HLD/LLD — fare quotes, Redis geospatial matching, distributed driver
+                        locks, peak-demand queues, and geo-sharded scaling.
                     </p>
                     <div class="article-meta">
                         <div class="article-tags">
@@ -408,6 +434,24 @@
                         <span class="read-link">Read article →</span>
                     </div>
                 </a>
+
+                <!-- Placeholder for the next system design piece -->
+                <div class="article-card upcoming">
+                    <span class="article-badge">In Progress</span>
+                    <h3 class="article-title">More systems to be designed on the way</h3>
+                    <p class="article-description">
+                        ChatGPT, StockExchange, UPI — same format: one
+                        concept, taken all the way down.
+                    </p>
+                    <div class="article-meta">
+                        <div class="article-tags">
+                            <span class="tech-tag">Payment</span>
+                            <span class="tech-tag">Volume</span>
+                            <span class="tech-tag">Consistency</span>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </section>
@@ -419,4 +463,5 @@
         </div>
     </footer>
 </body>
+
 </html>
