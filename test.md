@@ -25,3 +25,49 @@ Credit to the Anthropic team for setting a genuinely high bar.
 
 
 1) AI Fluency: Framework & Foundations
+
+
+SystemDesign Primer
+1) perfromance vs scalability
+2) latency vs throughput
+3) availibility vs consistency
+4) sql vs nosql
+
+Design patterns
+- Design pattern
+
+Deepdives
+- API ratelimiter
+- caching
+- concurrency
+- event/kafka design
+- elastic search
+- time series database
+
+System Design
+- bookmyshow
+- tinder
+- ride hailing
+- chatgpt
+- ad click agggregator
+- notification system
+- payment system
+- google doc
+- UPI system design
+- stock exchange
+
+
+Database
+    Relational database management system (RDBMS)
+        Master-slave replication
+        Master-master replication
+        Federation
+        Sharding
+        Denormalization
+        SQL tuning
+    NoSQL
+        Key-value store
+        Document store
+        Wide column store
+        Graph Database
+SQL or NoSQL
