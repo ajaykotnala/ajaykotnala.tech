@@ -4,22 +4,27 @@
  * and bakes them into data/analytics.json so the static site can render them
  * without anyone logging into the Cloudflare dashboard.
  *
+ * Deliberately uses only the GraphQL API, which needs a single token
+ * permission: Account -> Account Analytics -> Read. The REST endpoint that
+ * lists RUM sites would additionally require Account Settings: Read, so the
+ * site tag is left unset and the account-level aggregate is used instead.
+ *
  * Env:
  *   CF_API_TOKEN   (required) token with Account Analytics -> Read
  *   CF_ACCOUNT_ID  (required) Cloudflare account id
- *   CF_SITE_TAG    (optional) RUM site tag; auto-discovered when omitted
- *   CF_SITE_TOKEN  (optional) beacon token, used to pick the right site
+ *   CF_SITE_TAG    (optional) only needed once the account has >1 RUM site
  *   LOOKBACK_DAYS  (optional) how many days to re-fetch each run (default 7)
  */
 
 const fs = require("node:fs");
 const path = require("node:path");
 
-const API = "https://api.cloudflare.com/client/v4";
+const GRAPHQL = "https://api.cloudflare.com/client/v4/graphql";
 const OUT = path.join(__dirname, "..", "data", "analytics.json");
 
 const token = requireEnv("CF_API_TOKEN");
 const accountTag = requireEnv("CF_ACCOUNT_ID");
+const siteTag = process.env.CF_SITE_TAG?.trim() || null;
 const lookbackDays = Number(process.env.LOOKBACK_DAYS || 7);
 
 function requireEnv(name) {
@@ -31,59 +36,23 @@ function requireEnv(name) {
   return v.trim();
 }
 
-const authHeaders = {
-  Authorization: `Bearer ${token}`,
-  "Content-Type": "application/json",
-};
-
-/** Cloudflare's REST envelope: { success, errors, result }. */
-async function rest(path) {
-  const res = await fetch(`${API}${path}`, { headers: authHeaders });
-  const body = await res.json();
-  if (!res.ok || body.success === false) {
-    throw new Error(`${path} failed: ${JSON.stringify(body.errors || body)}`);
-  }
-  return body.result;
-}
-
-/**
- * The beacon token in the HTML snippet is not the same value as the siteTag
- * the GraphQL API filters on, so resolve it from the RUM site list.
- */
-async function resolveSiteTag() {
-  if (process.env.CF_SITE_TAG) return process.env.CF_SITE_TAG.trim();
-
-  const sites = await rest(`/accounts/${accountTag}/rum/site_info/list`);
-  if (!Array.isArray(sites) || sites.length === 0) {
-    throw new Error("No Web Analytics sites found on this account");
-  }
-
-  const wanted = process.env.CF_SITE_TOKEN?.trim();
-  const match = wanted && sites.find((s) => s.site_token === wanted);
-  const chosen = match || sites[0];
-
-  if (!match && sites.length > 1) {
-    console.warn(
-      `${sites.length} sites found and no CF_SITE_TOKEN match; defaulting to ${chosen.site_tag}`
-    );
-  }
-  console.log(`Using siteTag ${chosen.site_tag} (${chosen.ruleset?.zone_name || "JS snippet"})`);
-  return chosen.site_tag;
-}
+/** Optional site filter; omitted entirely when the account has a single site. */
+const siteFilter = siteTag ? "siteTag: $siteTag, " : "";
+const siteParam = siteTag ? ", $siteTag: String!" : "";
 
 const QUERY = `
-query SiteAnalytics($accountTag: String!, $siteTag: String!, $dayStart: Time!, $rangeStart: Time!, $end: Time!) {
+query SiteAnalytics($accountTag: String!, $dayStart: Time!, $rangeStart: Time!, $end: Time!${siteParam}) {
   viewer {
     accounts(filter: { accountTag: $accountTag }) {
       last24h: rumPageloadEventsAdaptiveGroups(
-        filter: { siteTag: $siteTag, datetime_geq: $dayStart, datetime_leq: $end }
+        filter: { ${siteFilter}datetime_geq: $dayStart, datetime_leq: $end }
         limit: 1
       ) {
         count
         sum { visits }
       }
       daily: rumPageloadEventsAdaptiveGroups(
-        filter: { siteTag: $siteTag, datetime_geq: $rangeStart, datetime_leq: $end }
+        filter: { ${siteFilter}datetime_geq: $rangeStart, datetime_leq: $end }
         limit: 1000
         orderBy: [date_ASC]
       ) {
@@ -95,26 +64,35 @@ query SiteAnalytics($accountTag: String!, $siteTag: String!, $dayStart: Time!, $
   }
 }`;
 
-async function fetchAnalytics(siteTag) {
+async function fetchAnalytics() {
   const now = new Date();
   const variables = {
     accountTag,
-    siteTag,
     end: now.toISOString(),
     dayStart: new Date(now.getTime() - 24 * 3600 * 1000).toISOString(),
     rangeStart: new Date(now.getTime() - lookbackDays * 24 * 3600 * 1000).toISOString(),
+    ...(siteTag ? { siteTag } : {}),
   };
 
-  const res = await fetch(`${API}/graphql`, {
+  const res = await fetch(GRAPHQL, {
     method: "POST",
-    headers: authHeaders,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ query: QUERY, variables }),
   });
   const body = await res.json();
 
   if (body.errors?.length) {
+    const messages = body.errors.map((e) => e.message).join("; ");
+    if (/auth|permission|denied|forbidden/i.test(messages)) {
+      throw new Error(
+        `GraphQL auth failure: ${messages}\n` +
+          `The token needs exactly: Account -> Account Analytics -> Read, ` +
+          `scoped to account ${accountTag}.`
+      );
+    }
     throw new Error(`GraphQL errors: ${JSON.stringify(body.errors, null, 2)}`);
   }
+
   const account = body.data?.viewer?.accounts?.[0];
   if (!account) throw new Error(`No account data returned: ${JSON.stringify(body)}`);
   return account;
@@ -139,8 +117,7 @@ function sumWindow(daily, days) {
 }
 
 async function main() {
-  const siteTag = await resolveSiteTag();
-  const { last24h, daily: freshDays } = await fetchAnalytics(siteTag);
+  const { last24h, daily: freshDays } = await fetchAnalytics();
 
   // Merge fresh days over the archive. Cloudflare's free plan drops old data,
   // so the committed file becomes the long-term record.
@@ -158,7 +135,7 @@ async function main() {
 
   const payload = {
     source: "cloudflare-web-analytics",
-    siteTag,
+    siteTag: siteTag || "account-wide",
     totals: sumWindow(sorted, 1e6),
     windows: {
       last24h: { pageViews: rolling.count, visits: rolling.sum?.visits ?? 0 },

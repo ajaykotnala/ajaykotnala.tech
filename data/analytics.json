@@ -1,7 +1,7 @@
 {
   "updatedAt": "1970-01-01T00:00:00.000Z",
   "source": "cloudflare-web-analytics",
-  "siteTag": "",
+  "siteTag": "account-wide",
   "totals": { "pageViews": 0, "visits": 0 },
   "windows": {
     "last24h": { "pageViews": 0, "visits": 0 },

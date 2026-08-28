@@ -27,7 +27,6 @@ jobs:
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CF_SITE_TOKEN: 25a535ed0cef446989ce07ab00b1d46d
         run: node scripts/fetch-analytics.js
 
       - name: Commit if changed
