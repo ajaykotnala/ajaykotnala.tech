@@ -1,0 +1,43 @@
+name: Refresh Cloudflare analytics
+
+on:
+  schedule:
+    # every 6 hours; tighten or relax as you like
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: analytics
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Fetch Web Analytics
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_SITE_TOKEN: 25a535ed0cef446989ce07ab00b1d46d
+        run: node scripts/fetch-analytics.js
+
+      - name: Commit if changed
+        run: |
+          if [[ -z "$(git status --porcelain data/analytics.json)" ]]; then
+            echo "No analytics change to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/analytics.json
+          git commit -m "chore: refresh analytics data"
+          git push

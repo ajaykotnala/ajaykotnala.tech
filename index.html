@@ -1009,6 +1009,17 @@
             transition: color 0.2s;
         }
 
+        .site-stats {
+            margin-top: 6px;
+            opacity: 0.75;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .site-stats-updated {
+            opacity: 0.7;
+            margin-left: 6px;
+        }
+
         .footer-bottom .social-links a:hover {
             color: var(--color-primary);
             text-decoration: underline;
@@ -1737,6 +1748,12 @@
                 </div>
                 <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved. Designed with Apple design
                     guidelines.</p>
+                <p class="fine-print site-stats" data-cf-stats-container hidden>
+                    <span data-cf-stat="totals.pageViews">0</span> page views &middot;
+                    <span data-cf-stat="totals.visits">0</span> visits &middot;
+                    <span data-cf-stat="windows.last24h.pageViews">0</span> in the last 24h
+                    <span class="site-stats-updated">updated <time data-cf-stat="updatedAt"></time></span>
+                </p>
             </div>
         </div>
     </footer>
@@ -1790,6 +1807,7 @@
             });
         });
     </script>
+    <script defer src="/assets/js/analytics-counter.js"></script>
     <!-- Cloudflare Web Analytics -->
     <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "25a535ed0cef446989ce07ab00b1d46d"}'></script>
     <!-- End Cloudflare Web Analytics -->
