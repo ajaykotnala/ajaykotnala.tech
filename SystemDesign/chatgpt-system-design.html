@@ -1,0 +1,2761 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChatGPT System Design — Serving an LLM to 800M Daily Users | Ajay Kotnala</title>
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="../assets/icons/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="../assets/icons/favicon-16.png" sizes="16x16" type="image/png" />
+    <link rel="apple-touch-icon" href="../assets/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="../site.webmanifest" />
+    <meta name="theme-color" content="#0066cc" />
+    <meta name="description"
+        content="A full system design breakdown of ChatGPT at 800M daily active users — how a transformer actually runs, prefill vs decode, the KV cache that caps batch size, continuous batching, GPU capacity math, SSE streaming, and cost-per-token architecture. By Ajay Kotnala, Senior Solution Architect." />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+        rel="stylesheet" />
+    <style>
+        /* ===== Apple Design Tokens (matching index.html) ===== */
+        :root {
+            /* Color System */
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-pearl: #fafafc;
+            --color-on-primary: #ffffff;
+
+            /* ChatGPT brand accents (article identity) */
+            --gpt-teal: #10a37f;
+            --gpt-violet: #6b4fbb;
+            --gpt-gradient: linear-gradient(135deg, #10a37f, #6b4fbb);
+
+            /* Typography */
+            --font-headline:
+                system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+                sans-serif;
+            --font-body: "Lora", Georgia, "Times New Roman", serif;
+            --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+
+            /* Border Radii */
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            /* Shadows */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06);
+
+            /* Article */
+            --article-width: 680px;
+        }
+
+        /* ===== Reset ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* ===== 1. Global Navigation Bar (Apple Thin Black Bar) ===== */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            font-family: var(--font-ui);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .global-nav-logo .logo-icon {
+            font-size: 16px;
+            color: var(--color-primary-on-dark);
+        }
+
+        .global-nav-links {
+            display: flex;
+            list-style: none;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .global-nav-links a {
+            color: #cccccc;
+            text-decoration: none;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            letter-spacing: -0.12px;
+            transition: color 0.2s ease;
+        }
+
+        .global-nav-links a:hover {
+            color: #ffffff;
+        }
+
+        .global-nav-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .global-nav-actions a {
+            color: #cccccc;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .global-nav-actions a:hover {
+            color: #ffffff;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ===== 2. Sub Navigation Bar (Frosted Sticky) ===== */
+        .sub-nav-frosted {
+            position: sticky;
+            top: 44px;
+            left: 0;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 999;
+            border-bottom: 1px solid var(--color-divider-soft);
+        }
+
+        .sub-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .sub-nav-title {
+            font-family: var(--font-headline);
+            font-size: 21px;
+            font-weight: 600;
+            color: var(--color-ink);
+            text-decoration: none;
+            letter-spacing: 0.231px;
+        }
+
+        .sub-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sub-nav-link {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink);
+            text-decoration: none;
+            opacity: 0.8;
+            transition:
+                color 0.2s ease,
+                opacity 0.2s ease;
+        }
+
+        .sub-nav-link:hover {
+            color: var(--color-primary);
+            opacity: 1;
+        }
+
+        .sub-nav-button {
+            background: var(--color-primary);
+            color: var(--color-on-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            border-radius: var(--rounded-pill);
+            text-decoration: none;
+            transition:
+                background 0.2s ease,
+                transform 0.1s ease;
+        }
+
+        .sub-nav-button:hover {
+            background: var(--color-primary-focus);
+        }
+
+        .sub-nav-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== Scroll Progress Bar ===== */
+        .progress-bar {
+            position: fixed;
+            top: 44px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--gpt-gradient);
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        /* ===== Article Hero ===== */
+        .article-hero {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(96px + 4rem) 2rem 4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .article-hero-inner {
+            max-width: var(--article-width);
+            width: 100%;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .article-category {
+            display: inline-block;
+            padding: 4px 14px;
+            background: var(--gpt-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .article-date {
+            color: var(--color-body-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .article-read-time {
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 13px;
+        }
+
+        .article-read-time::before {
+            content: "·";
+            margin-right: 0.5rem;
+            color: var(--color-body-muted);
+        }
+
+        .article-hero h1 {
+            font-family: var(--font-headline);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+        }
+
+        .article-hero h1 .gradient-text {
+            background: var(--gpt-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .article-hero-desc {
+            font-family: var(--font-body);
+            font-size: 20px;
+            color: var(--color-body-muted);
+            line-height: 1.7;
+            max-width: 600px;
+        }
+
+        .article-hero-desc em {
+            font-style: italic;
+            color: var(--color-ink-muted-80);
+        }
+
+        /* ===== Author Bar (Medium-style) ===== */
+        .author-bar {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--color-divider-soft);
+            margin-bottom: 2.5rem;
+        }
+
+        .author-bar-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-bar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .author-bar-name {
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-ink);
+        }
+
+        .author-bar-meta {
+            font-family: var(--font-ui);
+            font-size: 13px;
+            color: var(--color-body-muted);
+        }
+
+        /* ===== Table of Contents ===== */
+        .toc-wrapper {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .toc {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem 2.5rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--gpt-gradient);
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toc h3 {
+            font-size: 12px;
+            margin-bottom: 1.2rem;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            padding: 0.35rem 0;
+        }
+
+        .toc li a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 15px;
+            transition:
+                color 0.2s ease,
+                padding-left 0.2s ease;
+            display: inline-block;
+        }
+
+        .toc li a::before {
+            content: counter(toc-counter, decimal-leading-zero) ".";
+            color: var(--gpt-teal);
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-right: 0.8rem;
+            font-size: 13px;
+        }
+
+        .toc li a:hover {
+            color: var(--color-primary);
+            padding-left: 4px;
+        }
+
+        /* ===== Article Body (Medium-friendly) ===== */
+        .article-body {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .article-body h2 {
+            font-family: var(--font-headline);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-top: 3.5rem;
+            margin-bottom: 1.2rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .article-body h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .article-body h2 .section-number {
+            color: var(--gpt-teal);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .article-body h3 {
+            font-family: var(--font-headline);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-top: 2.5rem;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .article-body p {
+            font-family: var(--font-body);
+            font-size: 19px;
+            line-height: 1.85;
+            color: var(--color-ink-muted-80);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.003em;
+        }
+
+        .article-body ul,
+        .article-body ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .article-body li {
+            font-family: var(--font-body);
+            color: var(--color-ink-muted-80);
+            margin-bottom: 0.6rem;
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .article-body strong {
+            color: var(--color-ink);
+            font-weight: 600;
+        }
+
+        .article-body em {
+            color: var(--color-ink-muted-80);
+            font-style: italic;
+        }
+
+        .article-body code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--color-canvas-parchment);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--gpt-teal);
+        }
+
+        /* ===== Callout Boxes ===== */
+        .callout {
+            background: var(--color-canvas-parchment);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 0 var(--rounded-sm) var(--rounded-sm) 0;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .callout.callout-warning {
+            border-left-color: var(--gpt-violet);
+            background: #f0faf8;
+        }
+
+        .callout.callout-insight {
+            border-left-color: var(--gpt-teal);
+            background: #f0faf5;
+        }
+
+        .callout .callout-label {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.6rem;
+            color: var(--color-primary);
+        }
+
+        .callout.callout-warning .callout-label {
+            color: var(--gpt-violet);
+        }
+
+        .callout.callout-insight .callout-label {
+            color: var(--gpt-teal);
+        }
+
+        .callout p {
+            margin-bottom: 0;
+            font-size: 16px !important;
+            line-height: 1.7 !important;
+        }
+
+        /* ===== Code Blocks (GitHub Light Theme) ===== */
+        .code-block {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-hairline);
+            border-radius: var(--rounded-sm);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0 2rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--color-hairline);
+            color: var(--color-body-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 0 var(--rounded-sm) 0 var(--rounded-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--color-ink);
+            line-height: 1.7;
+            white-space: pre;
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .code-block .keyword {
+            color: #cf222e;
+        }
+
+        .code-block .string {
+            color: #0a3069;
+        }
+
+        .code-block .comment {
+            color: #6e7781;
+            font-style: italic;
+        }
+
+        .code-block .type {
+            color: #953800;
+        }
+
+        .code-block .number {
+            color: #0550ae;
+        }
+
+        /* ===== Entity Cards ===== */
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .entity-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 1.8rem;
+            text-align: center;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .entity-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .entity-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .entity-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .entity-card p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ===== API Endpoint Cards ===== */
+        .api-endpoint {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0;
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .api-endpoint:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .api-method-url {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .api-method {
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .api-method.post {
+            background: #f0faf5;
+            color: var(--gpt-teal);
+        }
+
+        .api-method.patch {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .api-method.get {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .api-url {
+            font-family: var(--font-mono);
+            color: var(--color-ink);
+            font-size: 15px;
+        }
+
+        .api-desc {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 15px !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        /* ===== Excalidraw-Style SVG Architecture Diagrams ===== */
+        .diagram-container {
+            margin: 3rem -2rem;
+            padding: 2rem;
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            overflow-x: auto;
+        }
+
+        .diagram-title {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-body-muted);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .diagram-placeholder {
+            background: var(--color-canvas);
+            border: 2px dashed var(--gpt-violet);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+            position: relative;
+        }
+
+        .diagram-placeholder .placeholder-badge {
+            display: inline-block;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--gpt-teal);
+            background: #f0faf5;
+            padding: 3px 10px;
+            border-radius: var(--rounded-pill);
+            margin-bottom: 0.8rem;
+        }
+
+        .diagram-placeholder h4 {
+            font-family: var(--font-ui);
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--color-ink);
+            margin-bottom: 0.6rem;
+        }
+
+        .diagram-placeholder p,
+        .diagram-placeholder li {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            line-height: 1.65 !important;
+            color: var(--color-ink-muted-80) !important;
+            margin-bottom: 0.4rem !important;
+        }
+
+        .diagram-placeholder ul {
+            margin: 0.5rem 0 0 1.2rem;
+            padding: 0;
+        }
+
+        .diagram-caption {
+            text-align: center;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            margin-top: 1rem;
+            font-style: italic;
+        }
+
+        .diagram-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== Comparison Table ===== */
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 2rem 0;
+            border-radius: var(--rounded-md);
+            overflow: hidden;
+            border: 1px solid var(--color-divider-soft);
+            font-family: var(--font-ui);
+        }
+
+        .comparison-table th {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            background: var(--color-canvas);
+            color: var(--color-ink-muted-80);
+            font-size: 15px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--color-divider-soft);
+            line-height: 1.5;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--color-canvas-parchment);
+        }
+
+        .check-icon {
+            color: var(--color-primary);
+            font-weight: 700;
+        }
+
+        .cross-icon {
+            color: var(--color-body-muted);
+            font-weight: 700;
+        }
+
+        /* ===== Scale Numbers ===== */
+        .scale-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .scale-stat {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 1.2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition:
+                box-shadow 0.3s ease,
+                transform 0.3s ease;
+        }
+
+        .scale-stat:hover {
+            box-shadow: var(--shadow-card);
+            transform: translateY(-2px);
+        }
+
+        .scale-stat::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--gpt-gradient);
+        }
+
+        .scale-stat .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            background: var(--gpt-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-headline);
+        }
+
+        .scale-stat .stat-desc {
+            color: var(--color-body-muted);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ===== Deep Dive Accordion ===== */
+        .deep-dive {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            margin: 1.5rem 0;
+            overflow: hidden;
+            transition:
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .deep-dive:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .deep-dive-header {
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+
+        .deep-dive-header:hover {
+            background: var(--color-canvas-parchment);
+        }
+
+        .deep-dive-header h4 {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--color-ink);
+        }
+
+        .deep-dive-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-canvas-parchment);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            transition:
+                transform 0.3s ease,
+                background 0.3s ease;
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        .deep-dive.open .deep-dive-toggle {
+            transform: rotate(45deg);
+            background: #f0faf5;
+            color: var(--gpt-teal);
+        }
+
+        .deep-dive-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .deep-dive.open .deep-dive-content {
+            max-height: 3000px;
+        }
+
+        .deep-dive-content-inner {
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .deep-dive-content-inner p,
+        .deep-dive-content-inner li {
+            font-size: 16px !important;
+        }
+
+        /* ===== Level Expectation Cards ===== */
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .level-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition:
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .level-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .level-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .level-card.mid::before {
+            background: var(--color-primary);
+        }
+
+        .level-card.senior::before {
+            background: var(--gpt-violet);
+        }
+
+        .level-card.staff::before {
+            background: var(--gpt-teal);
+        }
+
+        .level-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .level-card.mid .level-label {
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-label {
+            color: var(--gpt-violet);
+        }
+
+        .level-card.staff .level-label {
+            color: var(--gpt-teal);
+        }
+
+        .level-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .level-card p {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .level-focus {
+            display: inline-block;
+            margin-top: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .level-card.mid .level-focus {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-focus {
+            background: #fef3ef;
+            color: var(--gpt-violet);
+        }
+
+        .level-card.staff .level-focus {
+            background: #f0faf5;
+            color: var(--gpt-teal);
+        }
+
+        /* ===== Author Footer Card ===== */
+        .article-footer {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+        }
+
+        .author-card {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-canvas);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            flex-shrink: 0;
+        }
+
+        .author-info h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: var(--color-ink);
+        }
+
+        .author-info .author-role {
+            color: var(--color-primary);
+            font-size: 14px;
+            font-family: var(--font-ui);
+            margin-bottom: 0.6rem;
+        }
+
+        .author-info p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+        }
+
+        .back-links-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-weight: 500;
+            font-size: 15px;
+            transition: gap 0.2s ease;
+        }
+
+        .back-link:hover {
+            gap: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* ===== Global Footer ===== */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .footer-container {
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .social-links a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        .fine-print {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink-muted-48);
+            letter-spacing: -0.12px;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 833px) {
+            .global-nav-links {
+                display: none;
+            }
+
+            .sub-nav-container {
+                padding: 0 16px;
+            }
+
+            .article-hero {
+                padding: calc(96px + 2rem) 1.5rem 3rem;
+            }
+
+            .article-body {
+                padding: 0 1.5rem 4rem;
+            }
+
+            .toc-wrapper {
+                padding: 0 1.5rem;
+            }
+
+            .entity-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .scale-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .level-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .author-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .diagram-container {
+                margin: 2rem -1rem;
+                padding: 1.5rem 1rem;
+            }
+
+            .comparison-table {
+                font-size: 14px;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 8px 10px;
+            }
+
+            .author-bar {
+                padding: 0 1.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .scale-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        /* ===== Animations ===== */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(24px);
+            transition:
+                opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1),
+                transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .reveal-element.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="progress-bar" id="progressBar"></div>
+
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="index.html" class="global-nav-logo">
+                <span class="logo-icon">[AK]</span>
+                Ajay Kotnala
+            </a>
+            <div class="global-nav-actions">
+                <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
+                    </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" aria-label="LinkedIn">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. Sticky Sub Navigation Bar -->
+    <nav class="sub-nav-frosted">
+        <div class="sub-nav-container">
+            <a href="#" class="sub-nav-title">System Design</a>
+            <div class="sub-nav-right">
+                <a href="./index.html" class="sub-nav-link">System Design Articles</a>
+                <a href="../index.html" class="sub-nav-link">Portfolio</a>
+                <a href="../index.html#contact" class="sub-nav-button">Get in Touch</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="article-hero">
+        <div class="article-hero-inner reveal-element active">
+            <div class="article-meta">
+                <span class="article-category">System Design</span>
+                <span class="article-date">August 2026</span>
+                <span class="article-read-time">32 min read</span>
+            </div>
+            <h1>Designing <span class="gradient-text">ChatGPT</span> at Scale:<br>800 Million Users, One Token at a Time</h1>
+            <p class="article-hero-desc">
+                Every system design you have practised assumes requests are cheap and stateless. This one is neither.
+                A single ChatGPT reply burns more compute than <em>ten thousand</em> ordinary API calls, holds gigabytes
+                of live state, and must stream back word by word. Let's build it — starting from what actually happens
+                inside the model.
+            </p>
+        </div>
+    </section>
+
+    <!-- Author Bar (Medium-style) -->
+    <div class="author-bar reveal-element active">
+        <img src="../content/ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar">
+        <div class="author-bar-info">
+            <div class="author-bar-name">Ajay Kotnala</div>
+            <div class="author-bar-meta">Senior Solution Architect · August 2026 · 32 min read</div>
+        </div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc-wrapper">
+        <div class="toc reveal-element">
+            <h3>In This Article</h3>
+            <ol>
+                <li><a href="#understanding">Understanding the Problem</a></li>
+                <li><a href="#requirements">Defining Requirements</a></li>
+                <li><a href="#entities">Core Entities &amp; Data Model</a></li>
+                <li><a href="#api">The API Surface</a></li>
+                <li><a href="#hld">High-Level Architecture</a></li>
+                <li><a href="#deep-dive-internals">Deep Dive: Inside the Model</a></li>
+                <li><a href="#deep-dive-batching">Deep Dive: Prefill, Decode &amp; Continuous Batching</a></li>
+                <li><a href="#deep-dive-kv">Deep Dive: The KV Cache Is the Bottleneck</a></li>
+                <li><a href="#deep-dive-streaming">Deep Dive: Streaming &amp; Backpressure</a></li>
+                <li><a href="#deep-dive-cost">Deep Dive: Capacity, Cost &amp; Routing</a></li>
+                <li><a href="#final">Final Architecture &amp; Interview Bar</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Article Body -->
+    <article class="article-body">
+
+        <!-- Section 1 -->
+        <h2 id="understanding"><span class="section-number">01</span>Understanding the Problem</h2>
+
+        <p>
+            On the surface ChatGPT is the simplest product in this entire series. There is one text box. You type into
+            it, and text comes back. There is no seat map, no geo-spatial index, no matching engine, no payment
+            settlement. A junior engineer could sketch the UI in an afternoon.
+        </p>
+        <p>
+            And yet it is the hardest system in the series, because it breaks the one assumption every other design in
+            your toolkit is built on: <strong>that a request is cheap.</strong>
+        </p>
+        <p>
+            Every system you have designed until now — Tinder, BookMyShow, a ride-hailing app — is fundamentally
+            <em>I/O-bound</em>. The server receives a request, reads or writes some rows, serialises JSON, and returns.
+            The CPU is mostly idle. Requests are stateless, so any machine can serve any request, and you scale by
+            adding boxes behind a load balancer.
+        </p>
+        <p>
+            ChatGPT inverts every one of those properties:
+        </p>
+        <ul>
+            <li><strong>It is compute-bound, not I/O-bound.</strong> A single response can consume several
+                <em>GPU-seconds</em> on hardware that costs tens of thousands of dollars per card.</li>
+            <li><strong>It is stateful mid-request.</strong> Generating a reply builds up gigabytes of intermediate
+                tensors that must live in GPU memory until the last word is emitted.</li>
+            <li><strong>It is not one request, it is hundreds.</strong> A 400-word answer is 400 sequential forward
+                passes through the model, each depending on the output of the last.</li>
+            <li><strong>The response streams.</strong> The connection stays open for 10–30 seconds, not 50ms.</li>
+            <li><strong>Capacity is physically scarce.</strong> You cannot autoscale your way out of a GPU shortage.
+                There is a global supply constraint, and it is measured in months of lead time.</li>
+        </ul>
+        <p>
+            That last point is what makes this an interesting interview question rather than a trivia quiz. In every
+            other design, the bottleneck is something you built badly and could fix. Here, the bottleneck is the
+            hardware itself, and the entire architecture exists to squeeze more useful work out of a fixed, expensive,
+            oversubscribed pool of accelerators.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>The trap in this question is spending twenty minutes on conversation storage and CRUD APIs — the part
+                you already know how to build — and running out of time before you reach inference serving. Storage is
+                perhaps 5% of the difficulty here. Say so out loud early: <em>"The database side of this is
+                conventional; I'd like to spend most of our time on the inference path, because that's where the cost
+                and the latency live."</em> Interviewers almost always agree, and you have just framed the entire
+                conversation around the interesting half.</p>
+        </div>
+
+        <!-- Section 2 -->
+        <h2 id="requirements"><span class="section-number">02</span>Defining Requirements</h2>
+
+        <h3>Functional Requirements</h3>
+        <p>Scope tightly. These are the features that define the product:</p>
+        <ul>
+            <li><strong>Send a message and receive a streamed reply</strong> — tokens appear progressively, not as one
+                blob at the end</li>
+            <li><strong>Multi-turn conversation</strong> — the model sees the prior turns, so context must be
+                reassembled on every request</li>
+            <li><strong>Persistent history</strong> — conversations survive across sessions and devices</li>
+            <li><strong>Stop and regenerate</strong> — the user can abort mid-stream or ask for another attempt</li>
+            <li><strong>Model selection</strong> — a fast cheap model and a slow expensive one, with different capacity
+                pools behind them</li>
+        </ul>
+        <p>
+            Explicitly out of scope, and worth naming so the interviewer knows you chose rather than forgot: training
+            and fine-tuning, image generation, voice, code execution sandboxes, and the retrieval/tool-calling stack.
+            Each is a system design question of its own.
+        </p>
+
+        <h3>Non-Functional Requirements</h3>
+        <p>
+            The latency requirements here are unusual and worth stating precisely, because "p99 latency" is almost
+            meaningless for a streaming response. There are two separate numbers that matter, and they are governed by
+            completely different parts of the system:
+        </p>
+        <ul>
+            <li><strong>TTFT — Time To First Token.</strong> How long from pressing Enter until the first word appears.
+                Target <strong>&lt; 500ms p95</strong>. This is what users perceive as "responsiveness," and it is
+                dominated by queueing plus one expensive pass over the prompt.</li>
+            <li><strong>ITL — Inter-Token Latency.</strong> The gap between successive words once streaming has begun.
+                Target <strong>&lt; 50ms</strong>, which yields roughly 20+ tokens/second — comfortably faster than
+                reading speed. This is what users perceive as "fluency," and it is dominated by memory bandwidth.</li>
+        </ul>
+        <p>
+            A system with a 300ms TTFT and a 200ms ITL feels broken and stuttering. A system with a 2s TTFT and a 30ms
+            ITL feels slow to start but smooth. They are different failure modes with different fixes, and collapsing
+            them into one "latency" number is the single most common mistake candidates make here.
+        </p>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">800M</div>
+                <div class="stat-desc">Daily Active Users</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">&lt;500ms</div>
+                <div class="stat-desc">TTFT (p95)</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">&lt;50ms</div>
+                <div class="stat-desc">Inter-Token Latency</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">99.9%</div>
+                <div class="stat-desc">Availability</div>
+            </div>
+        </div>
+
+        <h3>The Arithmetic That Shapes Everything</h3>
+        <p>
+            Do this math out loud in an interview. It takes ninety seconds and it determines every architectural
+            decision that follows.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Capacity Estimation · 800M DAU</span>
+            <code>REQUEST VOLUME
+  800M users × 4 conversations/day × 5 turns   =  16B messages / day
+  16e9 ÷ 86,400s                               =  ~185,000 messages / sec  (average)
+  peak factor ~3×                              =  ~555,000 messages / sec  (peak)
+
+TOKEN VOLUME   (the number that actually matters)
+  avg prompt  (system + history + new turn)    =  ~1,500 tokens
+  avg output                                   =  ~400 tokens
+
+  prefill:  16e9 × 1,500 ÷ 86,400              =  ~278M input  tokens / sec
+  decode:   16e9 ×   400 ÷ 86,400              =  ~74M  output tokens / sec
+
+GPU FLEET  (assume 8×H100 node ≈ 15K output tok/s with continuous batching)
+  74M ÷ 15,000                                 =  ~4,900 nodes    (average)
+  × 3 for peak                                 =  ~14,800 nodes
+                                               =  ~118,000 GPUs</code>
+        </div>
+
+        <p>
+            A hundred thousand accelerators, to serve a text box. At roughly $25–30k per H100-class GPU that is a
+            capital outlay in the billions before a single conversation happens, and it is why the rest of this article
+            is essentially one long exercise in <strong>raising GPU utilisation</strong>.
+        </p>
+        <p>
+            Note which term dominates. Prefill processes 278M tokens/sec — nearly four times the decode volume — yet
+            decode sets the fleet size. That asymmetry is the most important fact in the whole design, and
+            <a href="#deep-dive-batching">section 07</a> explains why.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ The Cost Constraint Is a Design Constraint</div>
+            <p>In a normal system, a 20% efficiency win is a nice-to-have that saves some money. Here, a 20% throughput
+                improvement is worth roughly 3,000 GPUs — hundreds of millions of dollars of hardware you do not have to
+                buy, on a part with a multi-month lead time. This is why techniques that would be absurd
+                micro-optimisations elsewhere (custom attention kernels, cache-aware routing, speculative decoding) are
+                table stakes here. <strong>Cost per token is the primary architectural metric</strong>, not p99
+                latency.</p>
+        </div>
+
+        <!-- Section 3 -->
+        <h2 id="entities"><span class="section-number">03</span>Core Entities &amp; Data Model</h2>
+
+        <p>
+            The persistent entities are refreshingly boring, and you should say that. The interesting state in this
+            system is <em>ephemeral</em> and lives on a GPU.
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">👤</div>
+                <h4>User</h4>
+                <p>Identity, subscription tier, rate-limit budget. Tier determines which model pool the request is
+                    allowed to reach.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">💬</div>
+                <h4>Conversation</h4>
+                <p>An ordered container of messages. Owns a title, a model binding, and a system prompt. The unit of
+                    sharing and deletion.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">✉️</div>
+                <h4>Message</h4>
+                <p>One turn. Role (user / assistant / system), content, token count, and the model that produced it.
+                    Append-only.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🧠</div>
+                <h4>KV Cache Block</h4>
+                <p>The model's working memory for an in-flight conversation. Lives in GPU HBM, measured in gigabytes,
+                    gone when the request ends.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🎛️</div>
+                <h4>Model Deployment</h4>
+                <p>A named model version pinned to a pool of GPU nodes, with its own weights, capacity, and cost per
+                    token.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">📊</div>
+                <h4>Usage Record</h4>
+                <p>Input and output tokens per request. Drives billing, quota enforcement, and capacity planning.
+                    Emitted asynchronously.</p>
+            </div>
+        </div>
+
+        <h3>The Storage Shape</h3>
+        <p>
+            Messages are append-only, always read as a contiguous range within one conversation, and never joined
+            across users. That access pattern points directly at a wide-column store — partition by
+            <code>conversation_id</code>, cluster by <code>seq</code>:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Message Table · partitioned by conversation</span>
+            <code>PRIMARY KEY ((conversation_id), seq)
+
+conversation_id   uuid        -- partition key: all turns co-located
+seq               int         -- clustering key: natural ordering
+role              text        -- 'user' | 'assistant' | 'system'
+content           text
+token_count       int         -- denormalised, avoids re-tokenising to bill
+model             text
+created_at        timestamp
+
+-- One partition read returns the whole conversation in order.
+-- No joins, no scatter-gather, no secondary index needed.</code>
+        </div>
+
+        <p>
+            Conversation metadata (title, updated_at, owner) lives in a separate table partitioned by
+            <code>user_id</code>, so the sidebar list is also a single-partition read. Two tables, two access patterns,
+            zero clever indexing. Total volume is large but unremarkable — 16B messages/day at ~1KB each is roughly
+            16TB/day, which is a solved problem.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The State That Actually Matters</div>
+            <p>Notice that the <strong>KV cache block</strong> appears in the entity list but not in the database
+                schema. That is deliberate, and it is the single most important observation in this design. The model's
+                working memory for an active conversation is measured in <em>gigabytes per user</em>, lives in GPU HBM,
+                cannot be written to disk fast enough to be worth persisting, and evaporates the moment the request
+                completes. Every hard problem in this system — routing, batching, admission control, cost — is
+                downstream of managing that ephemeral state. <a href="#deep-dive-kv">Section 08</a> is entirely about
+                it.</p>
+        </div>
+
+        <!-- Section 4 -->
+        <h2 id="api"><span class="section-number">04</span>The API Surface</h2>
+
+        <p>
+            The CRUD endpoints are exactly what you would expect. The one that deserves real thought is the completion
+            endpoint, because it is the only streaming call in the system.
+        </p>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method post">POST</span>
+                <span class="api-url">/v1/conversations</span>
+            </div>
+            <p class="api-desc">
+                Create an empty conversation. Returns an id the client uses for all subsequent turns.
+            </p>
+        </div>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method post">POST</span>
+                <span class="api-url">/v1/conversations/{id}/completions</span>
+            </div>
+            <p class="api-desc">
+                The main event. Appends a user turn and streams back the assistant's reply token by token over
+                Server-Sent Events. Holds the connection open for the full generation.
+            </p>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">Request &amp; SSE Response</span>
+            <code>POST /v1/conversations/c_8f2a/completions
+{ "content": "Explain the KV cache", "model": "gpt-fast", "stream": true }
+
+--> Content-Type: text/event-stream
+
+data: {"delta":"The",   "seq":0}
+data: {"delta":" KV",   "seq":1}
+data: {"delta":" cache","seq":2}
+...
+data: {"finish_reason":"stop","usage":{"in":1487,"out":392}}
+data: [DONE]</code>
+        </div>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method post">POST</span>
+                <span class="api-url">/v1/completions/{request_id}/cancel</span>
+            </div>
+            <p class="api-desc">
+                Abort an in-flight generation. Critical for cost, not just UX — a cancelled request frees a GPU
+                slot and its KV cache immediately.
+            </p>
+        </div>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method get">GET</span>
+                <span class="api-url">/v1/conversations?limit=20&amp;cursor=…</span>
+            </div>
+            <p class="api-desc">
+                Cursor-paginated sidebar list for the signed-in user. Ordinary, cacheable, uninteresting — which is the
+                point.
+            </p>
+        </div>
+
+        <div class="callout">
+            <div class="callout-label">🔌 Why SSE and not WebSockets</div>
+            <p>The data flow here is strictly one-directional once generation starts: the server pushes tokens, the
+                client just listens. SSE gives you that over plain HTTP — it survives proxies and CDNs, reconnects
+                automatically, needs no special infrastructure, and costs one ordinary HTTP connection. WebSockets buy
+                you bidirectional messaging you do not need, in exchange for stickier connections, more awkward load
+                balancing, and a protocol upgrade that some corporate proxies quietly break. Cancellation is rare
+                enough to be a separate <code>POST</code> rather than a reason to hold a duplex channel open.
+                <strong>Choose the weaker protocol when it fits</strong> — that reasoning is what the interviewer is
+                listening for.</p>
+        </div>
+
+        <!-- Section 5 -->
+        <h2 id="hld"><span class="section-number">05</span>High-Level Architecture</h2>
+
+        <p>
+            Here is the whole system in one picture. The left half is a conventional web application you could build in
+            your sleep. The right half — everything past the scheduler — is where this design lives or dies.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 1 · Request Path, End to End</div>
+            <svg viewBox="0 0 820 430" xmlns="http://www.w3.org/2000/svg" style="max-width: 820px">
+                <defs>
+                    <filter id="roughenG1" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="4" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.3" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="arrG1" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8"
+                        orient="auto">
+                        <path d="M 0 1 L 10 6 L 0 11" fill="none" stroke="#86868b" stroke-width="1.6" />
+                    </marker>
+                </defs>
+
+                <text x="410" y="24" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="12"
+                    text-anchor="middle">One message in, four hundred tokens out — and a GPU held for twelve seconds.</text>
+
+                <!-- stateless half -->
+                <rect x="20" y="46" width="330" height="330" rx="10" fill="#fafafc" stroke="#d8d8dd"
+                    stroke-dasharray="5,4" />
+                <text x="185" y="66" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="10"
+                    text-anchor="middle">STATELESS · scales by adding boxes</text>
+
+                <rect x="50" y="82" width="120" height="42" rx="8" fill="#fff" stroke="#10a37f" stroke-width="2"
+                    filter="url(#roughenG1)" />
+                <text x="110" y="108" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="11"
+                    text-anchor="middle">Client</text>
+
+                <rect x="50" y="152" width="120" height="42" rx="8" fill="#fff" stroke="#10a37f" stroke-width="2"
+                    filter="url(#roughenG1)" />
+                <text x="110" y="172" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="11"
+                    text-anchor="middle">API Gateway</text>
+                <text x="110" y="186" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="8"
+                    text-anchor="middle">auth · rate limit · quota</text>
+
+                <rect x="50" y="222" width="120" height="42" rx="8" fill="#fff" stroke="#10a37f" stroke-width="2"
+                    filter="url(#roughenG1)" />
+                <text x="110" y="242" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="11"
+                    text-anchor="middle">Conversation Svc</text>
+                <text x="110" y="256" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="8"
+                    text-anchor="middle">assemble context</text>
+
+                <rect x="205" y="222" width="120" height="42" rx="8" fill="#fff" stroke="#86868b" stroke-width="1.6"
+                    filter="url(#roughenG1)" />
+                <text x="265" y="242" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="11"
+                    text-anchor="middle">Message Store</text>
+                <text x="265" y="256" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="8"
+                    text-anchor="middle">Cassandra-shaped</text>
+
+                <rect x="50" y="292" width="120" height="42" rx="8" fill="#fff" stroke="#86868b" stroke-width="1.6"
+                    filter="url(#roughenG1)" />
+                <text x="110" y="312" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="11"
+                    text-anchor="middle">Safety Filter</text>
+                <text x="110" y="326" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="8"
+                    text-anchor="middle">pre + post</text>
+
+                <!-- gpu half -->
+                <rect x="380" y="46" width="420" height="330" rx="10" fill="#f7f4fc" stroke="#c9bce8"
+                    stroke-dasharray="5,4" />
+                <text x="590" y="66" fill="#6b4fbb" font-family="'Segoe Print','Comic Neue',cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">STATEFUL · scarce · the whole ballgame</text>
+
+                <rect x="410" y="82" width="150" height="46" rx="8" fill="#fff" stroke="#6b4fbb" stroke-width="2.4"
+                    filter="url(#roughenG1)" />
+                <text x="485" y="102" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">Inference Scheduler</text>
+                <text x="485" y="118" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="8"
+                    text-anchor="middle">queue · batch · cache-aware route</text>
+
+                <rect x="410" y="162" width="360" height="120" rx="8" fill="#fff" stroke="#6b4fbb" stroke-width="2"
+                    filter="url(#roughenG1)" />
+                <text x="590" y="182" fill="#6b4fbb" font-family="'Segoe Print','Comic Neue',cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">GPU Inference Fleet</text>
+
+                <rect x="428" y="196" width="98" height="68" rx="6" fill="#f7f4fc" stroke="#6b4fbb" stroke-width="1.4" />
+                <text x="477" y="216" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">PREFILL</text>
+                <text x="477" y="232" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="7.5"
+                    text-anchor="middle">1,500 tokens</text>
+                <text x="477" y="244" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="7.5"
+                    text-anchor="middle">ONE pass</text>
+                <text x="477" y="257" fill="#10a37f" font-family="'Segoe Print','Comic Neue',cursive" font-size="7.5"
+                    text-anchor="middle" font-weight="700">compute-bound</text>
+
+                <rect x="546" y="196" width="98" height="68" rx="6" fill="#f7f4fc" stroke="#6b4fbb" stroke-width="1.4" />
+                <text x="595" y="216" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">DECODE</text>
+                <text x="595" y="232" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="7.5"
+                    text-anchor="middle">400 tokens</text>
+                <text x="595" y="244" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="7.5"
+                    text-anchor="middle">400 passes</text>
+                <text x="595" y="257" fill="#e11d48" font-family="'Segoe Print','Comic Neue',cursive" font-size="7.5"
+                    text-anchor="middle" font-weight="700">bandwidth-bound</text>
+
+                <rect x="664" y="196" width="90" height="68" rx="6" fill="#fff8e6" stroke="#d9a441" stroke-width="1.4" />
+                <text x="709" y="216" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">KV CACHE</text>
+                <text x="709" y="232" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="7.5"
+                    text-anchor="middle">~2.5 GB</text>
+                <text x="709" y="244" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="7.5"
+                    text-anchor="middle">per conversation</text>
+                <text x="709" y="257" fill="#d9a441" font-family="'Segoe Print','Comic Neue',cursive" font-size="7.5"
+                    text-anchor="middle" font-weight="700">the real limit</text>
+
+                <rect x="410" y="308" width="150" height="40" rx="8" fill="#fff" stroke="#86868b" stroke-width="1.6"
+                    filter="url(#roughenG1)" />
+                <text x="485" y="332" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="10"
+                    text-anchor="middle">Usage / Billing (Kafka)</text>
+
+                <rect x="600" y="308" width="170" height="40" rx="8" fill="#fff" stroke="#86868b" stroke-width="1.6"
+                    filter="url(#roughenG1)" />
+                <text x="685" y="332" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="10"
+                    text-anchor="middle">Prefix Cache (Redis)</text>
+
+                <!-- arrows -->
+                <path d="M 110 124 L 110 150" fill="none" stroke="#86868b" stroke-width="1.6" marker-end="url(#arrG1)" />
+                <path d="M 110 194 L 110 220" fill="none" stroke="#86868b" stroke-width="1.6" marker-end="url(#arrG1)" />
+                <path d="M 170 243 L 203 243" fill="none" stroke="#86868b" stroke-width="1.6" marker-end="url(#arrG1)" />
+                <path d="M 110 264 L 110 290" fill="none" stroke="#86868b" stroke-width="1.6" marker-end="url(#arrG1)" />
+                <path d="M 170 305 C 260 305, 330 200, 408 138" fill="none" stroke="#6b4fbb" stroke-width="2"
+                    marker-end="url(#arrG1)" />
+                <path d="M 485 128 L 485 160" fill="none" stroke="#6b4fbb" stroke-width="2" marker-end="url(#arrG1)" />
+                <path d="M 485 282 L 485 306" fill="none" stroke="#86868b" stroke-width="1.4" marker-end="url(#arrG1)" />
+                <path d="M 700 282 L 690 306" fill="none" stroke="#86868b" stroke-width="1.4" marker-end="url(#arrG1)" />
+
+                <!-- stream back -->
+                <path d="M 408 105 C 300 60, 200 60, 128 80" fill="none" stroke="#10a37f" stroke-width="2"
+                    stroke-dasharray="5,4" marker-end="url(#arrG1)" />
+                <text x="268" y="52" fill="#10a37f" font-family="'Segoe Print','Comic Neue',cursive" font-size="9"
+                    text-anchor="middle" font-weight="700">SSE token stream ↩</text>
+            </svg>
+            <div class="diagram-caption">
+                Everything left of the dashed line is a normal web app. Everything right of it is a scheduling problem
+                over scarce hardware.
+            </div>
+        </div>
+
+        <h3>Walking the Path</h3>
+        <ol>
+            <li><strong>Gateway</strong> authenticates, checks the user's rate-limit budget, and rejects early. Cheap
+                rejection matters enormously when the downstream resource costs dollars per minute.</li>
+            <li><strong>Conversation service</strong> reads the message history for that conversation, applies the
+                context window policy (truncate or summarise older turns), and assembles the final prompt.</li>
+            <li><strong>Safety filter</strong> screens the input. A blocked prompt never reaches a GPU — which is a cost
+                control as much as a policy control.</li>
+            <li><strong>Inference scheduler</strong> is the brain. It queues the request, decides which node should run
+                it (preferring one that already holds a matching prefix in cache), and admits it into a running
+                batch.</li>
+            <li><strong>GPU fleet</strong> runs prefill over the prompt, then loops decode, emitting one token per
+                iteration back through the open SSE connection.</li>
+            <li><strong>Usage events</strong> fire asynchronously to Kafka for billing and capacity planning — never on
+                the synchronous path.</li>
+        </ol>
+
+        <!-- Section 6 -->
+        <h2 id="deep-dive-internals"><span class="section-number">06</span>Deep Dive: Inside the Model</h2>
+
+        <p>
+            You cannot design this system without knowing what the box labelled "GPU Inference Fleet" is actually
+            doing. Every scheduling decision later in this article is a direct consequence of the mechanics below, so
+            it is worth being precise — not mathematically rigorous, but precise about the <em>shape</em> of the
+            computation.
+        </p>
+
+        <h3>Step 1 — Tokenization</h3>
+        <p>
+            The model never sees characters. Text is first split into <strong>tokens</strong> — subword fragments
+            produced by a learned merge table (byte-pair encoding). Common words are single tokens; rare words shatter
+            into pieces.
+        </p>
+        <div class="code-block">
+            <span class="code-block-label">Tokenization</span>
+            <code>"The KV cache is the bottleneck"
+   ↓
+["The", " KV", " cache", " is", " the", " bott", "leneck"]
+   ↓
+[464, 27653, 12940, 318, 262, 10038, 43163]
+
+Rule of thumb:  1 token ≈ 4 characters ≈ 0.75 English words
+Consequence:    code, JSON and non-English text cost MORE tokens
+                per character — and you bill per token.</code>
+        </div>
+
+        <h3>Step 2 — Embedding</h3>
+        <p>
+            Each token id indexes into an embedding table, producing a vector of a few thousand dimensions. A 1,500
+            token prompt becomes a <code>1500 × d_model</code> matrix. From here until the very last step, the model is
+            manipulating floating-point matrices — there are no words anywhere inside it.
+        </p>
+
+        <h3>Step 3 — The Transformer Stack</h3>
+        <p>
+            That matrix passes through a stack of identical blocks — 80 or more in a large model. Each block does two
+            things, and understanding the difference between them explains most of the performance behaviour of the
+            whole system.
+        </p>
+
+        <p>
+            <strong>Self-attention</strong> lets every token look at every previous token and pull in relevant
+            information. Each token projects into three vectors: a <em>query</em> (what am I looking for?), a
+            <em>key</em> (what do I offer?), and a <em>value</em> (what do I actually contribute?). Attention scores
+            each token's query against every key, softmaxes into weights, and takes a weighted sum of the values. This
+            is the step where "it" gets connected to the noun it refers to, forty words back.
+        </p>
+
+        <p>
+            <strong>The feed-forward network</strong> then processes each position independently through a much wider
+            layer — typically 4× the model dimension. This is where most of the parameters live, and in modern
+            <em>mixture-of-experts</em> models it is split into many expert sub-networks with only a couple activated
+            per token. That is how a model can have a trillion parameters but only spend the compute of a much smaller
+            one on each token.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">One Transformer Block</span>
+            <code>x = x + Attention(LayerNorm(x))     # mix information ACROSS positions
+x = x + FeedForward(LayerNorm(x))   # process EACH position independently
+
+Attention(x):
+    Q = x @ Wq      # what each token is looking for
+    K = x @ Wk      # what each token offers
+    V = x @ Wv      # what each token contributes
+    scores  = softmax( Q @ K.T / sqrt(d) + causal_mask )
+    output  = scores @ V
+
+causal_mask ensures position i can only attend to positions <= i.
+That single constraint is why text generates left-to-right,
+and why the KV cache works at all.</code>
+        </div>
+
+        <h3>Step 4 — The Autoregressive Loop</h3>
+        <p>
+            After the final block, a projection maps the last position's vector to a score for every token in the
+            vocabulary. Softmax turns those into probabilities, and a sampler picks one — greedily, or with
+            <em>temperature</em> and <em>top-p</em> controlling how adventurous the choice is.
+        </p>
+        <p>
+            Then comes the part that defines this entire system: <strong>the chosen token is appended to the input, and
+            the whole model runs again.</strong> A 400-token answer means 400 sequential forward passes. They cannot be
+            parallelised, because token 200 depends on token 199 having been chosen.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 2 · Prefill Once, Then Decode 400 Times</div>
+            <svg viewBox="0 0 800 350" xmlns="http://www.w3.org/2000/svg" style="max-width: 800px">
+                <defs>
+                    <filter id="roughenG2" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="7" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <marker id="arrG2" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8"
+                        orient="auto">
+                        <path d="M 0 1 L 10 6 L 0 11" fill="none" stroke="#6b4fbb" stroke-width="1.6" />
+                    </marker>
+                </defs>
+
+                <text x="400" y="24" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="12"
+                    text-anchor="middle">Two phases with opposite hardware appetites — this is the whole story.</text>
+
+                <!-- PREFILL -->
+                <rect x="30" y="46" width="300" height="250" rx="10" fill="#f0faf6" stroke="#10a37f" stroke-width="2"
+                    filter="url(#roughenG2)" />
+                <text x="180" y="70" fill="#10a37f" font-family="'Segoe Print','Comic Neue',cursive" font-size="13"
+                    text-anchor="middle" font-weight="700">PREFILL — once</text>
+
+                <text x="180" y="96" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="9"
+                    text-anchor="middle">all 1,500 prompt tokens together</text>
+
+                <g>
+                    <rect x="58" y="112" width="26" height="26" rx="4" fill="#fff" stroke="#10a37f" />
+                    <rect x="90" y="112" width="26" height="26" rx="4" fill="#fff" stroke="#10a37f" />
+                    <rect x="122" y="112" width="26" height="26" rx="4" fill="#fff" stroke="#10a37f" />
+                    <rect x="154" y="112" width="26" height="26" rx="4" fill="#fff" stroke="#10a37f" />
+                    <rect x="186" y="112" width="26" height="26" rx="4" fill="#fff" stroke="#10a37f" />
+                    <text x="232" y="130" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive"
+                        font-size="11">… × 1500</text>
+                </g>
+                <text x="180" y="160" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="10"
+                    text-anchor="middle">↓ ONE forward pass, fully parallel ↓</text>
+
+                <rect x="70" y="176" width="220" height="34" rx="6" fill="#fff" stroke="#10a37f" stroke-width="1.6" />
+                <text x="180" y="198" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="10"
+                    text-anchor="middle">big matrix × matrix — GPU saturated</text>
+
+                <text x="180" y="234" fill="#10a37f" font-family="'Segoe Print','Comic Neue',cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">COMPUTE-BOUND</text>
+                <text x="180" y="252" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="9"
+                    text-anchor="middle">arithmetic intensity is high;</text>
+                <text x="180" y="266" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="9"
+                    text-anchor="middle">tensor cores actually busy</text>
+                <text x="180" y="285" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">→ sets your TTFT</text>
+
+                <!-- DECODE -->
+                <rect x="380" y="46" width="390" height="250" rx="10" fill="#fdf2f5" stroke="#e11d48" stroke-width="2"
+                    filter="url(#roughenG2)" />
+                <text x="575" y="70" fill="#e11d48" font-family="'Segoe Print','Comic Neue',cursive" font-size="13"
+                    text-anchor="middle" font-weight="700">DECODE — 400 times, one by one</text>
+
+                <rect x="410" y="88" width="150" height="30" rx="5" fill="#fff" stroke="#e11d48" stroke-width="1.4" />
+                <text x="485" y="108" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="9"
+                    text-anchor="middle">1 token in → 1 token out</text>
+
+                <path d="M 560 103 C 610 103, 620 130, 600 142" fill="none" stroke="#6b4fbb" stroke-width="1.8"
+                    marker-end="url(#arrG2)" />
+                <path d="M 570 150 C 520 165, 430 145, 440 122" fill="none" stroke="#6b4fbb" stroke-width="1.8"
+                    marker-end="url(#arrG2)" />
+                <text x="655" y="128" fill="#6b4fbb" font-family="'Segoe Print','Comic Neue',cursive" font-size="9">append,</text>
+                <text x="655" y="141" fill="#6b4fbb" font-family="'Segoe Print','Comic Neue',cursive" font-size="9">run again</text>
+
+                <rect x="410" y="178" width="330" height="34" rx="6" fill="#fff" stroke="#e11d48" stroke-width="1.6" />
+                <text x="575" y="194" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="9.5"
+                    text-anchor="middle">read ALL 140GB of weights… to compute ONE token</text>
+                <text x="575" y="206" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="8"
+                    text-anchor="middle">matrix × vector — tensor cores mostly idle</text>
+
+                <text x="575" y="234" fill="#e11d48" font-family="'Segoe Print','Comic Neue',cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">MEMORY-BANDWIDTH-BOUND</text>
+                <text x="575" y="252" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="9"
+                    text-anchor="middle">arithmetic intensity ≈ 1 — the GPU is a very</text>
+                <text x="575" y="266" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="9"
+                    text-anchor="middle">expensive memory-copy engine at batch size 1</text>
+                <text x="575" y="285" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="10"
+                    text-anchor="middle" font-weight="700">→ sets your ITL, your cost, and your fleet size</text>
+
+                <text x="400" y="326" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">Batching barely helps prefill. Batching is the ONLY thing that saves decode.</text>
+            </svg>
+            <div class="diagram-caption">
+                One request, two workloads with opposite bottlenecks. Every optimisation later in this article targets
+                the right-hand box.
+            </div>
+        </div>
+
+        <h3>Why Decode Is So Wasteful</h3>
+        <p>
+            This is the insight that separates a strong answer from a memorised one, so it is worth stating carefully.
+        </p>
+        <p>
+            To generate one token, the GPU must read <em>every weight in the model</em> from high-bandwidth memory and
+            multiply it against a single vector. For a 70B-parameter model in fp16 that is roughly 140GB of memory
+            traffic to produce a handful of characters. The arithmetic per byte read — the
+            <strong>arithmetic intensity</strong> — is close to 1, while an H100's tensor cores want a ratio in the
+            hundreds to stay busy.
+        </p>
+        <p>
+            So at batch size 1, a $30,000 accelerator spends nearly all its time waiting on memory. Its compute units
+            are idle. You are not paying for FLOPs; you are paying for a very fast, very expensive memcpy.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 The Sentence the Whole Design Hangs On</div>
+            <p>Because those 140GB of weights are read <em>regardless of batch size</em>, running 64 sequences together
+                costs almost exactly the same memory traffic as running one. The weights are read once and reused
+                across every sequence in the batch. <strong>Batch size 64 is therefore close to 64× the throughput for
+                roughly the same cost.</strong><br><br>
+                That single fact is why the scheduler is the most important component in this architecture, why the KV
+                cache — which limits how many sequences fit in a batch — is the true bottleneck, and why an idle GPU is
+                a catastrophe rather than an inefficiency.</p>
+        </div>
+
+        <h3>Step 5 — The KV Cache</h3>
+        <p>
+            One more mechanism, and it is the one that turns an intractable problem into a merely expensive one.
+        </p>
+        <p>
+            Naively, generating token 401 means re-running attention over all 400 previous tokens — recomputing their
+            keys and values from scratch, every single step. That is quadratic work and would make generation
+            impossibly slow.
+        </p>
+        <p>
+            But because of the causal mask, the key and value vectors for a token <em>never change</em> once computed.
+            Token 12's contribution is identical whether you are generating token 13 or token 400. So you compute them
+            once and keep them: the <strong>KV cache</strong>. Each decode step then computes K and V for only the
+            single newest token and appends to the cache.
+        </p>
+        <p>
+            This converts the per-step cost from quadratic to linear. It is not an optimisation — no production system
+            works without it. And it comes with a bill:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">KV Cache Memory · the number that caps your batch size</span>
+            <code>bytes/token = 2 (K and V) × layers × kv_heads × head_dim × precision
+
+70B-class model with grouped-query attention:
+  2 × 80 layers × 8 kv_heads × 128 head_dim × 2 bytes  =  ~320 KB / token
+
+  8,000-token conversation   →  ~2.5 GB      of GPU memory, per user
+  8×H100 node                →   640 GB HBM
+  minus model weights        →  -140 GB
+  available for KV cache     →  ~500 GB
+                             →  ~200 concurrent conversations per node
+
+That is the batch size. Not CPU, not network — HBM.</code>
+        </div>
+
+        <p>
+            Two hundred concurrent conversations per node, from a machine costing roughly a quarter of a million
+            dollars. Now the fleet arithmetic from section 02 has a physical explanation, and the rest of this article
+            is about pushing that number up.
+        </p>
+
+        <!-- Section 7 -->
+        <h2 id="deep-dive-batching"><span class="section-number">07</span>Deep Dive: Prefill, Decode &amp; Continuous Batching</h2>
+
+        <p>
+            We established that batching is nearly free throughput. The obvious move is to collect requests into
+            batches. The obvious implementation is also badly wrong, and watching a candidate discover why is one of
+            the more satisfying moments in this interview.
+        </p>
+
+        <h3>Why Static Batching Fails</h3>
+        <p>
+            The naive approach: gather 32 requests, run them together, return all 32 results, repeat. This is how you
+            would batch database writes, and it is how every batching system you have built before works.
+        </p>
+        <p>
+            It collapses here because <strong>generation lengths vary wildly</strong>. One user asks for a yes/no
+            answer — 5 tokens. Another asks for an essay — 2,000 tokens. In a static batch, the 5-token request
+            finishes almost immediately, and then its slot sits idle for the remaining 1,995 iterations while the batch
+            waits for its slowest member. GPU utilisation falls off a cliff, and every short request pays the latency
+            of the longest one in its batch.
+        </p>
+
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 3 · Static vs Continuous Batching</div>
+            <svg viewBox="0 0 800 380" xmlns="http://www.w3.org/2000/svg" style="max-width: 800px">
+                <defs>
+                    <filter id="roughenG3" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="11" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.1" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+
+                <text x="400" y="22" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="12"
+                    text-anchor="middle">Same four requests. Same hardware. Twice the throughput.</text>
+
+                <!-- STATIC -->
+                <text x="60" y="56" fill="#e11d48" font-family="'Segoe Print','Comic Neue',cursive" font-size="12"
+                    font-weight="700">STATIC BATCHING</text>
+                <text x="60" y="72" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="9">batch
+                    starts and ends together</text>
+
+                <g font-family="'Segoe Print','Comic Neue',cursive" font-size="9" fill="#86868b">
+                    <text x="52" y="98" text-anchor="end">req A</text>
+                    <text x="52" y="122" text-anchor="end">req B</text>
+                    <text x="52" y="146" text-anchor="end">req C</text>
+                    <text x="52" y="170" text-anchor="end">req D</text>
+                </g>
+
+                <rect x="60" y="88" width="300" height="14" rx="3" fill="#10a37f" filter="url(#roughenG3)" />
+                <rect x="60" y="112" width="90" height="14" rx="3" fill="#10a37f" filter="url(#roughenG3)" />
+                <rect x="150" y="112" width="210" height="14" rx="3" fill="#f3d4da" />
+                <rect x="60" y="136" width="150" height="14" rx="3" fill="#10a37f" filter="url(#roughenG3)" />
+                <rect x="210" y="136" width="150" height="14" rx="3" fill="#f3d4da" />
+                <rect x="60" y="160" width="60" height="14" rx="3" fill="#10a37f" filter="url(#roughenG3)" />
+                <rect x="120" y="160" width="240" height="14" rx="3" fill="#f3d4da" />
+
+                <line x1="360" y1="80" x2="360" y2="182" stroke="#e11d48" stroke-width="2" stroke-dasharray="4,3" />
+                <text x="366" y="196" fill="#e11d48" font-family="'Segoe Print','Comic Neue',cursive" font-size="9">batch
+                    ends</text>
+
+                <rect x="150" y="210" width="14" height="12" rx="2" fill="#f3d4da" />
+                <text x="172" y="220" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive"
+                    font-size="9">= slot finished, GPU still paying for it</text>
+                <text x="60" y="242" fill="#e11d48" font-family="'Segoe Print','Comic Neue',cursive" font-size="10"
+                    font-weight="700">~48% of the batch is wasted padding</text>
+
+                <!-- CONTINUOUS -->
+                <text x="450" y="56" fill="#10a37f" font-family="'Segoe Print','Comic Neue',cursive" font-size="12"
+                    font-weight="700">CONTINUOUS BATCHING</text>
+                <text x="450" y="72" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="9">new
+                    work admitted every iteration</text>
+
+                <g font-family="'Segoe Print','Comic Neue',cursive" font-size="9" fill="#86868b">
+                    <text x="442" y="98" text-anchor="end">slot 1</text>
+                    <text x="442" y="122" text-anchor="end">slot 2</text>
+                    <text x="442" y="146" text-anchor="end">slot 3</text>
+                    <text x="442" y="170" text-anchor="end">slot 4</text>
+                </g>
+
+                <rect x="450" y="88" width="300" height="14" rx="3" fill="#10a37f" filter="url(#roughenG3)" />
+                <rect x="450" y="112" width="90" height="14" rx="3" fill="#10a37f" filter="url(#roughenG3)" />
+                <rect x="542" y="112" width="120" height="14" rx="3" fill="#6b4fbb" filter="url(#roughenG3)" />
+                <rect x="664" y="112" width="86" height="14" rx="3" fill="#d9a441" filter="url(#roughenG3)" />
+                <rect x="450" y="136" width="150" height="14" rx="3" fill="#10a37f" filter="url(#roughenG3)" />
+                <rect x="602" y="136" width="148" height="14" rx="3" fill="#6b4fbb" filter="url(#roughenG3)" />
+                <rect x="450" y="160" width="60" height="14" rx="3" fill="#10a37f" filter="url(#roughenG3)" />
+                <rect x="512" y="160" width="110" height="14" rx="3" fill="#6b4fbb" filter="url(#roughenG3)" />
+                <rect x="624" y="160" width="126" height="14" rx="3" fill="#d9a441" filter="url(#roughenG3)" />
+
+                <text x="450" y="220" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="9">
+                    a finished slot is refilled on the very next iteration</text>
+                <text x="450" y="242" fill="#10a37f" font-family="'Segoe Print','Comic Neue',cursive" font-size="10"
+                    font-weight="700">~95% occupancy · no request waits for another</text>
+
+                <!-- bottom note -->
+                <rect x="60" y="272" width="690" height="82" rx="8" fill="#fafafc" stroke="#d8d8dd" />
+                <text x="405" y="296" fill="#333" font-family="'Segoe Print','Comic Neue',cursive" font-size="11"
+                    text-anchor="middle" font-weight="700">The scheduling unit is the ITERATION, not the request.</text>
+                <text x="405" y="318" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="9.5"
+                    text-anchor="middle">Every single decode step, the scheduler re-decides who is in the batch —</text>
+                <text x="405" y="334" fill="#86868b" font-family="'Segoe Print','Comic Neue',cursive" font-size="9.5"
+                    text-anchor="middle">evicting finished sequences and admitting waiting ones.</text>
+            </svg>
+            <div class="diagram-caption">
+                Static batching pays for empty slots. Continuous batching refills them mid-flight — the single largest
+                throughput win available.
+            </div>
+        </div>
+
+        <h3>Continuous Batching</h3>
+        <p>
+            The fix is to schedule at <strong>iteration granularity</strong> rather than request granularity. Because
+            decode is already a loop of discrete steps, the scheduler can intervene between any two of them. After
+            every step it evicts finished sequences, admits queued ones into the freed slots, and runs the next
+            iteration with a different batch composition.
+        </p>
+        <p>
+            No request waits for another to finish. Utilisation stays near peak regardless of how wildly generation
+            lengths vary. In practice this is a 2–4× throughput improvement over static batching on identical
+            hardware — on our fleet, tens of thousands of GPUs' worth.
+        </p>
+
+        <h3>The Prefill/Decode Interference Problem</h3>
+        <p>
+            Now a subtler issue, and a good place to show depth. Prefill and decode want opposite things from the
+            hardware, and they contend when mixed.
+        </p>
+        <p>
+            A prefill for a 1,500-token prompt is a large, compute-heavy operation. If you drop it into a batch of
+            decode steps, every sequence already streaming stalls for the duration — users mid-sentence see their text
+            visibly hitch. Prioritise decode instead and new requests queue behind them, pushing TTFT up.
+        </p>
+
+        <div class="comparison-table reveal-element">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Strategy</th>
+                        <th>How it works</th>
+                        <th>Trade-off</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Chunked prefill</strong></td>
+                        <td>Split a long prompt into fixed-size chunks, interleaving decode steps between them</td>
+                        <td>Smooth ITL, slightly higher TTFT. The usual default.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Disaggregated serving</strong></td>
+                        <td>Separate GPU pools for prefill and decode; transfer the KV cache between them</td>
+                        <td>Each pool tuned for its bottleneck; costs a large cross-node transfer per request.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Prefill priority</strong></td>
+                        <td>Always run waiting prefills first</td>
+                        <td>Best TTFT, visibly stuttering streams. Rarely worth it.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p>
+            Disaggregation is what large deployments converge on, because it lets you buy different hardware for the
+            two phases — compute-dense parts for prefill, bandwidth-dense parts for decode — and scale the pools
+            independently against the 278M/74M tokens-per-second split we calculated earlier.
+        </p>
+
+        <!-- Section 8 -->
+        <h2 id="deep-dive-kv"><span class="section-number">08</span>Deep Dive: The KV Cache Is the Bottleneck</h2>
+
+        <p>
+            Batch size determines throughput. KV cache memory determines batch size. So the entire economics of this
+            system reduce to one question: <em>how many conversations can you keep resident in HBM at once?</em>
+        </p>
+
+        <h3>The Fragmentation Problem</h3>
+        <p>
+            The naive allocator reserves, for each sequence, a contiguous block sized for the maximum possible context
+            — say 8,000 tokens, 2.5GB. But the average conversation uses perhaps 1,500 tokens. You have reserved 2.5GB
+            to use 470MB, and the waste is not recoverable because the block must stay contiguous in case the sequence
+            grows.
+        </p>
+        <p>
+            This is textbook internal fragmentation, and measured on real workloads it wastes 60–80% of KV memory. That
+            is the difference between 200 concurrent conversations per node and 50.
+        </p>
+
+        <h3>PagedAttention</h3>
+        <p>
+            The solution is the one operating systems reached for in the 1960s: <strong>virtual memory</strong>. Split
+            the KV cache into fixed-size blocks (say 16 tokens each). Allocate blocks on demand as a sequence grows.
+            Keep a per-sequence block table mapping logical positions to physical blocks, which need not be contiguous.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Paged KV Cache</span>
+            <code>CONTIGUOUS (naive)
+  seq A  [################........................]  reserved 8k, used 1.5k
+  seq B  [#####...................................]  reserved 8k, used 0.9k
+         └─ 70% of HBM reserved and idle ─┘
+
+PAGED
+  physical blocks:  [b0][b1][b2][b3][b4][b5][b6][b7]...
+  seq A block table:  b0 → b3 → b7        (grows on demand)
+  seq B block table:  b1 → b2
+  free list:          b4, b5, b6, ...     (immediately reusable)
+
+  waste = at most one partly-filled block per sequence  (<4%)
+  → 3-4× more concurrent sequences on identical hardware</code>
+        </div>
+
+        <h3>Prefix Sharing — the Multiplier</h3>
+        <p>
+            Paging unlocks something better than efficiency. Because blocks are indirected through a table, two
+            sequences can <em>point at the same physical block</em>.
+        </p>
+        <p>
+            This matters enormously given the actual traffic shape. Every request carries a system prompt — often
+            hundreds of tokens, identical across millions of users. And in a multi-turn conversation, turn five re-sends
+            the entire text of turns one through four. That shared prefix does not need to be recomputed or re-stored;
+            it can be computed once and referenced by every sequence that shares it, copy-on-write at the point where
+            they diverge.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Why the Scheduler Must Be Cache-Aware</div>
+            <p>Prefix sharing only pays off if requests that share a prefix land on the <em>same node</em>, since KV
+                blocks live in one machine's HBM. This turns routing from a load-balancing problem into a
+                <strong>cache-affinity problem</strong>: route by hash of the conversation prefix, not round-robin.<br><br>
+                A returning turn in an existing conversation then skips prefill for everything except the newest
+                message — cutting TTFT from ~800ms to under 100ms and eliminating most of the prefill compute
+                entirely. But affinity fights load balance: a hot prefix can overload one node. The honest answer is a
+                hybrid — prefer the cache-owning node, fall back to least-loaded when it is saturated, and accept the
+                recompute. Saying that trade-off out loud is a senior signal.</p>
+        </div>
+
+        <h3>Eviction and Preemption</h3>
+        <p>
+            When memory runs out mid-generation — a batch of sequences all growing at once — something must give.
+            Options, in increasing order of pain:
+        </p>
+        <ul>
+            <li><strong>Stop admitting.</strong> Queue new requests; running ones continue. TTFT rises, ITL is
+                unaffected. Always try this first.</li>
+            <li><strong>Swap to host memory.</strong> Move a victim's KV blocks to CPU RAM over PCIe and bring them
+                back later. Adds hundreds of milliseconds and burns PCIe bandwidth.</li>
+            <li><strong>Preempt and recompute.</strong> Drop a victim's cache entirely and re-prefill it when
+                rescheduled. Counterintuitively often cheaper than swapping, because prefill is fast and parallel while
+                PCIe is not.</li>
+        </ul>
+        <p>
+            Which victim? Newest-first preserves the work already invested in long-running requests and avoids the
+            pathological case where a nearly-complete 2,000-token generation is killed at token 1,900.
+        </p>
+
+        <!-- Section 9 -->
+        <h2 id="deep-dive-streaming"><span class="section-number">09</span>Deep Dive: Streaming &amp; Backpressure</h2>
+
+        <p>
+            Tokens are produced on a GPU deep inside the fleet and must reach a browser possibly on the other side of
+            the planet, one at a time, for twenty seconds. Three problems fall out of that.
+        </p>
+
+        <h3>Connection Economics</h3>
+        <p>
+            At 555K messages/sec peak and ~12 seconds average generation, Little's Law gives the concurrency directly:
+        </p>
+        <div class="code-block">
+            <span class="code-block-label">Little's Law · concurrent open connections</span>
+            <code>L = λ × W  =  555,000 req/s × 12s  =  ~6.7 million concurrent SSE streams
+
+Each is an idle-ish socket emitting ~20 small frames/second.
+→ the streaming tier must be event-driven, not thread-per-request
+→ ~65k connections/node ⇒ ~100+ dedicated edge nodes just to hold sockets
+→ and every one of them is a stateful attachment to a specific GPU worker</code>
+        </div>
+        <p>
+            This is why the streaming tier is worth separating from the API tier. It has a completely different
+            resource profile — almost no CPU, enormous connection counts, long lifetimes — and mixing it with
+            request/response traffic means sizing both for the worse case.
+        </p>
+
+        <h3>Cancellation Is a Cost Control</h3>
+        <p>
+            Users close tabs. They navigate away. They read the first sentence, decide it is wrong, and hit stop. In an
+            ordinary web system an abandoned request is a rounding error. Here it is a GPU slot and 2.5GB of HBM,
+            possibly for another fifteen seconds.
+        </p>
+        <p>
+            So disconnect detection must propagate all the way to the scheduler and free the slot immediately. This
+            sounds obvious and is frequently missed: a naive implementation keeps generating into a dead socket,
+            and at scale that wastes a meaningful fraction of the entire fleet. Treat client disconnect as a
+            first-class cancellation signal, not an error path.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ The Resumability Trap</div>
+            <p>What happens if the network drops at token 300 of 400? The KV cache holding that generation lives in one
+                GPU's memory and cannot be moved cheaply. Options: (a) discard and force a regenerate — simple, wastes
+                the work, and the user gets different text because sampling is stochastic; (b) buffer emitted tokens in
+                Redis keyed by request id, letting a reconnect replay from an offset while generation continues
+                server-side. Option (b) costs a small write per token and is what makes "close your laptop, reopen it,
+                the answer is still there" possible. Candidates who ask <em>"what is the user experience on
+                reconnect?"</em> are thinking like product engineers, and it lands well.</p>
+        </div>
+
+        <!-- Section 10 -->
+        <h2 id="deep-dive-cost"><span class="section-number">10</span>Deep Dive: Capacity, Cost &amp; Routing</h2>
+
+        <p>
+            118,000 GPUs is the number you get by assuming every request goes to the biggest model. Nobody does that.
+            The remaining levers are about serving as much traffic as possible on as little silicon as possible.
+        </p>
+
+        <h3>Model Tiering</h3>
+        <p>
+            The single largest saving is not a kernel optimisation — it is not calling the large model. Most traffic is
+            short, simple, and perfectly well served by a model an order of magnitude cheaper. A router classifies the
+            request and picks a tier, escalating only when needed.
+        </p>
+
+        <div class="comparison-table reveal-element">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Technique</th>
+                        <th>Mechanism</th>
+                        <th>Typical gain</th>
+                        <th>Cost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Model tiering</strong></td>
+                        <td>Route easy prompts to a small model</td>
+                        <td>5–10× on routed traffic</td>
+                        <td>Router mistakes degrade quality</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Prefix caching</strong></td>
+                        <td>Reuse KV for shared system prompts and prior turns</td>
+                        <td>Most prefill eliminated</td>
+                        <td>Forces cache-affinity routing</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Quantization</strong></td>
+                        <td>Serve weights at 8 or 4 bits instead of 16</td>
+                        <td>2–4× memory, more batch</td>
+                        <td>Small, measurable quality loss</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Speculative decoding</strong></td>
+                        <td>A tiny draft model proposes several tokens; the big model verifies them in one pass</td>
+                        <td>2–3× on ITL</td>
+                        <td>Wasted compute when drafts are rejected</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Mixture of experts</strong></td>
+                        <td>Activate only a few expert sub-networks per token</td>
+                        <td>Large model at small-model compute</td>
+                        <td>Memory holds ALL experts; routing imbalance</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p>
+            Speculative decoding deserves a sentence of explanation because it looks like magic. Since decode is
+            memory-bandwidth-bound, verifying five candidate tokens costs almost exactly what verifying one costs — the
+            weights are read either way. So a cheap draft model guesses ahead, the large model checks all the guesses
+            in a single pass, and you keep the longest correct prefix. When the draft is good you get several tokens
+            for the price of one; when it is wrong you have lost only the draft model's trivial compute.
+        </p>
+
+        <h3>Admission Control and Graceful Degradation</h3>
+        <p>
+            When demand exceeds a fixed GPU supply — and it will, because supply is fixed for months — something has to
+            give. The failure you must avoid is uniform collapse, where everyone gets 4-second TTFT and the system
+            looks broken to all 800M users simultaneously.
+        </p>
+        <ul>
+            <li><strong>Shed by tier.</strong> Free users queue or fall back to the small model; paying users keep
+                capacity. Degradation should be visible in the product, not in the latency graph.</li>
+            <li><strong>Cap generation length</strong> under load. Fewer decode iterations per request directly
+                increases request throughput.</li>
+            <li><strong>Queue with a deadline.</strong> Reject fast when the queue implies a TTFT beyond what the user
+                will tolerate — a quick honest error beats a 30-second spinner.</li>
+            <li><strong>Never autoscale into a shortage.</strong> There is no elastic pool to burst into. Capacity
+                planning here is procurement, not configuration.</li>
+        </ul>
+
+        <!-- Section 11 -->
+        <h2 id="final"><span class="section-number">11</span>Final Architecture &amp; Interview Bar</h2>
+
+        <p>
+            Pulling it together — the component list, and what each one is actually for.
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Layer</th>
+                    <th>Choice</th>
+                    <th>Why</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Edge / streaming</td>
+                    <td>Event-driven SSE tier</td>
+                    <td>~6.7M concurrent long-lived connections</td>
+                </tr>
+                <tr>
+                    <td>Gateway</td>
+                    <td>Auth, quota, rate limit</td>
+                    <td>Reject before spending a GPU-second</td>
+                </tr>
+                <tr>
+                    <td>Conversation store</td>
+                    <td>Wide-column, partitioned by conversation</td>
+                    <td>Append-only, single-partition reads</td>
+                </tr>
+                <tr>
+                    <td>Scheduler</td>
+                    <td>Continuous batching, iteration-level</td>
+                    <td>2–4× throughput over static batching</td>
+                </tr>
+                <tr>
+                    <td>Routing</td>
+                    <td>Prefix-hash with load fallback</td>
+                    <td>KV reuse cuts TTFT ~8× on follow-up turns</td>
+                </tr>
+                <tr>
+                    <td>KV memory</td>
+                    <td>Paged blocks + copy-on-write sharing</td>
+                    <td>3–4× more concurrent sequences</td>
+                </tr>
+                <tr>
+                    <td>Inference pools</td>
+                    <td>Disaggregated prefill / decode</td>
+                    <td>Opposite bottlenecks, scaled independently</td>
+                </tr>
+                <tr>
+                    <td>Metering</td>
+                    <td>Kafka → billing and capacity</td>
+                    <td>Never on the synchronous path</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>What's expected at each level?</h3>
+        <div class="level-grid reveal-element">
+            <div class="level-card mid">
+                <div class="level-label">Mid-Level</div>
+                <h4>Clean HLD + knows it's GPU-bound</h4>
+                <p>
+                    Entities and APIs sensible; chooses SSE and can justify it; states that inference — not the
+                    database — is the bottleneck; separates TTFT from inter-token latency.
+                </p>
+                <span class="level-focus">80% Breadth · 20% Depth</span>
+            </div>
+            <div class="level-card senior">
+                <div class="level-label">Senior</div>
+                <h4>Prefill vs decode, and batching</h4>
+                <p>
+                    Explains why decode is memory-bandwidth-bound and batching is nearly free; derives KV cache size
+                    and shows it caps batch size; motivates continuous batching over static.
+                </p>
+                <span class="level-focus">60% Breadth · 40% Depth</span>
+            </div>
+            <div class="level-card staff">
+                <div class="level-label">Staff+</div>
+                <h4>Owns the cost curve</h4>
+                <p>
+                    Connects paged KV, prefix-affinity routing and disaggregation; reasons about admission control
+                    under fixed supply; argues cost per token as the primary metric and knows when a smaller model is
+                    the right answer.
+                </p>
+                <span class="level-focus">40% Breadth · 60% Depth</span>
+            </div>
+        </div>
+
+        <h3>Questions Worth Rehearsing</h3>
+        <ul>
+            <li><strong>"Why can't you just add more servers?"</strong> — Because capacity is GPUs, supply is fixed for
+                months, and an idle GPU costs the same as a busy one. The work is raising utilisation, not adding
+                nodes.</li>
+            <li><strong>"Why is the first token slow but the rest fast?"</strong> — Prefill processes the entire prompt
+                in one compute-heavy pass; decode then reuses the KV cache and touches only one token per step.</li>
+            <li><strong>"What limits how many users one GPU serves?"</strong> — HBM for the KV cache, not compute.
+                Derive it: ~320KB/token × context length × concurrent sequences, against what remains after the model
+                weights.</li>
+            <li><strong>"How do you cut cost by half?"</strong> — Not one trick. Prefix caching removes most prefill,
+                tiering removes most large-model calls, paging triples batch size, quantization doubles it again.</li>
+            <li><strong>"What breaks first under 5× load?"</strong> — The scheduler queue. TTFT climbs while ITL stays
+                flat, because running sequences are unaffected and new ones simply wait.</li>
+        </ul>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Final Thought</div>
+            <p>
+                Every other system in this series is about moving data around cheaply. This one is about renting the
+                scarcest hardware on earth by the millisecond and refusing to let it idle. The candidates who do well
+                are not the ones who can name the most inference frameworks — they are the ones who can say
+                <em>"decode is memory-bandwidth-bound, so batching is nearly free, so the KV cache is what actually
+                limits us, so let's talk about how memory is allocated"</em> and follow that chain without stopping.
+                <strong>Everything in this design is downstream of one number: how many conversations fit in
+                HBM.</strong>
+            </p>
+        </div>
+    </article>
+
+    <!-- Author Footer -->
+    <div class="article-footer">
+        <div class="author-card reveal-element">
+            <img src="../content/ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar" />
+            <div class="author-info">
+                <h4>Ajay Kotnala</h4>
+                <div class="author-role">Senior Solution Architect</div>
+                <p>
+                    15+ years designing cloud-native, event-driven architectures at enterprise scale. Passionate
+                    about system design, API-first thinking, and making complex systems feel simple.
+                </p>
+            </div>
+        </div>
+        <div class="back-links-row">
+            <a href="../index.html" class="back-link">← Back to Portfolio</a>
+            <a href="./index.html" class="back-link">Back to System Design Articles →</a>
+        </div>
+    </div>
+    <footer>
+        <div class="footer-container">
+            <div class="footer-bottom">
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank">LinkedIn</a>
+                    <a href="https://github.com/ajaykotnala" target="_blank">GitHub</a>
+                    <a href="https://medium.com/@ajay.kotnalajpr" target="_blank">Medium</a>
+                </div>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll Progress Bar
+        window.addEventListener("scroll", () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrollTop / docHeight) * 100;
+            document.getElementById("progressBar").style.width = progress + "%";
+        });
+
+        // Intersection Observer for scroll-reveal animations
+        document.addEventListener("DOMContentLoaded", () => {
+            const observerOptions = {
+                threshold: 0.12,
+                rootMargin: "0px 0px -40px 0px",
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("active");
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll(".reveal-element").forEach((el) => {
+                observer.observe(el);
+            });
+        });
+
+        // Deep Dive Accordion
+        function toggleDeepDive(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle("open");
+        }
+
+        // Smooth scroll for TOC and anchor links
+        document.querySelectorAll('.toc a, a[href^="#"]').forEach((anchor) => {
+            anchor.addEventListener("click", function (e) {
+                const targetId = this.getAttribute("href");
+                if (targetId.startsWith("#")) {
+                    e.preventDefault();
+                    const target = document.querySelector(targetId);
+                    if (target) {
+                        // Nav offset: global nav (44px) + sub nav (52px) + padding
+                        const offset = 110;
+                        const targetPosition = target.getBoundingClientRect().top + window.scrollY - offset;
+                        window.scrollTo({ top: targetPosition, behavior: "smooth" });
+                    }
+                }
+            });
+        });
+    </script>
+    <!-- Cloudflare Web Analytics -->
+    <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "25a535ed0cef446989ce07ab00b1d46d"}'></script>
+    <!-- End Cloudflare Web Analytics -->
+</body>
+
+</html>

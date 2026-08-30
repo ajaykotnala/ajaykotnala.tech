@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Ajay Kotnala">
+  <defs>
+    <linearGradient id="ak" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2997ff"/>
+      <stop offset="1" stop-color="#0043a8"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#ak)"/>
+  <path d="M32 20 L18 44 M32 20 L46 44 M18 44 L46 44"
+        stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" fill="none" opacity=".9"/>
+  <circle cx="32" cy="19" r="7" fill="#ffffff"/>
+  <circle cx="18" cy="45" r="7" fill="#ffffff"/>
+  <circle cx="46" cy="45" r="7" fill="#ffffff"/>
+</svg>
