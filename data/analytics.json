@@ -1,23 +1,23 @@
 {
-  "updatedAt": "2026-09-13T10:45:34.987Z",
+  "updatedAt": "2026-09-13T15:14:27.828Z",
   "source": "cloudflare-web-analytics",
   "siteTag": "account-wide",
   "totals": {
-    "pageViews": 78,
-    "visits": 49
+    "pageViews": 75,
+    "visits": 46
   },
   "windows": {
     "last24h": {
-      "pageViews": 3,
+      "pageViews": 0,
       "visits": 0
     },
     "last7d": {
-      "pageViews": 33,
-      "visits": 19
+      "pageViews": 30,
+      "visits": 16
     },
     "last30d": {
-      "pageViews": 78,
-      "visits": 49
+      "pageViews": 75,
+      "visits": 46
     }
   },
   "daily": {
@@ -62,8 +62,8 @@
       "visits": 0
     },
     "2026-09-06": {
-      "pageViews": 4,
-      "visits": 4
+      "pageViews": 1,
+      "visits": 1
     },
     "2026-09-07": {
       "pageViews": 2,
