@@ -296,6 +296,19 @@
             color: #4338ca;
         }
 
+        .article-card.rag::before {
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+        }
+
+        .article-card.rag .article-badge {
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+        }
+
+        .article-card.rag .read-link,
+        .article-card.rag .card-highlights li::before {
+            color: #2563eb;
+        }
+
         .article-badge {
             display: inline-block;
             padding: 3px 10px;
@@ -477,6 +490,7 @@
                 <span class="topic-chip">Context Engineering</span>
                 <span class="topic-chip">Agentic Loops</span>
                 <span class="topic-chip">Tool Design</span>
+                <span class="topic-chip">Retrieval &amp; RAG</span>
                 <span class="topic-chip">Evaluation</span>
                 <span class="topic-chip">Prompt Injection</span>
             </div>
@@ -548,6 +562,37 @@
                             <span class="tech-tag">Agents</span>
                             <span class="tech-tag">Tool Use</span>
                             <span class="tech-tag">30 min read</span>
+                        </div>
+                        <span class="read-link">Read article →</span>
+                    </div>
+                </a>
+
+                <!-- RAG in Production -->
+                <a href="rag-in-production.html" class="article-card rag">
+                    <span class="article-badge">Retrieval</span>
+                    <h3 class="article-title">RAG in Production</h3>
+                    <p class="article-description">
+                        Retrieval-augmented generation is four lines in a notebook and a different discipline
+                        once real documents and real consequences arrive. Why bad retrieval is worse than no
+                        retrieval — and the full architecture that keeps a knowledge base honest, from parsing
+                        PDFs to refusing to answer.
+                    </p>
+                    <div class="card-highlights">
+                        <h4>Inside the article</h4>
+                        <ul>
+                            <li>Why weak context makes models more confident</li>
+                            <li>Structure-aware ingestion &amp; chunking</li>
+                            <li>Metadata as retrieval surface, versions included</li>
+                            <li>Hybrid search, fusion and reranking</li>
+                            <li>Grounding gates and a real abstention path</li>
+                            <li>Per-stage evaluation &amp; red-teaming the corpus</li>
+                        </ul>
+                    </div>
+                    <div class="article-meta">
+                        <div class="article-tags">
+                            <span class="tech-tag">RAG</span>
+                            <span class="tech-tag">Retrieval</span>
+                            <span class="tech-tag">32 min read</span>
                         </div>
                         <span class="read-link">Read article →</span>
                     </div>
