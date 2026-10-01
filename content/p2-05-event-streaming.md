@@ -7,7 +7,7 @@ category: "System Design"
 date: "July 2026"
 read_time: "26 min read"
 description: "Every time you track a food delivery in real time, refresh a stock ticker, or watch concert tickets vanish in seconds — there's a good chance Kafka is moving the events behind the scenes. Let's unpack how it works, why interviewers love it, and what you need to say to stand out."
-source_html: "DeepDives/kafka-system-design.html"
+source_html: "system-design-deep-dives/kafka-system-design.html"
 status: "draft"
 ---
 

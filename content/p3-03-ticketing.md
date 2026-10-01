@@ -7,7 +7,7 @@ category: "System Design"
 date: "July 2026"
 read_time: "22 min read"
 description: "How do you build a system where 10 million fans hit \"Book Now\" at the exact same second — and not a single seat gets double-sold? Let's break it down, from event discovery and search to distributed locks and virtual waiting rooms."
-source_html: "SystemDesign/bookmyshow-system-design.html"
+source_html: "system-design/bookmyshow-system-design.html"
 status: "draft"
 ---
 

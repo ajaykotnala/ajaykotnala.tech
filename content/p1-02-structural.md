@@ -7,7 +7,7 @@ category: ""
 date: ""
 read_time: ""
 description: ""
-source_html: "DesignPatterns/structural-pattern.html"
+source_html: "design-patterns/structural-pattern.html"
 status: "draft"
 ---
 

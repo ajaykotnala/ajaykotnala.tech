@@ -41,19 +41,19 @@ DIAGRAMS = ROOT / "assets" / "diagrams"
 
 # part, source path, output slug
 ARTICLES = [
-    ("design-patterns", "DesignPatterns/creational-pattern.html",   "p1-01-creational"),
-    ("design-patterns", "DesignPatterns/structural-pattern.html",   "p1-02-structural"),
-    ("design-patterns", "DesignPatterns/behavioural-pattern.html",  "p1-03-behavioural"),
-    ("deep-dives",      "DeepDives/concurrency-system-design.html", "p2-01-concurrency"),
-    ("deep-dives",      "DeepDives/caching-system-design.html",     "p2-02-caching"),
-    ("deep-dives",      "DeepDives/api-rate-limiting-system-design.html", "p2-03-rate-limiting"),
-    ("deep-dives",      "DeepDives/kafka-system-design.html",       "p2-04-event-streaming"),
-    ("system-designs",  "SystemDesign/tinder-system-design.html",   "p3-01-proximity-matching"),
-    ("system-designs",  "SystemDesign/bookmyshow-system-design.html", "p3-02-ticketing"),
-    ("system-designs",  "SystemDesign/bookmyride-system-design.html", "p3-03-ride-hailing"),
+    ("design-patterns", "design-patterns/creational-pattern.html",   "p1-01-creational"),
+    ("design-patterns", "design-patterns/structural-pattern.html",   "p1-02-structural"),
+    ("design-patterns", "design-patterns/behavioural-pattern.html",  "p1-03-behavioural"),
+    ("deep-dives",      "system-design-deep-dives/concurrency-system-design.html", "p2-01-concurrency"),
+    ("deep-dives",      "system-design-deep-dives/caching-system-design.html",     "p2-02-caching"),
+    ("deep-dives",      "system-design-deep-dives/api-rate-limiting-system-design.html", "p2-03-rate-limiting"),
+    ("deep-dives",      "system-design-deep-dives/kafka-system-design.html",       "p2-04-event-streaming"),
+    ("system-designs",  "system-design/tinder-system-design.html",   "p3-01-proximity-matching"),
+    ("system-designs",  "system-design/bookmyshow-system-design.html", "p3-02-ticketing"),
+    ("system-designs",  "system-design/bookmyride-system-design.html", "p3-03-ride-hailing"),
 ]
 
-# Syntax-highlighting spans. The DesignPatterns articles use short names, the
+# Syntax-highlighting spans. The design-patterns articles use short names, the
 # others use long ones; both are presentational and must collapse to plain text.
 CODE_SPANS = {
     "kw", "fn", "cl", "cm", "st", "dc", "ty", "nm", "op", "pn",

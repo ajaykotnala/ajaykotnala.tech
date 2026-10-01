@@ -253,6 +253,14 @@
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
         }
 
+        .article-badge.game {
+            background: linear-gradient(135deg, #6d28d9 0%, #d97706 100%);
+        }
+
+        .article-badge.pay {
+            background: linear-gradient(135deg, #4338ca 0%, #059669 100%);
+        }
+
         .article-title {
             font-family: var(--font-headline);
             font-size: 21px;
@@ -391,6 +399,42 @@
         <div class="container">
             <h2 class="section-title">System Design Articles</h2>
             <div class="articles-grid">
+                <!-- Payment System Design -->
+                <a href="payment-system-design.html" class="article-card">
+                    <span class="article-badge pay">Fintech</span>
+                    <h3 class="article-title">Designing a Payment System for India</h3>
+                    <p class="article-description">
+                        UPI-first payments for a marketplace — idempotent checkout, a double-entry ledger, UPI pending
+                        states, three-way reconciliation, and seller payouts over IMPS and NEFT.
+                    </p>
+                    <div class="article-meta">
+                        <div class="article-tags">
+                            <span class="tech-tag">UPI</span>
+                            <span class="tech-tag">Ledger</span>
+                            <span class="tech-tag">30 min read</span>
+                        </div>
+                        <span class="read-link">Read article →</span>
+                    </div>
+                </a>
+
+                <!-- Gaming Leaderboard System Design -->
+                <a href="leaderboard-system-design.html" class="article-card">
+                    <span class="article-badge game">Real-time Gaming</span>
+                    <h3 class="article-title">Designing a Gaming Leaderboard at Scale</h3>
+                    <p class="article-description">
+                        Real-time rankings for 1 crore daily players — Redis sorted sets, exactly-once scoring, fair
+                        tie-breaks, IST season rollover, and sharding for IPL-final traffic.
+                    </p>
+                    <div class="article-meta">
+                        <div class="article-tags">
+                            <span class="tech-tag">Redis</span>
+                            <span class="tech-tag">Idempotency</span>
+                            <span class="tech-tag">26 min read</span>
+                        </div>
+                        <span class="read-link">Read article →</span>
+                    </div>
+                </a>
+
                 <!-- ChatGPT System Design -->
                 <a href="chatgpt-system-design.html" class="article-card">
                     <span class="article-badge gpt">AI Infrastructure</span>

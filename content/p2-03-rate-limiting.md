@@ -7,7 +7,7 @@ category: "API & Systems"
 date: "August 2026"
 read_time: "32 min read"
 description: "Uber gave five thousand engineers an AI coding tool and burned a year's budget in four months. Not one of the five algorithms in every rate-limiting article would have stopped it — because requests per second was never the unit that mattered. Here's the full map: what you count, how you count it, where the counter lives, and what breaks when it does."
-source_html: "DeepDives/api-rate-limiting-system-design.html"
+source_html: "system-design-deep-dives/api-rate-limiting-system-design.html"
 status: "draft"
 ---
 

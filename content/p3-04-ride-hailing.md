@@ -7,7 +7,7 @@ category: "System Design"
 date: "July 2026"
 read_time: "22 min read"
 description: "You leave the venue at 2am. Surge pricing is active, three friends are splitting the fare, and every rider in a six-block radius is competing for the same handful of drivers. That's when fare quotes, geospatial indexes, and driver locks stop being interview trivia and start being the product. (You'll see this problem called Uber/OLA/Rapido etc.. in many interview loops — same architecture, different sticker on the app icon.)"
-source_html: "SystemDesign/bookmyride-system-design.html"
+source_html: "system-design/bookmyride-system-design.html"
 status: "draft"
 ---
 

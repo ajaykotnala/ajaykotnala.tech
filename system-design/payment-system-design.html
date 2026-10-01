@@ -1,0 +1,3452 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Designing a Payment System for India — System Design Deep Dive | Ajay Kotnala</title>
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="../assets/icons/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="../assets/icons/favicon-16.png" sizes="16x16" type="image/png" />
+    <link rel="apple-touch-icon" href="../assets/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="../site.webmanifest" />
+    <meta name="theme-color" content="#0066cc" />
+    <meta name="description"
+        content="A system design deep dive into a UPI-first payment system for an Indian marketplace — idempotent checkout, a double-entry ledger, UPI pending states, three-way reconciliation, and seller payouts over IMPS and NEFT. Written by Ajay Kotnala, Senior Solution Architect.">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+        rel="stylesheet">
+    <style>
+        /* ===== Apple Design Tokens (matching index.html) ===== */
+        :root {
+            /* Color System */
+            --color-primary: #0066cc;
+            --color-primary-focus: #0071e3;
+            --color-primary-on-dark: #2997ff;
+            --color-ink: #1d1d1f;
+            --color-body: #1d1d1f;
+            --color-body-on-dark: #ffffff;
+            --color-body-muted: #86868b;
+            --color-ink-muted-80: #333333;
+            --color-ink-muted-48: #7a7a7a;
+            --color-divider-soft: rgba(0, 0, 0, 0.08);
+            --color-hairline: #e0e0e0;
+            --color-canvas: #ffffff;
+            --color-canvas-parchment: #f5f5f7;
+            --color-surface-pearl: #fafafc;
+            --color-on-primary: #ffffff;
+
+            /* Payments accents (kept for article identity) */
+            --pay-indigo: #4338ca;
+            --pay-green: #059669;
+            --pay-amber: #d97706;
+            --pay-gradient: linear-gradient(135deg, #4338ca, #059669);
+
+            /* Typography */
+            --font-headline: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-body: "Lora", Georgia, "Times New Roman", serif;
+            --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+            --font-mono: "Source Code Pro", monospace;
+
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 12px;
+            --spacing-md: 17px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+
+            /* Border Radii */
+            --rounded-sm: 8px;
+            --rounded-md: 11px;
+            --rounded-lg: 18px;
+            --rounded-pill: 9999px;
+
+            /* Shadows */
+            --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+            --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06);
+
+            /* Article */
+            --article-width: 680px;
+        }
+
+        /* ===== Reset ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: var(--color-canvas);
+            color: var(--color-ink);
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* ===== 1. Global Navigation Bar (Apple Thin Black Bar) ===== */
+        .global-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 44px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .global-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .global-nav-logo {
+            color: #f5f5f7;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            font-family: var(--font-ui);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .global-nav-logo .logo-icon {
+            font-size: 16px;
+            color: var(--color-primary-on-dark);
+        }
+
+        .global-nav-links {
+            display: flex;
+            list-style: none;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .global-nav-links a {
+            color: #cccccc;
+            text-decoration: none;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            letter-spacing: -0.12px;
+            transition: color 0.2s ease;
+        }
+
+        .global-nav-links a:hover {
+            color: #ffffff;
+        }
+
+        .global-nav-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .global-nav-actions a {
+            color: #cccccc;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .global-nav-actions a:hover {
+            color: #ffffff;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ===== 2. Sub Navigation Bar (Frosted Sticky) ===== */
+        .sub-nav-frosted {
+            position: sticky;
+            top: 44px;
+            left: 0;
+            width: 100%;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            z-index: 999;
+            border-bottom: 1px solid var(--color-divider-soft);
+        }
+
+        .sub-nav-container {
+            max-width: 1024px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 22px;
+        }
+
+        .sub-nav-title {
+            font-family: var(--font-headline);
+            font-size: 21px;
+            font-weight: 600;
+            color: var(--color-ink);
+            text-decoration: none;
+            letter-spacing: 0.231px;
+        }
+
+        .sub-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sub-nav-link {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink);
+            text-decoration: none;
+            opacity: 0.8;
+            transition: color 0.2s ease, opacity 0.2s ease;
+        }
+
+        .sub-nav-link:hover {
+            color: var(--color-primary);
+            opacity: 1;
+        }
+
+        .sub-nav-button {
+            background: var(--color-primary);
+            color: var(--color-on-primary);
+            padding: 4px 12px;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 400;
+            border-radius: var(--rounded-pill);
+            text-decoration: none;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        .sub-nav-button:hover {
+            background: var(--color-primary-focus);
+        }
+
+        .sub-nav-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== Scroll Progress Bar ===== */
+        .progress-bar {
+            position: fixed;
+            top: 44px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--pay-gradient);
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        /* ===== Article Hero ===== */
+        .article-hero {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(96px + 4rem) 2rem 4rem;
+            background: var(--color-canvas);
+            position: relative;
+        }
+
+        .article-hero-inner {
+            max-width: var(--article-width);
+            width: 100%;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .article-category {
+            display: inline-block;
+            padding: 4px 14px;
+            background: var(--pay-gradient);
+            color: #fff;
+            border-radius: var(--rounded-pill);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .article-date {
+            color: var(--color-body-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .article-read-time {
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 13px;
+        }
+
+        .article-read-time::before {
+            content: '·';
+            margin-right: 0.5rem;
+            color: var(--color-body-muted);
+        }
+
+        .article-hero h1 {
+            font-family: var(--font-headline);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-bottom: 1.5rem;
+        }
+
+        .article-hero h1 .gradient-text {
+            background: var(--pay-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .article-hero-desc {
+            font-family: var(--font-body);
+            font-size: 20px;
+            color: var(--color-body-muted);
+            line-height: 1.7;
+            max-width: 600px;
+        }
+
+        .article-hero-desc em {
+            font-style: italic;
+            color: var(--color-ink-muted-80);
+        }
+
+        /* ===== Author Bar (Medium-style) ===== */
+        .author-bar {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--color-divider-soft);
+            margin-bottom: 2.5rem;
+        }
+
+        .author-bar-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-bar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .author-bar-name {
+            font-family: var(--font-ui);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-ink);
+        }
+
+        .author-bar-meta {
+            font-family: var(--font-ui);
+            font-size: 13px;
+            color: var(--color-body-muted);
+        }
+
+        /* ===== Table of Contents ===== */
+        .toc-wrapper {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .toc {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem 2.5rem;
+            margin-bottom: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toc::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--pay-gradient);
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toc h3 {
+            font-size: 12px;
+            margin-bottom: 1.2rem;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc li {
+            counter-increment: toc-counter;
+            padding: 0.35rem 0;
+        }
+
+        .toc li a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 15px;
+            transition: color 0.2s ease, padding-left 0.2s ease;
+            display: inline-block;
+        }
+
+        .toc li a::before {
+            content: counter(toc-counter, decimal-leading-zero) '.';
+            color: var(--pay-indigo);
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-right: 0.8rem;
+            font-size: 13px;
+        }
+
+        .toc li a:hover {
+            color: var(--color-primary);
+            padding-left: 4px;
+        }
+
+        /* ===== Article Body (Medium-friendly) ===== */
+        .article-body {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .article-body h2 {
+            font-family: var(--font-headline);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--color-ink);
+            margin-top: 3.5rem;
+            margin-bottom: 1.2rem;
+            padding-top: 2.5rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .article-body h2:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .article-body h2 .section-number {
+            color: var(--pay-indigo);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .article-body h3 {
+            font-family: var(--font-headline);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin-top: 2.5rem;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .article-body p {
+            font-family: var(--font-body);
+            font-size: 19px;
+            line-height: 1.85;
+            color: var(--color-ink-muted-80);
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.003em;
+        }
+
+        .article-body ul,
+        .article-body ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        .article-body li {
+            font-family: var(--font-body);
+            color: var(--color-ink-muted-80);
+            margin-bottom: 0.6rem;
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .article-body strong {
+            color: var(--color-ink);
+            font-weight: 600;
+        }
+
+        .article-body em {
+            color: var(--color-ink-muted-80);
+            font-style: italic;
+        }
+
+        .article-body code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--color-canvas-parchment);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--pay-indigo);
+        }
+
+        /* ===== Callout Boxes ===== */
+        .callout {
+            background: var(--color-canvas-parchment);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 0 var(--rounded-sm) var(--rounded-sm) 0;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .callout.callout-warning {
+            border-left-color: var(--pay-amber);
+            background: #fef7f5;
+        }
+
+        .callout.callout-insight {
+            border-left-color: var(--pay-indigo);
+            background: #eef2ff;
+        }
+
+        .callout .callout-label {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.6rem;
+            color: var(--color-primary);
+        }
+
+        .callout.callout-warning .callout-label {
+            color: var(--pay-amber);
+        }
+
+        .callout.callout-insight .callout-label {
+            color: var(--pay-indigo);
+        }
+
+        .callout p {
+            margin-bottom: 0;
+            font-size: 16px !important;
+            line-height: 1.7 !important;
+        }
+
+        /* ===== Code Blocks (GitHub Light Theme) ===== */
+        .code-block {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-hairline);
+            border-radius: var(--rounded-sm);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0 2rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block-label {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--color-hairline);
+            color: var(--color-body-muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 0 var(--rounded-sm) 0 var(--rounded-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            color: var(--color-ink);
+            line-height: 1.7;
+            white-space: pre;
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .code-block .keyword {
+            color: #cf222e;
+        }
+
+        .code-block .string {
+            color: #0a3069;
+        }
+
+        .code-block .comment {
+            color: #6e7781;
+            font-style: italic;
+        }
+
+        .code-block .type {
+            color: #953800;
+        }
+
+        .code-block .number {
+            color: #0550ae;
+        }
+
+        /* ===== Entity Cards ===== */
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .entity-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 1.8rem;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .entity-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .entity-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .entity-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .entity-card p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            margin-bottom: 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ===== API Endpoint Cards ===== */
+        .api-endpoint {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .api-endpoint:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .api-method-url {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .api-method {
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .api-method.post {
+            background: #eef2ff;
+            color: var(--pay-indigo);
+        }
+
+        .api-method.get {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .api-method.put {
+            background: #fffbeb;
+            color: var(--pay-amber);
+        }
+
+        .api-method-url .api-url,
+        .comparison-table code {
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .api-url {
+            font-family: var(--font-mono);
+            color: var(--color-ink);
+            font-size: 15px;
+        }
+
+        .api-desc {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 15px !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        /* ===== Excalidraw-Style SVG Architecture Diagrams ===== */
+        .diagram-container {
+            margin: 3rem -2rem;
+            padding: 2rem;
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            overflow-x: auto;
+        }
+
+        .diagram-title {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-body-muted);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .diagram-caption {
+            text-align: center;
+            color: var(--color-body-muted);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            margin-top: 1rem;
+            font-style: italic;
+        }
+
+        .diagram-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* ===== Comparison Table ===== */
+        .comparison-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 2rem 0;
+            border-radius: var(--rounded-md);
+            overflow: hidden;
+            border: 1px solid var(--color-divider-soft);
+            font-family: var(--font-ui);
+        }
+
+        .comparison-table th {
+            background: var(--color-canvas-parchment);
+            color: var(--color-ink-muted-80);
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            background: var(--color-canvas);
+            color: var(--color-ink-muted-80);
+            font-size: 15px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--color-divider-soft);
+            line-height: 1.5;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--color-canvas-parchment);
+        }
+
+        .check-icon {
+            color: var(--color-primary);
+            font-weight: 700;
+        }
+
+        .cross-icon {
+            color: var(--color-body-muted);
+            font-weight: 700;
+        }
+
+        /* ===== Scale Numbers ===== */
+        .scale-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .scale-stat {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem 1.2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition: box-shadow 0.3s ease, transform 0.3s ease;
+        }
+
+        .scale-stat:hover {
+            box-shadow: var(--shadow-card);
+            transform: translateY(-2px);
+        }
+
+        .scale-stat::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--pay-gradient);
+        }
+
+        .scale-stat .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            background: var(--pay-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-headline);
+        }
+
+        .scale-stat .stat-desc {
+            color: var(--color-body-muted);
+            font-size: 12px;
+            font-family: var(--font-ui);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ===== Deep Dive Accordion ===== */
+        .deep-dive {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            margin: 1.5rem 0;
+            overflow: hidden;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .deep-dive:hover {
+            border-color: rgba(0, 0, 0, 0.16);
+            box-shadow: var(--shadow-card);
+        }
+
+        .deep-dive-header {
+            padding: 1.2rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+
+        .deep-dive-header:hover {
+            background: var(--color-canvas-parchment);
+        }
+
+        .deep-dive-header h4 {
+            font-family: var(--font-ui);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--color-ink);
+        }
+
+        .deep-dive-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-canvas-parchment);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            transition: transform 0.3s ease, background 0.3s ease;
+            flex-shrink: 0;
+            font-family: var(--font-ui);
+        }
+
+        .deep-dive.open .deep-dive-toggle {
+            transform: rotate(45deg);
+            background: #eef2ff;
+            color: var(--pay-indigo);
+        }
+
+        .deep-dive-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+
+        .deep-dive.open .deep-dive-content {
+            max-height: 3000px;
+        }
+
+        .deep-dive-content-inner {
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .deep-dive-content-inner p,
+        .deep-dive-content-inner li {
+            font-size: 16px !important;
+        }
+
+        /* ===== Level Expectation Cards ===== */
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            margin: 2rem 0;
+        }
+
+        .level-card {
+            background: var(--color-canvas);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-md);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .level-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-card-hover);
+        }
+
+        .level-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .level-card.mid::before {
+            background: var(--color-primary);
+        }
+
+        .level-card.senior::before {
+            background: var(--pay-amber);
+        }
+
+        .level-card.staff::before {
+            background: var(--pay-indigo);
+        }
+
+        .level-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.8rem;
+            font-weight: 700;
+        }
+
+        .level-card.mid .level-label {
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-label {
+            color: var(--pay-amber);
+        }
+
+        .level-card.staff .level-label {
+            color: var(--pay-indigo);
+        }
+
+        .level-card h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            margin-bottom: 0.8rem;
+            color: var(--color-ink);
+        }
+
+        .level-card p {
+            font-family: var(--font-ui) !important;
+            font-size: 14px !important;
+            color: var(--color-body-muted) !important;
+            line-height: 1.6 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .level-focus {
+            display: inline-block;
+            margin-top: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .level-card.mid .level-focus {
+            background: #eef6ff;
+            color: var(--color-primary);
+        }
+
+        .level-card.senior .level-focus {
+            background: #fef3ef;
+            color: var(--pay-amber);
+        }
+
+        .level-card.staff .level-focus {
+            background: #eef2ff;
+            color: var(--pay-indigo);
+        }
+
+        /* ===== Author Footer Card ===== */
+        .article-footer {
+            max-width: var(--article-width);
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+        }
+
+        .author-card {
+            background: var(--color-canvas-parchment);
+            border: 1px solid var(--color-divider-soft);
+            border-radius: var(--rounded-lg);
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .author-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--color-canvas);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            flex-shrink: 0;
+        }
+
+        .author-info h4 {
+            font-family: var(--font-ui);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: var(--color-ink);
+        }
+
+        .author-info .author-role {
+            color: var(--color-primary);
+            font-size: 14px;
+            font-family: var(--font-ui);
+            margin-bottom: 0.6rem;
+        }
+
+        .author-info p {
+            font-family: var(--font-ui) !important;
+            color: var(--color-body-muted) !important;
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+        }
+
+        .back-links-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-weight: 500;
+            font-size: 15px;
+            transition: gap 0.2s ease;
+        }
+
+        .back-link:hover {
+            gap: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* ===== Global Footer ===== */
+        footer {
+            background: var(--color-canvas-parchment);
+            padding: var(--spacing-xxl) 2rem;
+            border-top: 1px solid var(--color-divider-soft);
+        }
+
+        .footer-container {
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .social-links a {
+            color: var(--color-ink-muted-80);
+            text-decoration: none;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        .fine-print {
+            font-size: 12px;
+            font-family: var(--font-ui);
+            color: var(--color-ink-muted-48);
+            letter-spacing: -0.12px;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 833px) {
+            .global-nav-links {
+                display: none;
+            }
+
+            .sub-nav-container {
+                padding: 0 16px;
+            }
+
+            .article-hero {
+                padding: calc(96px + 2rem) 1.5rem 3rem;
+            }
+
+            .article-body {
+                padding: 0 1.5rem 4rem;
+            }
+
+            .toc-wrapper {
+                padding: 0 1.5rem;
+            }
+
+            .entity-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .scale-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .level-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .author-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .diagram-container {
+                margin: 2rem -1rem;
+                padding: 1.5rem 1rem;
+            }
+
+            .comparison-table {
+                font-size: 14px;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 8px 10px;
+            }
+
+            .author-bar {
+                padding: 0 1.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .scale-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        /* ===== Animations ===== */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1), transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .reveal-element.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* ===== Ledger Tables ===== */
+        .table-scroll {
+            overflow-x: auto;
+            margin: 2rem 0;
+        }
+
+        .table-scroll .comparison-table {
+            margin: 0;
+        }
+
+        .comparison-table th.num,
+        .comparison-table td.num {
+            text-align: right;
+            font-family: var(--font-mono);
+            white-space: nowrap;
+        }
+
+        .comparison-table tr.journal-start td {
+            border-top: 2px solid var(--color-hairline);
+        }
+
+        .comparison-table td.journal-name {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            color: var(--pay-indigo);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- 1. Global Navigation Bar -->
+    <header class="global-nav">
+        <div class="global-nav-container">
+            <a href="../index.html" class="global-nav-logo">
+                <span class="logo-icon">[AK]</span> Ajay Kotnala
+            </a>
+            <div class="global-nav-actions">
+                <a href="https://github.com/ajaykotnala" target="_blank" aria-label="GitHub">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
+                    </svg>
+                </a>
+                <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank" aria-label="LinkedIn">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                </a>
+                <a href="https://medium.com/@ajay.kotnalajpr" target="_blank" aria-label="Medium">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M2 6.5c.02-.2-.05-.4-.19-.54L.36 4.21V4h4.5l3.48 7.63L11.4 4H15.7v.21l-1.24 1.19a.37.37 0 0 0-.14.36v12.48a.37.37 0 0 0 .14.36l1.21 1.19V20h-6.1v-.21l1.25-1.22c.12-.12.12-.16.12-.36V8.12L7.47 19.97h-.5L2.93 8.12v8.55c-.03.27.06.55.24.75l1.63 1.98V20H.18v-.21l1.63-1.98c.18-.2.26-.49.22-.75V7.18c.02-.25-.07-.5-.25-.68z" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. Sticky Sub Navigation Bar -->
+    <nav class="sub-nav-frosted">
+        <div class="sub-nav-container">
+            <a href="#" class="sub-nav-title">System Design</a>
+            <div class="sub-nav-right">
+                <a href="./index.html" class="sub-nav-link">System Design Articles</a>
+                <a href="../index.html" class="sub-nav-link">Portfolio</a>
+                <a href="../index.html#contact" class="sub-nav-button">Get in Touch</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Article Hero -->
+    <section class="article-hero">
+        <div class="article-hero-inner reveal-element active">
+            <div class="article-meta">
+                <span class="article-category">System Design</span>
+                <span class="article-date">October 2026</span>
+                <span class="article-read-time">30 min read</span>
+            </div>
+            <h1>Designing a <span class="gradient-text">Payment System</span> for India:<br>A System Design Deep Dive</h1>
+            <p class="article-hero-desc">
+                It's 11:59 PM, one minute before the festive sale opens. Lakhs of shoppers are about to tap
+                <em>Pay</em> at the same moment — most of them on UPI, many on patchy 4G. Some payments will succeed but
+                look failed, some will hang in "processing", and a few will get tapped twice. Let's build the payment
+                system that moves every rupee exactly once and can prove it the next morning — from idempotency keys
+                and a double-entry ledger to UPI pending states, reconciliation, and seller payouts.
+            </p>
+        </div>
+    </section>
+
+    <!-- Author Bar (Medium-style) -->
+    <div class="author-bar reveal-element active">
+        <img src="../content/ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-bar-avatar">
+        <div class="author-bar-info">
+            <div class="author-bar-name">Ajay Kotnala</div>
+            <div class="author-bar-meta">Senior Solution Architect · October 2026 · 30 min read</div>
+        </div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc-wrapper">
+        <div class="toc reveal-element">
+            <h3>In This Article</h3>
+            <ol>
+                <li><a href="#understanding">Understanding the Problem</a></li>
+                <li><a href="#requirements">Defining Requirements</a></li>
+                <li><a href="#entities">Core Entities &amp; Data Model</a></li>
+                <li><a href="#api">The API Surface</a></li>
+                <li><a href="#hld">High-Level Architecture</a></li>
+                <li><a href="#deep-dive-idempotency">Deep Dive: Never Charge Twice</a></li>
+                <li><a href="#deep-dive-ledger">Deep Dive: The Double-Entry Ledger</a></li>
+                <li><a href="#deep-dive-failures">Deep Dive: UPI Pending &amp; Failed Payments</a></li>
+                <li><a href="#deep-dive-recon">Deep Dive: Reconciliation &amp; Seller Payouts</a></li>
+                <li><a href="#deep-dive-security">Deep Dive: Security, Compliance &amp; Resilience</a></li>
+                <li><a href="#final">Final Architecture &amp; Interview Bar</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Article Body -->
+    <article class="article-body">
+
+        <!-- Section 1: Understanding the Problem -->
+        <h2 id="understanding"><span class="section-number">01</span>Understanding the Problem</h2>
+
+        <p>
+            Picture <strong>ApnaBazaar</strong>, a fictional online marketplace. It has <strong>3 lakh sellers</strong>
+            — block-printers in Jaipur, electronics wholesalers in Surat, spice traders in Kochi — and buyers everywhere
+            from Bengaluru high-rises to tier-3 towns in Bihar. A buyer fills a cart with items from several sellers,
+            taps <em>Pay</em> once, and ApnaBazaar pays each seller their share a week later, minus commission and
+            taxes.
+        </p>
+        <p>
+            We're designing the <strong>payment backend</strong> behind that button. It takes money in from buyers
+            (<strong>pay-in</strong>), keeps track of who it belongs to, and sends it out to sellers
+            (<strong>pay-out</strong>). And it does this in India, which shapes almost every decision: UPI carries the
+            large majority of payments, a "pending" UPI payment can take minutes to resolve, card numbers legally can't
+            be stored by merchants, and payment data has to stay inside the country.
+        </p>
+        <p>
+            One thing to get straight early: <strong>ApnaBazaar doesn't move money itself.</strong> Only
+            RBI-regulated entities touch the actual rails. Our system orchestrates them, records every movement, and
+            proves the records are right.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Who</th>
+                    <th>What They Do</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Buyer's bank</td>
+                    <td>Holds the buyer's money and approves or declines the debit</td>
+                </tr>
+                <tr>
+                    <td>UPI app</td>
+                    <td>The app where the buyer enters their UPI PIN</td>
+                </tr>
+                <tr>
+                    <td>NPCI</td>
+                    <td>Runs the UPI switch (and RuPay) that routes money between banks</td>
+                </tr>
+                <tr>
+                    <td>Card networks</td>
+                    <td>Route card payments between the buyer's bank and the acquiring bank</td>
+                </tr>
+                <tr>
+                    <td>Payment Aggregator (PA)</td>
+                    <td>An RBI-authorised company that connects us to all of the above through one API</td>
+                </tr>
+                <tr>
+                    <td>Escrow bank</td>
+                    <td>Holds buyers' money in a dedicated account until sellers are paid</td>
+                </tr>
+                <tr>
+                    <td>Seller's bank</td>
+                    <td>Receives the payout over IMPS, NEFT or RTGS</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>Before drawing anything, ask two questions: <strong>"Do we ever see card numbers?"</strong> and
+                <strong>"Do we also pay the sellers?"</strong> The first decides your compliance burden. The second
+                turns "call a payment gateway" into a bookkeeping problem — and that's where the real design is.</p>
+        </div>
+
+        <!-- Section 2: Requirements -->
+        <h2 id="requirements"><span class="section-number">02</span>Defining Requirements</h2>
+
+        <h3>Functional Requirements</h3>
+        <p>Here's what the payment system has to do:</p>
+        <ul>
+            <li><strong>Pay-in</strong> — the buyer pays once for the whole cart, with UPI (intent or QR), cards,
+                netbanking or wallets</li>
+            <li><strong>Split by seller</strong> — one payment covers many seller orders, each with its own
+                commission</li>
+            <li><strong>Payment status</strong> — the buyer always sees success, failure, or an honest
+                "processing"</li>
+            <li><strong>Refunds</strong> — cancellations and returns go back to the original payment method</li>
+            <li><strong>Payouts</strong> — sellers are paid into their bank accounts once the return window
+                closes</li>
+            <li><strong>Reconciliation</strong> — every day, our books are matched against the PA and the bank</li>
+        </ul>
+
+        <h3>Non-Functional Requirements</h3>
+        <p>And these are the constraints that make it interesting:</p>
+
+        <div class="scale-stats reveal-element">
+            <div class="scale-stat">
+                <div class="stat-value">20 L</div>
+                <div class="stat-desc">Checkouts / Day</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">2,000/s</div>
+                <div class="stat-desc">Sale-Night Peak</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">₹240 Cr</div>
+                <div class="stat-desc">Daily GMV</div>
+            </div>
+            <div class="scale-stat">
+                <div class="stat-value">0</div>
+                <div class="stat-desc">Double Charges</div>
+            </div>
+        </div>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Requirement</th>
+                    <th>Priority</th>
+                    <th>Why It Matters</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Never charge twice</td>
+                    <td><span class="check-icon">●</span> Must have</td>
+                    <td>A double debit means a support ticket, a chargeback, and a buyer who never comes back</td>
+                </tr>
+                <tr>
+                    <td>Never lose a successful payment</td>
+                    <td><span class="check-icon">●</span> Must have</td>
+                    <td>"Money debited but order not placed" is the most common payment complaint in India</td>
+                </tr>
+                <tr>
+                    <td>Every rupee traceable</td>
+                    <td><span class="check-icon">●</span> Must have</td>
+                    <td>Auditors, tax filings and seller disputes all need line-by-line proof</td>
+                </tr>
+                <tr>
+                    <td>Daily reconciliation</td>
+                    <td><span class="check-icon">●</span> Must have</td>
+                    <td>It's the only way to catch what the happy path silently missed</td>
+                </tr>
+                <tr>
+                    <td>No card data stored, data kept in India</td>
+                    <td><span class="check-icon">●</span> Must have</td>
+                    <td>RBI tokenisation and data-localisation rules, plus PCI DSS</td>
+                </tr>
+                <tr>
+                    <td>Running our own PA or switch</td>
+                    <td><span class="cross-icon">○</span> Out of scope</td>
+                    <td>We integrate with licensed payment aggregators</td>
+                </tr>
+                <tr>
+                    <td>Cash on delivery</td>
+                    <td><span class="cross-icon">○</span> Out of scope</td>
+                    <td>Courier partners collect and remit cash; it joins the same ledger later</td>
+                </tr>
+                <tr>
+                    <td>Foreign currency</td>
+                    <td><span class="cross-icon">○</span> Out of scope</td>
+                    <td>Everything is in rupees</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Back-of-the-Envelope</h3>
+        <p>
+            Let's put numbers on an ordinary day and on the night the festive sale opens. Assume 20 lakh checkouts a
+            day with an average cart of ₹1,200.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Quantity</th>
+                    <th>How</th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Average payments</td>
+                    <td>20 L ÷ 86,400 s</td>
+                    <td>~23/s</td>
+                </tr>
+                <tr>
+                    <td>Evening peak</td>
+                    <td>30% of checkouts between 8–11 PM: 6 L ÷ 10,800 s</td>
+                    <td>~60/s</td>
+                </tr>
+                <tr>
+                    <td>Sale opening</td>
+                    <td>6 L checkouts in the first 10 minutes, ~1.5 attempts each</td>
+                    <td>~1,500/s → design for 2,000/s</td>
+                </tr>
+                <tr>
+                    <td>PA webhooks</td>
+                    <td>~2 per attempt, ~1.3 attempts per checkout</td>
+                    <td>~50 L/day</td>
+                </tr>
+                <tr>
+                    <td>Ledger lines</td>
+                    <td>~8 per checkout (capture, fees, settlement, payout) × ~150 bytes</td>
+                    <td>1.6 Cr rows, ~2.4 GB/day</td>
+                </tr>
+                <tr>
+                    <td>Seller payouts</td>
+                    <td>One batched transfer per active seller per day</td>
+                    <td>up to 3 L/day</td>
+                </tr>
+                <tr>
+                    <td>Money moved</td>
+                    <td>20 L × ₹1,200</td>
+                    <td>₹240 Cr/day</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p>
+            None of these numbers is scary. Even the sale-night peak is well within what a well-run relational database
+            can handle. The hard part of a payment system is that its worst failures are <em>silent</em>: a debit with
+            no order, an order with no debit, a seller paid twice. Nothing crashes, and the books are quietly wrong.
+            So this design is about <strong>correctness first and throughput second</strong>.
+        </p>
+
+        <!-- Section 3: Core Entities -->
+        <h2 id="entities"><span class="section-number">03</span>Core Entities &amp; Data Model</h2>
+
+        <p>
+            Six nouns carry the whole design. Getting them straight early saves a lot of back-and-forth later.
+        </p>
+
+        <div class="entity-grid reveal-element">
+            <div class="entity-card">
+                <div class="entity-icon">🛒</div>
+                <h4>Checkout</h4>
+                <p>One cart, one total, and one payment the buyer approves. Identified by <code>checkout_id</code>.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">📦</div>
+                <h4>Seller Order</h4>
+                <p>The slice of a checkout that belongs to one seller, with its own amount and commission.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🔁</div>
+                <h4>Payment Attempt</h4>
+                <p>One try at paying a checkout. A buyer whose first UPI try fails may make several.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">🏦</div>
+                <h4>Account</h4>
+                <p>A named bucket of money: the escrow, one seller's payable balance, our commission.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">📒</div>
+                <h4>Ledger Entry</h4>
+                <p>One line of a journal. Every journal's debits and credits add up to exactly zero.</p>
+            </div>
+            <div class="entity-card">
+                <div class="entity-icon">💸</div>
+                <h4>Payout</h4>
+                <p>One bank transfer to a seller, usually covering many orders at once.</p>
+            </div>
+        </div>
+
+        <p>
+            Two modelling decisions matter more than the rest.
+        </p>
+        <p>
+            <strong>One debit per checkout, split in the ledger.</strong> Meera's cart has a kurta from Jaipur and
+            earphones from Surat. We don't ask her to approve two UPI payments — she enters her PIN once for ₹1,798.
+            Splitting that money between the two sellers is bookkeeping we do internally, in the ledger.
+        </p>
+        <p>
+            <strong>Attempts are separate from checkouts.</strong> A noticeable share of first UPI attempts fail —
+            wrong PIN, the bank's server is down, the buyer switches apps and never comes back. Each retry is a new
+            attempt with its own reference at the PA. The checkout is paid when <em>exactly one</em> attempt
+            succeeds.
+        </p>
+        <p>
+            For storage, we pick <strong>PostgreSQL</strong>. Payments need ACID transactions and strong consistency far
+            more than raw speed. Postgres has a long track record in financial systems, mature tooling for backups and
+            replication, and a large pool of engineers and DBAs who know it well. Those things matter more here than
+            any benchmark.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">Schema</span>
+            <code><span class="comment">-- PostgreSQL, Mumbai region. All amounts are integer paise.</span>
+<span class="keyword">CREATE TABLE</span> checkouts (
+  checkout_id      <span class="type">TEXT</span> <span class="keyword">PRIMARY KEY</span>,
+  buyer_id         <span class="type">TEXT</span> <span class="keyword">NOT NULL</span>,
+  amount_paise     <span class="type">BIGINT</span> <span class="keyword">NOT NULL</span>,     <span class="comment">-- ₹1,798.00 = 179800</span>
+  status           <span class="type">TEXT</span> <span class="keyword">NOT NULL</span>,       <span class="comment">-- OPEN, PAID, EXPIRED</span>
+  expires_at       <span class="type">TIMESTAMPTZ</span>               <span class="comment">-- stock held until then</span>
+);
+
+<span class="keyword">CREATE TABLE</span> seller_orders (
+  seller_order_id  <span class="type">TEXT</span> <span class="keyword">PRIMARY KEY</span>,
+  checkout_id      <span class="type">TEXT</span> <span class="keyword">REFERENCES</span> checkouts,
+  seller_id        <span class="type">TEXT</span> <span class="keyword">NOT NULL</span>,
+  amount_paise     <span class="type">BIGINT</span> <span class="keyword">NOT NULL</span>,
+  commission_paise <span class="type">BIGINT</span> <span class="keyword">NOT NULL</span>
+);
+
+<span class="keyword">CREATE TABLE</span> payment_attempts (
+  attempt_id       <span class="type">TEXT</span> <span class="keyword">PRIMARY KEY</span>,    <span class="comment">-- our reference at the PA</span>
+  checkout_id      <span class="type">TEXT</span> <span class="keyword">REFERENCES</span> checkouts,
+  idempotency_key  <span class="type">TEXT</span> <span class="keyword">UNIQUE NOT NULL</span>,
+  method           <span class="type">TEXT</span>,                  <span class="comment">-- UPI_INTENT, CARD, NETBANKING</span>
+  amount_paise     <span class="type">BIGINT</span> <span class="keyword">NOT NULL</span>,
+  status           <span class="type">TEXT</span> <span class="keyword">NOT NULL</span>,         <span class="comment">-- CREATED, PENDING, SUCCESS, ...</span>
+  pa_payment_id    <span class="type">TEXT</span> <span class="keyword">UNIQUE</span>,
+  utr              <span class="type">TEXT</span>,                  <span class="comment">-- bank reference, used in recon</span>
+  response         <span class="type">JSONB</span>,                 <span class="comment">-- replayed to retries</span>
+  updated_at       <span class="type">TIMESTAMPTZ</span>
+);
+
+<span class="keyword">CREATE TABLE</span> ledger_entries (             <span class="comment">-- append-only, never updated</span>
+  entry_id         <span class="type">BIGSERIAL</span> <span class="keyword">PRIMARY KEY</span>,
+  journal_id       <span class="type">TEXT</span> <span class="keyword">NOT NULL</span>,       <span class="comment">-- one business event</span>
+  account_id       <span class="type">TEXT</span> <span class="keyword">NOT NULL</span>,       <span class="comment">-- 'seller_payable:S_JPR_221'</span>
+  direction        <span class="type">TEXT</span> <span class="keyword">NOT NULL</span>,       <span class="comment">-- DEBIT or CREDIT</span>
+  amount_paise     <span class="type">BIGINT</span> <span class="keyword">NOT NULL CHECK</span> (amount_paise &gt; <span class="number">0</span>),
+  created_at       <span class="type">TIMESTAMPTZ</span>
+);
+
+<span class="keyword">CREATE TABLE</span> payment_outbox (
+  id <span class="type">BIGSERIAL</span>, event_type <span class="type">TEXT</span>, checkout_id <span class="type">TEXT</span>, payload <span class="type">JSONB</span>
+);</code>
+        </div>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Never Use Floats for Money</div>
+            <p>In floating point, <code>0.1 + 0.2</code> is <code>0.30000000000000004</code>. Spread that over crores
+                of transactions and the books stop balancing. Store <strong>integer paise</strong> in a
+                <code>BIGINT</code>: ₹1,798.00 is <code>179800</code>. In JSON, send it as an integer in paise or as a
+                string — never as a float.</p>
+        </div>
+
+        <!-- Section 4: API Design -->
+        <h2 id="api"><span class="section-number">04</span>The API Surface</h2>
+
+        <p>
+            Four endpoints cover the product: two for the buyer's app, one for refunds, and one internal endpoint
+            where the PA tells us what happened.
+        </p>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method post">POST</span>
+                <span class="api-url">/v1/checkouts/{checkoutId}/payments</span>
+            </div>
+            <p class="api-desc">
+                Starts a payment attempt. The app generates an <code>Idempotency-Key</code> when the buyer taps Pay and
+                sends the same key on every retry of that tap.
+            </p>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">Request</span>
+            <code>POST /v1/checkouts/chk_5TQ1/payments
+Idempotency-Key: 6f1c2a0e-3b7d-4d8e-9a51-2c4f7e1b9d30
+
+{
+  <span class="string">"method"</span>: <span class="string">"upi_intent"</span>,
+  <span class="string">"amount_paise"</span>: <span class="number">179800</span>
+}</code>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">Response · 201</span>
+            <code>{
+  <span class="string">"attempt_id"</span>: <span class="string">"att_9KX2"</span>,
+  <span class="string">"status"</span>: <span class="string">"PENDING"</span>,
+  <span class="string">"next_action"</span>: {
+    <span class="string">"type"</span>: <span class="string">"open_upi_app"</span>,
+    <span class="string">"uri"</span>: <span class="string">"upi://pay?pa=apnabazaar@pabank&amp;pn=ApnaBazaar&amp;tr=att_9KX2&amp;am=1798.00&amp;cu=INR"</span>
+  },
+  <span class="string">"poll_after_ms"</span>: <span class="number">2000</span>
+}</code>
+        </div>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method get">GET</span>
+                <span class="api-url">/v1/payments/{attemptId}</span>
+            </div>
+            <p class="api-desc">
+                The current status of an attempt. The app polls this while the buyer is in their UPI app, and again
+                when they come back.
+            </p>
+        </div>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method post">POST</span>
+                <span class="api-url">/v1/payments/{attemptId}/refunds</span>
+            </div>
+            <p class="api-desc">
+                Refunds all or part of a successful payment. It also takes an <code>Idempotency-Key</code>, because
+                a refund sent twice is just as bad as a charge sent twice.
+            </p>
+        </div>
+
+        <div class="api-endpoint reveal-element">
+            <div class="api-method-url">
+                <span class="api-method post">POST</span>
+                <span class="api-url">/internal/webhooks/pa</span>
+            </div>
+            <p class="api-desc">
+                Where the PA reports results: payment captured, failed, refunded, settled. Every call carries an HMAC
+                signature, which we verify before reading anything else in it.
+            </p>
+        </div>
+
+        <div class="callout">
+            <div class="callout-label">Design Decision</div>
+            <p>Why does the request carry <code>amount_paise</code> if the server already knows the cart? It's only a
+                <strong>cross-check</strong>. The server always recomputes the total from the cart. If the two differ —
+                a price changed, or someone edited the request — it returns <code>409 Conflict</code> and the app shows
+                the new total. The amount we charge never comes from the client.</p>
+        </div>
+
+        <!-- Section 5: High-Level Design -->
+        <h2 id="hld"><span class="section-number">05</span>High-Level Architecture</h2>
+
+        <p>
+            The system has two speeds. The <strong>payment path</strong> is what the buyer waits on: create an
+            attempt, hand them to their UPI app, hear back from the PA. Everything else — the ledger, the order
+            confirmation, the SMS — happens <strong>asynchronously</strong> after a payment is confirmed. And the actual
+            money moves on a third clock entirely, a day or more later.
+        </p>
+
+        <!-- DIAGRAM 1: High-Level Architecture (Excalidraw-style) -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 1 — High-Level System Architecture</div>
+            <svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg" style="max-width:800px;">
+                <defs>
+                    <!-- Excalidraw dot grid -->
+                    <pattern id="payDotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="10" cy="10" r="0.8" fill="#d0d0d0" />
+                    </pattern>
+                    <!-- Hand-drawn roughness filters -->
+                    <filter id="payRough" x="-2%" y="-2%" width="104%" height="104%">
+                        <feTurbulence type="turbulence" baseFrequency="0.03" numOctaves="3" seed="7" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <filter id="payRoughLight" filterUnits="userSpaceOnUse" x="0" y="0" width="800" height="500">
+                        <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="11" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                    <!-- Arrow markers -->
+                    <marker id="payArrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10"
+                        orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#666" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                    <marker id="payArrowIndigo" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10"
+                        markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#4338ca" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                    <marker id="payArrowBlue" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10"
+                        markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#0066cc" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                    <marker id="payArrowGreen" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10"
+                        markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#059669" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                    <marker id="payArrowGold" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10"
+                        markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#d97706" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                    <marker id="payArrowRed" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10"
+                        markerHeight="10" orient="auto">
+                        <path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#dc382d" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </marker>
+                    <!-- Fixed-size filled arrowheads for thick money lines -->
+                    <marker id="payHeadGold" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="16"
+                        markerHeight="16" markerUnits="userSpaceOnUse" orient="auto">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#d97706" />
+                    </marker>
+                    <marker id="payHeadGoldSmall" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="11"
+                        markerHeight="11" markerUnits="userSpaceOnUse" orient="auto">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#d97706" />
+                    </marker>
+                </defs>
+
+                <!-- Background -->
+                <rect width="800" height="500" fill="#fefefe" rx="12" />
+                <rect width="800" height="500" fill="url(#payDotGrid)" rx="12" />
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive">
+                    <!-- ===== Row 1: the payment path ===== -->
+                    <!-- Buyer App -->
+                    <rect x="20" y="40" width="100" height="80" rx="16" fill="#eef6ff" stroke="#333"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="70" y="68" fill="#333" font-size="20" text-anchor="middle">📱</text>
+                    <text x="70" y="92" fill="#333" font-size="12" text-anchor="middle" font-weight="600">Buyer App</text>
+                    <text x="70" y="109" fill="#86868b" font-size="10" text-anchor="middle">Android · iOS</text>
+
+                    <!-- API Gateway -->
+                    <rect x="150" y="40" width="100" height="80" rx="10" fill="#e3f2fd" stroke="#0066cc"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="200" y="70" fill="#0066cc" font-size="13" text-anchor="middle" font-weight="600">API</text>
+                    <text x="200" y="86" fill="#0066cc" font-size="13" text-anchor="middle" font-weight="600">Gateway</text>
+                    <text x="200" y="106" fill="#86868b" font-size="10" text-anchor="middle">auth · limits</text>
+
+                    <!-- Payment Service -->
+                    <rect x="280" y="40" width="100" height="80" rx="10" fill="#e0e7ff" stroke="#4338ca"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="330" y="70" fill="#4338ca" font-size="13" text-anchor="middle" font-weight="600">Payment</text>
+                    <text x="330" y="86" fill="#4338ca" font-size="13" text-anchor="middle" font-weight="600">Service</text>
+                    <text x="330" y="106" fill="#86868b" font-size="10" text-anchor="middle">idempotency</text>
+
+                    <!-- Payment Executor -->
+                    <rect x="410" y="40" width="100" height="80" rx="10" fill="#e0e7ff" stroke="#4338ca"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="460" y="70" fill="#4338ca" font-size="13" text-anchor="middle" font-weight="600">Payment</text>
+                    <text x="460" y="86" fill="#4338ca" font-size="13" text-anchor="middle" font-weight="600">Executor</text>
+                    <text x="460" y="106" fill="#86868b" font-size="10" text-anchor="middle">talks to PAs</text>
+
+                    <!-- Payment Aggregator -->
+                    <rect x="540" y="40" width="100" height="80" rx="10" fill="#fef3c7" stroke="#d97706"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="590" y="70" fill="#b45309" font-size="13" text-anchor="middle" font-weight="600">Payment</text>
+                    <text x="590" y="86" fill="#b45309" font-size="13" text-anchor="middle" font-weight="600">Aggregator</text>
+                    <text x="590" y="106" fill="#86868b" font-size="10" text-anchor="middle">RBI-authorised</text>
+
+                    <!-- Payment Rails -->
+                    <rect x="670" y="40" width="110" height="80" rx="10" fill="#f5f5f7" stroke="#333"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="725" y="70" fill="#333" font-size="13" text-anchor="middle" font-weight="600">Payment</text>
+                    <text x="725" y="86" fill="#333" font-size="13" text-anchor="middle" font-weight="600">Rails</text>
+                    <text x="725" y="106" fill="#86868b" font-size="10" text-anchor="middle">UPI · cards · NB</text>
+
+                    <!-- Row 1 arrows -->
+                    <path d="M 120 80 C 130 78, 138 82, 144 80" fill="none" stroke="#4338ca" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowIndigo)" filter="url(#payRoughLight)" />
+                    <text x="135" y="70" fill="#4338ca" font-size="10" text-anchor="middle">Pay</text>
+                    <path d="M 250 80 C 260 78, 268 82, 274 80" fill="none" stroke="#4338ca" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowIndigo)" filter="url(#payRoughLight)" />
+                    <path d="M 380 80 C 390 78, 398 82, 404 80" fill="none" stroke="#4338ca" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowIndigo)" filter="url(#payRoughLight)" />
+                    <path d="M 510 80 C 520 78, 528 82, 534 80" fill="none" stroke="#4338ca" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowIndigo)" filter="url(#payRoughLight)" />
+                    <path d="M 640 80 C 650 78, 658 82, 664 80" fill="none" stroke="#4338ca" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowIndigo)" filter="url(#payRoughLight)" />
+
+                    <!-- Webhook back from the PA -->
+                    <path d="M 565 120 C 560 154, 497 154, 490 127" fill="none" stroke="#d97706" stroke-width="1.5"
+                        stroke-dasharray="5,3" stroke-linecap="round" marker-end="url(#payArrowGold)"
+                        filter="url(#payRoughLight)" />
+                    <text x="527" y="165" fill="#b45309" font-size="10" text-anchor="middle">signed webhook</text>
+
+                    <!-- ===== Row 2 ===== -->
+                    <!-- Risk Engine -->
+                    <rect x="150" y="200" width="100" height="80" rx="10" fill="#fdecea" stroke="#dc382d"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="200" y="230" fill="#dc382d" font-size="13" text-anchor="middle" font-weight="600">Risk</text>
+                    <text x="200" y="246" fill="#dc382d" font-size="13" text-anchor="middle" font-weight="600">Engine</text>
+                    <text x="200" y="266" fill="#86868b" font-size="10" text-anchor="middle">fraud signals</text>
+
+                    <!-- PostgreSQL (hand-drawn cylinder) -->
+                    <path d="M 280 214 L 280 266 A 50 13 0 0 0 380 266 L 380 214" fill="#e3f2fd" stroke="#333"
+                        stroke-width="1.8" filter="url(#payRoughLight)" />
+                    <ellipse cx="330" cy="214" rx="50" ry="13" fill="#e3f2fd" stroke="#333" stroke-width="1.8"
+                        filter="url(#payRough)" />
+                    <text x="330" y="246" fill="#0066cc" font-size="12" text-anchor="middle" font-weight="600">PostgreSQL</text>
+                    <text x="330" y="262" fill="#86868b" font-size="10" text-anchor="middle">state · outbox</text>
+
+                    <!-- Kafka -->
+                    <rect x="410" y="200" width="100" height="80" rx="10" fill="#f5f5f7" stroke="#333"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="460" y="232" fill="#333" font-size="13" text-anchor="middle" font-weight="600">Kafka</text>
+                    <text x="460" y="252" fill="#86868b" font-size="10" text-anchor="middle">payment-events</text>
+                    <text x="460" y="267" fill="#86868b" font-size="10" text-anchor="middle">replayable</text>
+
+                    <!-- Recon Service -->
+                    <rect x="540" y="200" width="100" height="80" rx="10" fill="#ecfdf5" stroke="#059669"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="590" y="230" fill="#047857" font-size="13" text-anchor="middle" font-weight="600">Recon</text>
+                    <text x="590" y="246" fill="#047857" font-size="13" text-anchor="middle" font-weight="600">Service</text>
+                    <text x="590" y="266" fill="#86868b" font-size="10" text-anchor="middle">daily 3-way</text>
+
+                    <!-- Escrow Account -->
+                    <rect x="670" y="200" width="110" height="80" rx="10" fill="#fef3c7" stroke="#d97706"
+                        stroke-width="2.5" filter="url(#payRough)" />
+                    <text x="725" y="230" fill="#b45309" font-size="13" text-anchor="middle" font-weight="600">Escrow</text>
+                    <text x="725" y="246" fill="#b45309" font-size="13" text-anchor="middle" font-weight="600">Account</text>
+                    <text x="725" y="266" fill="#86868b" font-size="10" text-anchor="middle">held at a bank</text>
+
+                    <!-- Row 2 arrows -->
+                    <path d="M 300 120 C 290 150, 260 175, 232 196" fill="none" stroke="#4338ca" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowIndigo)" filter="url(#payRoughLight)" />
+                    <text x="266" y="150" fill="#4338ca" font-size="10" text-anchor="end">risk check</text>
+                    <path d="M 345 120 C 343 150, 347 172, 345 194" fill="none" stroke="#4338ca" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowIndigo)" filter="url(#payRoughLight)" />
+                    <text x="353" y="160" fill="#4338ca" font-size="10">1 txn</text>
+                    <path d="M 380 240 C 390 238, 398 242, 404 240" fill="none" stroke="#0066cc" stroke-width="2"
+                        stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#payArrowBlue)"
+                        filter="url(#payRoughLight)" />
+                    <text x="395" y="230" fill="#0066cc" font-size="9" text-anchor="middle">CDC</text>
+                    <path d="M 610 120 C 608 150, 612 172, 610 194" fill="none" stroke="#666" stroke-width="1.5"
+                        stroke-dasharray="5,3" stroke-linecap="round" marker-end="url(#payArrow)"
+                        filter="url(#payRoughLight)" />
+                    <text x="617" y="150" fill="#86868b" font-size="10">settlement</text>
+                    <text x="617" y="162" fill="#86868b" font-size="10">file</text>
+                    <path d="M 670 240 C 660 238, 652 242, 646 240" fill="none" stroke="#666" stroke-width="1.5"
+                        stroke-dasharray="5,3" stroke-linecap="round" marker-end="url(#payArrow)"
+                        filter="url(#payRoughLight)" />
+
+                    <!-- Money: rails settle into escrow -->
+                    <path d="M 725 120 L 725 182" fill="none" stroke="#d97706" stroke-width="5"
+                        stroke-linecap="butt" marker-end="url(#payHeadGold)" />
+                    <text x="735" y="160" fill="#b45309" font-size="10" font-weight="600">₹ T+1</text>
+
+                    <!-- ===== Row 3 ===== -->
+                    <!-- Order Service -->
+                    <rect x="150" y="350" width="100" height="80" rx="10" fill="#e3f2fd" stroke="#0066cc"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="200" y="380" fill="#0066cc" font-size="13" text-anchor="middle" font-weight="600">Order</text>
+                    <text x="200" y="396" fill="#0066cc" font-size="13" text-anchor="middle" font-weight="600">Service</text>
+                    <text x="200" y="416" fill="#86868b" font-size="10" text-anchor="middle">confirms order</text>
+
+                    <!-- Notify Service -->
+                    <rect x="280" y="350" width="100" height="80" rx="10" fill="#e3f2fd" stroke="#0066cc"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="330" y="380" fill="#0066cc" font-size="13" text-anchor="middle" font-weight="600">Notify</text>
+                    <text x="330" y="396" fill="#0066cc" font-size="13" text-anchor="middle" font-weight="600">Service</text>
+                    <text x="330" y="416" fill="#86868b" font-size="10" text-anchor="middle">SMS · WhatsApp</text>
+
+                    <!-- Ledger Service -->
+                    <rect x="410" y="350" width="100" height="80" rx="10" fill="#ecfdf5" stroke="#059669"
+                        stroke-width="2.5" filter="url(#payRough)" />
+                    <text x="460" y="380" fill="#047857" font-size="13" text-anchor="middle" font-weight="600">Ledger</text>
+                    <text x="460" y="396" fill="#047857" font-size="13" text-anchor="middle" font-weight="600">Service</text>
+                    <text x="460" y="416" fill="#86868b" font-size="10" text-anchor="middle">double-entry</text>
+
+                    <!-- Payout Service -->
+                    <rect x="540" y="350" width="100" height="80" rx="10" fill="#e0e7ff" stroke="#4338ca"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="590" y="380" fill="#4338ca" font-size="13" text-anchor="middle" font-weight="600">Payout</text>
+                    <text x="590" y="396" fill="#4338ca" font-size="13" text-anchor="middle" font-weight="600">Service</text>
+                    <text x="590" y="416" fill="#86868b" font-size="10" text-anchor="middle">after returns</text>
+
+                    <!-- Seller Banks -->
+                    <rect x="670" y="350" width="110" height="80" rx="10" fill="#f5f5f7" stroke="#333"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="725" y="380" fill="#333" font-size="13" text-anchor="middle" font-weight="600">Seller</text>
+                    <text x="725" y="396" fill="#333" font-size="13" text-anchor="middle" font-weight="600">Banks</text>
+                    <text x="725" y="416" fill="#86868b" font-size="10" text-anchor="middle">IMPS · NEFT</text>
+
+                    <!-- Kafka fan-out -->
+                    <path d="M 460 280 C 458 305, 462 325, 460 344" fill="none" stroke="#0066cc" stroke-width="2"
+                        stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#payArrowBlue)"
+                        filter="url(#payRoughLight)" />
+                    <path d="M 440 280 C 425 305, 362 318, 347 344" fill="none" stroke="#0066cc" stroke-width="2"
+                        stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#payArrowBlue)"
+                        filter="url(#payRoughLight)" />
+                    <path d="M 420 278 C 380 300, 240 302, 215 344" fill="none" stroke="#0066cc" stroke-width="2"
+                        stroke-dasharray="6,4" stroke-linecap="round" marker-end="url(#payArrowBlue)"
+                        filter="url(#payRoughLight)" />
+
+                    <!-- Ledger → Payout, Ledger → Recon, Payout → Escrow -->
+                    <path d="M 510 390 C 520 388, 528 392, 534 390" fill="none" stroke="#4338ca" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowIndigo)" filter="url(#payRoughLight)" />
+                    <path d="M 500 350 C 515 325, 545 305, 565 287" fill="none" stroke="#059669" stroke-width="1.5"
+                        stroke-dasharray="5,3" stroke-linecap="round" marker-end="url(#payArrowGreen)"
+                        filter="url(#payRoughLight)" />
+                    <path d="M 625 350 C 640 325, 665 305, 680 287" fill="none" stroke="#4338ca" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowIndigo)" filter="url(#payRoughLight)" />
+
+                    <!-- Money: escrow pays sellers -->
+                    <path d="M 725 280 L 725 332" fill="none" stroke="#d97706" stroke-width="5"
+                        stroke-linecap="butt" marker-end="url(#payHeadGold)" />
+                    <text x="735" y="315" fill="#b45309" font-size="10" font-weight="600">₹ T+7</text>
+
+                    <!-- Legend -->
+                    <path d="M 20 476 L 50 476" stroke="#4338ca" stroke-width="2" />
+                    <text x="58" y="480" fill="#333" font-size="10">payment path</text>
+                    <path d="M 175 476 L 205 476" stroke="#0066cc" stroke-width="2" stroke-dasharray="6,4" />
+                    <text x="213" y="480" fill="#333" font-size="10">async events</text>
+                    <path d="M 330 476 L 360 476" stroke="#d97706" stroke-width="5" />
+                    <text x="368" y="480" fill="#333" font-size="10">money movement</text>
+                    <path d="M 500 476 L 530 476" stroke="#666" stroke-width="1.5" stroke-dasharray="5,3" />
+                    <text x="538" y="480" fill="#333" font-size="10">files and reconciliation</text>
+                </g>
+            </svg>
+            <p class="diagram-caption">The indigo path is the only part the buyer waits on. Blue events fan out once a
+                payment is confirmed. Gold is real money moving between bank accounts — on its own clock, days
+                later.</p>
+        </div>
+
+        <h3>Walking Through a Payment</h3>
+        <ol>
+            <li>Meera in Pune taps <em>Pay ₹1,798</em>. Her app creates an idempotency key for this tap and calls
+                <code>POST /v1/checkouts/chk_5TQ1/payments</code>.</li>
+            <li>The <strong>payment service</strong> recomputes the cart total, asks the <strong>risk engine</strong>
+                for a quick verdict (velocity, device, account age), and inserts an attempt row with status
+                <code>CREATED</code>.</li>
+            <li>The <strong>payment executor</strong> creates an order at the <strong>payment aggregator</strong>,
+                passing <code>att_9KX2</code> as its reference. The PA returns a UPI intent link, and the attempt moves
+                to <code>PENDING</code>.</li>
+            <li>Meera's phone opens her UPI app. She enters her PIN, and NPCI routes the debit from her bank to the
+                PA's bank.</li>
+            <li>The PA sends a <strong>signed webhook</strong>: captured, with the bank's UTR. The executor verifies
+                the signature, marks the attempt <code>SUCCESS</code>, and writes an outbox row — in one transaction.
+            </li>
+            <li>Change data capture publishes the outbox row to <strong>Kafka</strong>. The ledger posts journal
+                entries, the order service confirms both seller orders, and Meera gets an SMS.</li>
+            <li>Her app, which was polling <code>GET /v1/payments/att_9KX2</code>, shows <em>Order placed</em>.</li>
+            <li>The next day, the PA settles the money into our <strong>escrow account</strong>. A week later, once
+                the return window closes, the <strong>payout service</strong> pays each seller their share.</li>
+        </ol>
+
+        <h3>Sync Where the Buyer Waits, Async Everywhere Else</h3>
+        <p>
+            It's tempting to make the payment service call the ledger, the order service and the SMS service one
+            after another before replying. That works on day one and hurts on sale night.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Concern</th>
+                    <th>Synchronous Calls</th>
+                    <th>Events on Kafka</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Latency</td>
+                    <td>Grows with every service in the chain</td>
+                    <td>The buyer waits only for the payment step</td>
+                </tr>
+                <tr>
+                    <td>Failure isolation</td>
+                    <td>SMS provider down → checkout fails</td>
+                    <td>SMS provider down → SMS is late, payment is fine</td>
+                </tr>
+                <tr>
+                    <td>Coupling</td>
+                    <td>Payment service must know every consumer</td>
+                    <td>New consumers just subscribe</td>
+                </tr>
+                <tr>
+                    <td>Sale-night spikes</td>
+                    <td>No buffer, so overload cascades</td>
+                    <td>Kafka absorbs the burst, consumers catch up</td>
+                </tr>
+                <tr>
+                    <td>Simplicity</td>
+                    <td><span class="check-icon">●</span> Easy to follow</td>
+                    <td><span class="cross-icon">○</span> Needs idempotent consumers and lag alerts</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p>
+            Notice how Kafka is used: as a <strong>broadcast</strong>, not a work queue. In a work queue, each message
+            is handled by exactly one worker. Here, one "payment succeeded" event has to reach the ledger, the order
+            service <em>and</em> the notifier, so each of them is its own consumer group and each sees every event.
+        </p>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Watch Out</div>
+            <p>Async doesn't mean "fire and forget". If the payment service updated Postgres and then published to
+                Kafka as a separate step, a crash in between would lose the event — a paid order that never gets
+                confirmed. That's why the event goes into an <strong>outbox table in the same transaction</strong> as
+                the status change, and change data capture (Debezium) publishes it from the database log.</p>
+        </div>
+
+        <!-- Section 6: Deep Dive - Idempotency -->
+        <h2 id="deep-dive-idempotency"><span class="section-number">06</span>Deep Dive: Never Charge Twice</h2>
+
+        <p>
+            Here's a scenario that plays out every single day at our scale. Meera taps <em>Pay</em> while her metro
+            train enters a tunnel.
+        </p>
+
+        <!-- DIAGRAM 2: Double charge timeline (Excalidraw-style) -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 2 — How a Retry Charges a Buyer Twice</div>
+            <svg viewBox="0 0 760 330" xmlns="http://www.w3.org/2000/svg" style="max-width:760px;">
+                <rect width="760" height="330" fill="#fefefe" rx="12" />
+                <rect width="760" height="330" fill="url(#payDotGrid)" rx="12" />
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive">
+                    <!-- Lane labels -->
+                    <text x="24" y="84" fill="#0066cc" font-size="12" font-weight="700">Buyer App</text>
+                    <text x="24" y="174" fill="#4338ca" font-size="12" font-weight="700">Payments</text>
+                    <text x="24" y="264" fill="#b45309" font-size="12" font-weight="700">PA + Bank</text>
+                    <line x1="130" y1="50" x2="130" y2="310" stroke="#e0e0e0" stroke-width="1" />
+                    <line x1="140" y1="80" x2="740" y2="80" stroke="#f0f0f0" stroke-width="1" />
+                    <line x1="140" y1="170" x2="740" y2="170" stroke="#f0f0f0" stroke-width="1" />
+                    <line x1="140" y1="260" x2="740" y2="260" stroke="#f0f0f0" stroke-width="1" />
+
+                    <!-- Time arrow -->
+                    <path d="M 150 32 L 730 32" fill="none" stroke="#ccc" stroke-width="1.5"
+                        marker-end="url(#payArrow)" filter="url(#payRoughLight)" />
+                    <text x="440" y="24" fill="#86868b" font-size="11" text-anchor="middle">TIME →</text>
+
+                    <!-- 1. First tap -->
+                    <circle cx="170" cy="80" r="7" fill="#0066cc" filter="url(#payRoughLight)" />
+                    <text x="170" y="62" fill="#0066cc" font-size="10" text-anchor="middle">taps Pay</text>
+                    <path d="M 174 88 C 185 115, 195 140, 205 158" fill="none" stroke="#0066cc" stroke-width="1.5"
+                        stroke-dasharray="5,3" filter="url(#payRoughLight)" />
+
+                    <!-- 2. First PA order -->
+                    <rect x="190" y="158" width="110" height="24" rx="6" fill="#e0e7ff" stroke="#4338ca"
+                        stroke-width="1.5" filter="url(#payRough)" />
+                    <text x="245" y="174" fill="#4338ca" font-size="10" text-anchor="middle">new PA order</text>
+                    <path d="M 245 182 C 247 205, 251 225, 255 246" fill="none" stroke="#4338ca" stroke-width="1.5"
+                        stroke-dasharray="5,3" filter="url(#payRoughLight)" />
+                    <rect x="195" y="248" width="125" height="24" rx="6" fill="#f5f5f7" stroke="#ccc"
+                        stroke-width="1" filter="url(#payRough)" />
+                    <text x="257" y="264" fill="#333" font-size="10" text-anchor="middle">₹1,798 debited ✓</text>
+
+                    <!-- 3. Reply lost -->
+                    <path d="M 300 162 C 315 135, 330 110, 345 92" fill="none" stroke="#dc382d" stroke-width="1.5"
+                        stroke-dasharray="4,4" filter="url(#payRoughLight)" />
+                    <text x="330" y="126" fill="#dc382d" font-size="14" font-weight="700">✗</text>
+                    <text x="346" y="124" fill="#dc382d" font-size="10">4G drops, no reply</text>
+
+                    <!-- 4. Second tap -->
+                    <circle cx="420" cy="80" r="7" fill="#0066cc" filter="url(#payRoughLight)" />
+                    <text x="420" y="62" fill="#0066cc" font-size="10" text-anchor="middle">sees error, taps again</text>
+                    <path d="M 424 88 C 435 115, 445 140, 455 158" fill="none" stroke="#0066cc" stroke-width="1.5"
+                        stroke-dasharray="5,3" filter="url(#payRoughLight)" />
+
+                    <!-- 5. Second PA order -->
+                    <rect x="440" y="158" width="110" height="24" rx="6" fill="#e0e7ff" stroke="#4338ca"
+                        stroke-width="1.5" filter="url(#payRough)" />
+                    <text x="495" y="174" fill="#4338ca" font-size="10" text-anchor="middle">another PA order</text>
+                    <path d="M 495 182 C 497 205, 501 225, 505 246" fill="none" stroke="#4338ca" stroke-width="1.5"
+                        stroke-dasharray="5,3" filter="url(#payRoughLight)" />
+                    <rect x="445" y="248" width="125" height="24" rx="6" fill="#fdecea" stroke="#dc382d"
+                        stroke-width="1.5" filter="url(#payRough)" />
+                    <text x="507" y="264" fill="#dc382d" font-size="10" text-anchor="middle">₹1,798 debited ✗</text>
+
+                    <!-- Result -->
+                    <rect x="598" y="146" width="142" height="50" rx="10" fill="#fdecea" stroke="#dc382d"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="669" y="167" fill="#dc382d" font-size="13" text-anchor="middle" font-weight="700">₹3,596 for 1 cart</text>
+                    <text x="669" y="184" fill="#86868b" font-size="9" text-anchor="middle">complaint + chargeback</text>
+                </g>
+            </svg>
+            <p class="diagram-caption">The first payment went through, but the app never heard back. Without an
+                idempotency key, the second tap looks exactly like a brand-new purchase.</p>
+        </div>
+
+        <p>
+            Retries aren't a corner case. They come from every direction: the buyer taps twice, the app retries after a
+            timeout, the executor retries a slow PA call, the PA delivers the same webhook three times, and Kafka
+            redelivers events after a consumer restarts. We can't stop retries — and we shouldn't, because retrying is
+            how we avoid <em>losing</em> payments.
+        </p>
+        <p>
+            Networks only offer two guarantees: <strong>at-least-once</strong> (keep retrying until you hear back) or
+            <strong>at-most-once</strong> (never retry). A payment needs both at once. The way to get that is to retry
+            freely and make every retry harmless:
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">The Rule</span>
+            <code>exactly-once  =  at-least-once delivery  +  idempotent processing</code>
+        </div>
+
+        <h3>Three Layers of Idempotency</h3>
+        <p>An idempotency key at the front door isn't enough. Every hop that can be retried needs its own guard.</p>
+
+        <div class="deep-dive open" id="dd-key">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-key')">
+                <h4>Layer 1: An Idempotency Key on the API</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        When Meera taps <em>Pay</em>, the app generates a UUID and sends it as
+                        <code>Idempotency-Key</code>. Every retry of <em>that tap</em> reuses it. A new tap after a
+                        definite failure gets a new key.
+                    </p>
+                    <p>
+                        On the server, a <strong>unique constraint does the work</strong>. The first request inserts
+                        the attempt row. A retry hits the constraint, inserts nothing, and gets back the response the
+                        first request stored. If the first request is still talking to the PA, there's no stored
+                        response yet, so we return <code>409</code> with <code>Retry-After: 1</code> and the app asks
+                        again a second later.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">SQL</span>
+            <code><span class="comment">-- 1. Claim the key. Only one request can win this insert.</span>
+<span class="keyword">INSERT INTO</span> payment_attempts (attempt_id, checkout_id, idempotency_key, method, amount_paise, status)
+<span class="keyword">VALUES</span> (<span class="string">'att_9KX2'</span>, <span class="string">'chk_5TQ1'</span>, <span class="string">'6f1c2a0e-…'</span>, <span class="string">'UPI_INTENT'</span>, <span class="number">179800</span>, <span class="string">'CREATED'</span>)
+<span class="keyword">ON CONFLICT</span> (idempotency_key) <span class="keyword">DO NOTHING</span>
+<span class="keyword">RETURNING</span> attempt_id;
+
+<span class="comment">-- 2. No row returned? It's a retry. Replay what the first request produced.</span>
+<span class="keyword">SELECT</span> attempt_id, status, response
+  <span class="keyword">FROM</span> payment_attempts
+ <span class="keyword">WHERE</span> idempotency_key = <span class="string">'6f1c2a0e-…'</span>;</code>
+        </div>
+
+        <div class="deep-dive" id="dd-pa">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-pa')">
+                <h4>Layer 2: Our Reference at the PA, and One Success per Checkout</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        The executor creates the PA order with <code>att_9KX2</code> as its reference. PAs refuse to
+                        create a second order with the same reference, so if the create call times out, the executor
+                        can simply send it again.
+                    </p>
+                    <p>
+                        That still leaves one very Indian problem: <strong>two different attempts can both
+                        succeed</strong>. Meera's first UPI attempt hangs in "pending", so she goes back and pays by
+                        card. Ten minutes later, the UPI attempt goes through as well. Each attempt was idempotent on its
+                        own — but the checkout has now been paid twice.
+                    </p>
+                    <p>
+                        A <strong>partial unique index</strong> lets the database enforce "one success per checkout".
+                        When the late UPI success tries to become the second <code>SUCCESS</code>, the update fails. The
+                        executor catches that, records the money it did receive, and sends the attempt straight to
+                        <code>REFUNDING</code>. Meera gets one order and one automatic refund.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">SQL</span>
+            <code><span class="comment">-- At most one successful attempt per checkout, enforced by the database</span>
+<span class="keyword">CREATE UNIQUE INDEX</span> one_success_per_checkout
+  <span class="keyword">ON</span> payment_attempts (checkout_id)
+  <span class="keyword">WHERE</span> status = <span class="string">'SUCCESS'</span>;</code>
+        </div>
+
+        <div class="deep-dive" id="dd-state">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-state')">
+                <h4>Layer 3: Conditional State Transitions</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Webhooks arrive more than once, and sometimes out of order — a "failed" from an earlier
+                        try can land after the "captured". So we never blindly set a status. Every transition is an
+                        <code>UPDATE</code> that only succeeds from the states it's allowed to come from.
+                    </p>
+                    <p>
+                        If it updates zero rows, the event is a duplicate or arrived too late to matter. We return
+                        <code>200</code> so the PA stops retrying, and do nothing else. The outbox row is only written
+                        when the update actually changed something, so downstream services never see a payment succeed
+                        twice.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="code-block">
+            <span class="code-block-label">SQL</span>
+            <code><span class="keyword">BEGIN</span>;
+<span class="keyword">UPDATE</span> payment_attempts
+   <span class="keyword">SET</span> status = <span class="string">'SUCCESS'</span>, pa_payment_id = <span class="string">'pay_Hx81'</span>, utr = <span class="string">'427815903311'</span>, updated_at = now()
+ <span class="keyword">WHERE</span> attempt_id = <span class="string">'att_9KX2'</span>
+   <span class="keyword">AND</span> status <span class="keyword">IN</span> (<span class="string">'CREATED'</span>, <span class="string">'PENDING'</span>);
+<span class="comment">-- 1 row  → first time we hear this: write the outbox row below</span>
+<span class="comment">-- 0 rows → duplicate or stale webhook: ROLLBACK, reply 200, done</span>
+
+<span class="keyword">INSERT INTO</span> payment_outbox (event_type, checkout_id, payload)
+<span class="keyword">VALUES</span> (<span class="string">'PAYMENT_SUCCEEDED'</span>, <span class="string">'chk_5TQ1'</span>, <span class="string">'{"attempt_id": "att_9KX2", …}'</span>);
+<span class="keyword">COMMIT</span>;</code>
+        </div>
+
+        <h3>Retrying Without Making Things Worse</h3>
+        <p>
+            Idempotency makes retries <em>safe</em>. How we space them out decides whether they're also
+            <em>kind</em> to a system that's already struggling.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Strategy</th>
+                    <th>How It Works</th>
+                    <th>Where We Use It</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Immediate</td>
+                    <td>Try again right away</td>
+                    <td>Only when the request provably never left, like a refused connection</td>
+                </tr>
+                <tr>
+                    <td>Fixed interval</td>
+                    <td>Same wait every time</td>
+                    <td>Rarely — thousands of clients end up retrying in lockstep</td>
+                </tr>
+                <tr>
+                    <td>Incremental</td>
+                    <td>Wait a little longer each time</td>
+                    <td>Status checks on a pending UPI attempt</td>
+                </tr>
+                <tr>
+                    <td>Exponential + jitter</td>
+                    <td>Double the wait, add randomness</td>
+                    <td>The default: PA API calls and Kafka consumer retries</td>
+                </tr>
+                <tr>
+                    <td>Cancel</td>
+                    <td>Stop and report</td>
+                    <td>Terminal errors (invalid UPI ID, insufficient balance) or retries used up</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p>
+            The server can help too. When we're overloaded, we reply <code>429</code> or <code>503</code> with a
+            <code>Retry-After</code> header, and our own app respects it. On sale night, that single header is what stops
+            a slowdown from turning into a retry storm.
+        </p>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Interview Tip</div>
+            <p>Saying "idempotency key" is the minimum bar. What stands out is placing a guard at
+                <strong>every hop that retries</strong> — the API, the PA call, the webhook handler, the Kafka consumers —
+                and then spotting the case none of them cover: two <em>different</em> attempts for the same checkout
+                that both succeed.</p>
+        </div>
+
+        <!-- Section 7: Deep Dive - Ledger -->
+        <h2 id="deep-dive-ledger"><span class="section-number">07</span>Deep Dive: The Double-Entry Ledger</h2>
+
+        <p>
+            Idempotency makes sure each rupee moves once. The <strong>ledger</strong> records every move, so that at
+            any moment we can answer two questions for every rupee: <em>where is it right now</em>, and <em>who does it
+            belong to</em>? Any chartered accountant would recognise the method — double-entry bookkeeping — and it
+            comes down to three rules:
+        </p>
+        <ol>
+            <li><strong>Every movement is a journal</strong> with at least two lines. Total debits equal total
+                credits, so the journal sums to zero.</li>
+            <li><strong>Entries are append-only.</strong> A mistake is fixed by posting a reversing journal, never by
+                <code>UPDATE</code> or <code>DELETE</code>.</li>
+            <li><strong>Balances are derived</strong> from entries. A balance you can't explain line by line is a
+                balance you can't trust.</li>
+        </ol>
+        <p>
+            Let's follow Meera's ₹1,798 all the way to the sellers. Her cart had a ₹1,299 kurta from a Jaipur seller
+            and ₹499 earphones from a Surat seller. ApnaBazaar takes 10% commission, and as the e-commerce operator it
+            also deducts TDS under Section 194-O (0.1% of the sale).
+        </p>
+
+        <!-- DIAGRAM 3: Money flow (Excalidraw-style) -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 3 — Where Meera's ₹1,798 Actually Goes</div>
+            <svg viewBox="0 0 780 300" xmlns="http://www.w3.org/2000/svg" style="max-width:780px;">
+                <rect width="780" height="300" fill="#fefefe" rx="12" />
+                <rect width="780" height="300" fill="url(#payDotGrid)" rx="12" />
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive">
+                    <text x="250" y="34" fill="#86868b" font-size="11" text-anchor="middle">one cart · two sellers · one UPI payment</text>
+
+                    <!-- Meera's bank -->
+                    <rect x="20" y="112" width="120" height="76" rx="10" fill="#f5f5f7" stroke="#333"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="80" y="140" fill="#333" font-size="13" text-anchor="middle" font-weight="600">Meera's</text>
+                    <text x="80" y="156" fill="#333" font-size="13" text-anchor="middle" font-weight="600">Bank</text>
+                    <text x="80" y="176" fill="#dc382d" font-size="11" text-anchor="middle" font-weight="600">− ₹1,798.00</text>
+
+                    <!-- Payment Aggregator -->
+                    <rect x="190" y="112" width="120" height="76" rx="10" fill="#fef3c7" stroke="#d97706"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="250" y="140" fill="#b45309" font-size="13" text-anchor="middle" font-weight="600">Payment</text>
+                    <text x="250" y="156" fill="#b45309" font-size="13" text-anchor="middle" font-weight="600">Aggregator</text>
+                    <text x="250" y="176" fill="#86868b" font-size="10" text-anchor="middle">holds ~1 day</text>
+
+                    <!-- Escrow -->
+                    <rect x="360" y="112" width="120" height="76" rx="10" fill="#fef3c7" stroke="#d97706"
+                        stroke-width="2.5" filter="url(#payRough)" />
+                    <text x="420" y="140" fill="#b45309" font-size="13" text-anchor="middle" font-weight="600">Escrow</text>
+                    <text x="420" y="156" fill="#b45309" font-size="13" text-anchor="middle" font-weight="600">Account</text>
+                    <text x="420" y="176" fill="#86868b" font-size="10" text-anchor="middle">till returns close</text>
+
+                    <!-- Money arrows along the chain -->
+                    <path d="M 140 150 L 172 150" fill="none" stroke="#d97706" stroke-width="5"
+                        stroke-linecap="butt" marker-end="url(#payHeadGold)" />
+                    <path d="M 310 150 L 342 150" fill="none" stroke="#d97706" stroke-width="5"
+                        stroke-linecap="butt" marker-end="url(#payHeadGold)" />
+
+                    <!-- Destinations -->
+                    <rect x="590" y="14" width="170" height="52" rx="10" fill="#ecfdf5" stroke="#059669"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="675" y="36" fill="#047857" font-size="12" text-anchor="middle" font-weight="600">Jaipur seller</text>
+                    <text x="675" y="54" fill="#333" font-size="11" text-anchor="middle">+ ₹1,167.80</text>
+
+                    <rect x="590" y="84" width="170" height="52" rx="10" fill="#ecfdf5" stroke="#059669"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="675" y="106" fill="#047857" font-size="12" text-anchor="middle" font-weight="600">Surat seller</text>
+                    <text x="675" y="124" fill="#333" font-size="11" text-anchor="middle">+ ₹448.60</text>
+
+                    <rect x="590" y="154" width="170" height="52" rx="10" fill="#e0e7ff" stroke="#4338ca"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="675" y="176" fill="#4338ca" font-size="12" text-anchor="middle" font-weight="600">ApnaBazaar</text>
+                    <text x="675" y="194" fill="#333" font-size="11" text-anchor="middle">₹179.80 commission</text>
+
+                    <rect x="590" y="224" width="170" height="52" rx="10" fill="#f5f5f7" stroke="#333"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="675" y="246" fill="#333" font-size="12" text-anchor="middle" font-weight="600">Income Tax Dept</text>
+                    <text x="675" y="264" fill="#333" font-size="11" text-anchor="middle">₹1.80 TDS</text>
+
+                    <!-- Fan-out from escrow -->
+                    <path d="M 480 138 C 530 138, 540 40, 574 40" fill="none" stroke="#d97706" stroke-width="5"
+                        stroke-linecap="butt" marker-end="url(#payHeadGold)" />
+                    <path d="M 480 146 C 530 146, 545 110, 574 110" fill="none" stroke="#d97706" stroke-width="3.5"
+                        stroke-linecap="butt" marker-end="url(#payHeadGold)" />
+                    <path d="M 480 154 C 530 154, 545 180, 578 180" fill="none" stroke="#d97706" stroke-width="2"
+                        stroke-linecap="butt" marker-end="url(#payHeadGoldSmall)" />
+                    <path d="M 480 162 C 530 162, 540 250, 578 250" fill="none" stroke="#d97706" stroke-width="1.5"
+                        stroke-linecap="butt" marker-end="url(#payHeadGoldSmall)" />
+
+                    <!-- Timeline -->
+                    <path d="M 40 250 L 545 250" fill="none" stroke="#ccc" stroke-width="1.5"
+                        stroke-dasharray="4,4" />
+                    <circle cx="165" cy="250" r="5" fill="#d97706" />
+                    <circle cx="335" cy="250" r="5" fill="#d97706" />
+                    <circle cx="520" cy="250" r="5" fill="#d97706" />
+                    <text x="165" y="274" fill="#b45309" font-size="12" text-anchor="middle" font-weight="700">T+0</text>
+                    <text x="165" y="290" fill="#86868b" font-size="10" text-anchor="middle">UPI debit</text>
+                    <text x="335" y="274" fill="#b45309" font-size="12" text-anchor="middle" font-weight="700">T+1</text>
+                    <text x="335" y="290" fill="#86868b" font-size="10" text-anchor="middle">PA settles</text>
+                    <text x="520" y="274" fill="#b45309" font-size="12" text-anchor="middle" font-weight="700">T+7</text>
+                    <text x="520" y="290" fill="#86868b" font-size="10" text-anchor="middle">payouts</text>
+                </g>
+            </svg>
+            <p class="diagram-caption">The money takes a week to reach the sellers and passes through two holding
+                accounts on the way. The ledger has to say where every rupee is at each step.</p>
+        </div>
+
+        <p>
+            Here are the four journals behind that picture. Each one balances on its own, and together they bring every
+            temporary account back to zero.
+        </p>
+
+        <div class="table-scroll reveal-element">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Journal</th>
+                        <th>Account</th>
+                        <th class="num">Debit ₹</th>
+                        <th class="num">Credit ₹</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="journal-name">① capture · T+0</td>
+                        <td>pa_receivable</td>
+                        <td class="num">1,798.00</td>
+                        <td class="num"></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>seller_payable:jaipur</td>
+                        <td class="num"></td>
+                        <td class="num">1,299.00</td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>seller_payable:surat</td>
+                        <td class="num"></td>
+                        <td class="num">499.00</td>
+                    </tr>
+                    <tr class="journal-start">
+                        <td class="journal-name">② fees · T+0</td>
+                        <td>seller_payable:jaipur</td>
+                        <td class="num">131.20</td>
+                        <td class="num"></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>seller_payable:surat</td>
+                        <td class="num">50.40</td>
+                        <td class="num"></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>commission_revenue</td>
+                        <td class="num"></td>
+                        <td class="num">179.80</td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>tds_payable</td>
+                        <td class="num"></td>
+                        <td class="num">1.80</td>
+                    </tr>
+                    <tr class="journal-start">
+                        <td class="journal-name">③ settle · T+1</td>
+                        <td>escrow_bank</td>
+                        <td class="num">1,798.00</td>
+                        <td class="num"></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>pa_receivable</td>
+                        <td class="num"></td>
+                        <td class="num">1,798.00</td>
+                    </tr>
+                    <tr class="journal-start">
+                        <td class="journal-name">④ payout · T+7</td>
+                        <td>seller_payable:jaipur</td>
+                        <td class="num">1,167.80</td>
+                        <td class="num"></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>seller_payable:surat</td>
+                        <td class="num">448.60</td>
+                        <td class="num"></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>escrow_bank</td>
+                        <td class="num"></td>
+                        <td class="num">1,616.40</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p>
+            Check the results. <code>pa_receivable</code> goes up by 1,798 and back down by 1,798: zero. The Jaipur
+            seller's payable is 1,299 − 131.20 − 1,167.80: zero. What's left in <code>escrow_bank</code> is exactly
+            ₹181.60 — our commission plus the TDS we owe the government. If any of those didn't come out to zero,
+            something is wrong, and the ledger tells us which journal.
+        </p>
+
+        <div class="callout">
+            <div class="callout-label">Real-World Note</div>
+            <p>A real journal ② has a few more lines: GST on the commission, and the GST TCS that marketplaces collect.
+                Cards would also add a gateway fee line (UPI payments carry zero MDR). More lines, same rule —
+                debits equal credits.</p>
+        </div>
+
+        <h3>Posting a Journal</h3>
+        <p>
+            A journal is posted in <strong>one transaction</strong>, and its ID is derived from the event that caused
+            it: <code>capture:att_9KX2</code>. If Kafka delivers the same event twice, the second insert into
+            <code>ledger_journals</code> hits the primary key and nothing is posted twice. The ledger service also
+            checks that the lines balance before committing, and a nightly job runs the auditor's favourite query
+            to prove it.
+        </p>
+
+        <div class="code-block">
+            <span class="code-block-label">SQL</span>
+            <code><span class="keyword">BEGIN</span>;
+<span class="keyword">INSERT INTO</span> ledger_journals (journal_id, kind) <span class="keyword">VALUES</span> (<span class="string">'capture:att_9KX2'</span>, <span class="string">'CAPTURE'</span>);
+  <span class="comment">-- replayed event → duplicate journal_id → ROLLBACK, nothing posted twice</span>
+<span class="keyword">INSERT INTO</span> ledger_entries (journal_id, account_id, direction, amount_paise) <span class="keyword">VALUES</span>
+  (<span class="string">'capture:att_9KX2'</span>, <span class="string">'pa_receivable'</span>,            <span class="string">'DEBIT'</span>,  <span class="number">179800</span>),
+  (<span class="string">'capture:att_9KX2'</span>, <span class="string">'seller_payable:S_JPR_221'</span>, <span class="string">'CREDIT'</span>, <span class="number">129900</span>),
+  (<span class="string">'capture:att_9KX2'</span>, <span class="string">'seller_payable:S_SRT_087'</span>, <span class="string">'CREDIT'</span>,  <span class="number">49900</span>);
+<span class="keyword">COMMIT</span>;
+
+<span class="comment">-- Must always return zero rows</span>
+<span class="keyword">SELECT</span> journal_id
+  <span class="keyword">FROM</span> ledger_entries
+ <span class="keyword">GROUP BY</span> journal_id
+<span class="keyword">HAVING SUM</span>(<span class="keyword">CASE</span> direction <span class="keyword">WHEN</span> <span class="string">'DEBIT'</span> <span class="keyword">THEN</span> amount_paise <span class="keyword">ELSE</span> -amount_paise <span class="keyword">END</span>) &lt;&gt; <span class="number">0</span>;</code>
+        </div>
+
+        <div class="deep-dive" id="dd-balance">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-balance')">
+                <h4>Where Do Balances Come From?</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Summing millions of entries every time a seller opens their dashboard would be slow. So the
+                        ledger keeps an <code>account_balances</code> table and updates it <strong>in the same
+                        transaction</strong> as the entries, with a version number for optimistic locking. The table is a
+                        cache of the entries, not a second source of truth: a nightly job recomputes every balance from
+                        the entries and alerts on any difference.
+                    </p>
+                    <p>
+                        This is the original idea behind a "wallet" service. A seller's balance isn't a number we set —
+                        it's the sum of everything that happened to their account, and we can always show them the
+                        lines that add up to it.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="deep-dive open" id="dd-hot">
+            <div class="deep-dive-header" onclick="toggleDeepDive('dd-hot')">
+                <h4>The Hot Account Problem</h4>
+                <div class="deep-dive-toggle">+</div>
+            </div>
+            <div class="deep-dive-content">
+                <div class="deep-dive-content-inner">
+                    <p>
+                        Look at journal ① again. <em>Every</em> payment debits <code>pa_receivable</code>. On sale
+                        night, that's 1,500 updates a second to one balance row, and each one waits for the row lock
+                        held by the one before. Seller accounts are spread out, but this system account becomes a single
+                        point of contention.
+                    </p>
+                    <p>
+                        The fix is to <strong>split the hot account</strong> into sub-accounts —
+                        <code>pa_receivable:00</code> to <code>pa_receivable:15</code> — and pick one with
+                        <code>hash(attempt_id) % 16</code>. The real balance is the sum of the sixteen, which only
+                        reports and recon need. Another option is to not keep a running balance for system accounts at
+                        all and roll them up every minute instead.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Why Not Just a Balance Column?</div>
+            <p>A balance column tells you <em>what</em>. A ledger tells you <em>why</em>. When the Jaipur seller asks
+                why they received ₹1,167.80 instead of ₹1,299, support can show the exact lines — commission ₹129.90,
+                TDS ₹1.30 — instead of "the system says so". With auditors, the tax department and 3 lakh sellers
+                looking at your numbers, that difference is everything.</p>
+        </div>
+
+        <!-- Section 8: Deep Dive - UPI pending & failures -->
+        <h2 id="deep-dive-failures"><span class="section-number">08</span>Deep Dive: UPI Pending &amp; Failed Payments</h2>
+
+        <p>
+            Meera enters her PIN. Her bank debits ₹1,798. Then nothing happens. Her UPI app shows a spinner, then
+            <em>"Transaction pending"</em>. Somewhere between her bank, NPCI and the PA's bank, a response timed out.
+        </p>
+        <p>
+            UPI is a chain of independent systems, each with its own timeouts. When one of them stalls mid-flight,
+            <strong>nobody knows the outcome for a while</strong> — sometimes seconds, occasionally much longer. This is
+            where most "money debited, order not placed" complaints come from. The golden rule: <strong>never
+            guess.</strong>
+        </p>
+
+        <!-- DIAGRAM 4: Attempt state machine (Excalidraw-style) -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 4 — The Life of a Payment Attempt</div>
+            <svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" style="max-width:760px;">
+                <rect width="760" height="300" fill="#fefefe" rx="12" />
+                <rect width="760" height="300" fill="url(#payDotGrid)" rx="12" />
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive">
+                    <!-- States -->
+                    <rect x="20" y="122" width="130" height="56" rx="12" fill="#f5f5f7" stroke="#333"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="85" y="148" fill="#333" font-size="13" text-anchor="middle" font-weight="700">CREATED</text>
+                    <text x="85" y="166" fill="#86868b" font-size="10" text-anchor="middle">row inserted</text>
+
+                    <rect x="215" y="122" width="130" height="56" rx="12" fill="#fef3c7" stroke="#d97706"
+                        stroke-width="2.5" filter="url(#payRough)" />
+                    <text x="280" y="148" fill="#b45309" font-size="13" text-anchor="middle" font-weight="700">PENDING</text>
+                    <text x="280" y="166" fill="#86868b" font-size="10" text-anchor="middle">waiting on the bank</text>
+
+                    <rect x="430" y="36" width="130" height="56" rx="12" fill="#ecfdf5" stroke="#059669"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="495" y="62" fill="#047857" font-size="13" text-anchor="middle" font-weight="700">SUCCESS</text>
+                    <text x="495" y="80" fill="#86868b" font-size="10" text-anchor="middle">order confirmed</text>
+
+                    <rect x="430" y="208" width="130" height="56" rx="12" fill="#fdecea" stroke="#dc382d"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="495" y="234" fill="#dc382d" font-size="13" text-anchor="middle" font-weight="700">FAILED</text>
+                    <text x="495" y="252" fill="#86868b" font-size="10" text-anchor="middle">bank said no</text>
+
+                    <rect x="615" y="36" width="130" height="56" rx="12" fill="#e0e7ff" stroke="#4338ca"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="680" y="62" fill="#4338ca" font-size="13" text-anchor="middle" font-weight="700">REFUNDING</text>
+                    <text x="680" y="80" fill="#86868b" font-size="10" text-anchor="middle">refund sent to PA</text>
+
+                    <rect x="615" y="208" width="130" height="56" rx="12" fill="#e0e7ff" stroke="#4338ca"
+                        stroke-width="2.5" filter="url(#payRough)" />
+                    <text x="680" y="234" fill="#4338ca" font-size="13" text-anchor="middle" font-weight="700">REFUNDED</text>
+                    <text x="680" y="252" fill="#86868b" font-size="10" text-anchor="middle">money back</text>
+
+                    <!-- Transitions -->
+                    <path d="M 150 150 C 170 148, 190 152, 209 150" fill="none" stroke="#4338ca" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowIndigo)" filter="url(#payRoughLight)" />
+                    <text x="182" y="140" fill="#4338ca" font-size="10" text-anchor="middle">PA order</text>
+
+                    <path d="M 345 136 C 380 120, 400 80, 424 70" fill="none" stroke="#059669" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowGreen)" filter="url(#payRoughLight)" />
+                    <text x="383" y="86" fill="#047857" font-size="10" text-anchor="end">captured</text>
+
+                    <path d="M 345 164 C 380 180, 400 220, 424 230" fill="none" stroke="#dc382d" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowRed)" filter="url(#payRoughLight)" />
+                    <text x="383" y="224" fill="#dc382d" font-size="10" text-anchor="end">declined</text>
+
+                    <path d="M 560 64 C 580 62, 595 66, 609 64" fill="none" stroke="#4338ca" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowIndigo)" filter="url(#payRoughLight)" />
+                    <text x="587" y="26" fill="#4338ca" font-size="10" text-anchor="middle">cancel · return</text>
+
+                    <path d="M 680 92 C 678 130, 682 170, 680 202" fill="none" stroke="#4338ca" stroke-width="2"
+                        stroke-linecap="round" marker-end="url(#payArrowIndigo)" filter="url(#payRoughLight)" />
+                    <text x="690" y="152" fill="#4338ca" font-size="10">PA confirms</text>
+
+                    <!-- Late or duplicate success -->
+                    <path d="M 345 150 C 450 150, 600 150, 640 98" fill="none" stroke="#4338ca" stroke-width="1.5"
+                        stroke-dasharray="5,3" stroke-linecap="round" marker-end="url(#payArrowIndigo)"
+                        filter="url(#payRoughLight)" />
+                    <text x="480" y="172" fill="#4338ca" font-size="10" text-anchor="middle">success, but checkout already paid</text>
+
+                    <!-- Self-loop on PENDING -->
+                    <path d="M 255 122 C 245 74, 315 74, 305 116" fill="none" stroke="#d97706" stroke-width="1.5"
+                        stroke-linecap="round" marker-end="url(#payArrowGold)" filter="url(#payRoughLight)" />
+                    <text x="280" y="64" fill="#b45309" font-size="10" text-anchor="middle">no reply → status check</text>
+
+                    <text x="380" y="290" fill="#333" font-size="11" text-anchor="middle">A timeout never moves an attempt to FAILED. Only the bank's answer does.</text>
+                </g>
+            </svg>
+            <p class="diagram-caption">Statuses only move forward along these arrows. Every transition is a conditional
+                UPDATE, so a duplicate or out-of-order webhook simply changes nothing.</p>
+        </div>
+
+        <h3>Rules for Pending Payments</h3>
+        <ul>
+            <li><strong>A timeout is not a failure.</strong> If the PA call times out or no webhook arrives, the
+                attempt stays <code>PENDING</code>. Marking it <code>FAILED</code> invites Meera to pay again — and
+                then the first one succeeds.</li>
+            <li><strong>Webhooks first, status checks second.</strong> The PA's webhook is the main signal. A
+                background job checks <code>PENDING</code> attempts with increasing gaps. NPCI caps how often a single
+                transaction's status may be checked, so this is a handful of well-spaced checks, not a tight loop.</li>
+            <li><strong>Tell the buyer the truth.</strong> The app shows <em>"Payment processing. Please don't pay
+                again — if money was debited, we'll confirm your order or refund it automatically."</em> Meera gets an
+                SMS or WhatsApp message the moment the status is final.</li>
+            <li><strong>Hold the stock, then let go.</strong> The checkout holds inventory for 15 minutes. If a success
+                arrives after that, we confirm the order if stock is still there and refund automatically if it isn't.
+            </li>
+            <li><strong>Know what the banks owe the buyer.</strong> If a UPI debit ultimately fails, RBI's turnaround
+                rules require the bank to reverse it by T+1, and to pay the customer ₹100 a day in compensation beyond
+                that. We store the UTR and the failure reason so support can tell Meera exactly where her money is.</li>
+        </ul>
+
+        <h3>When Downstream Processing Fails</h3>
+        <p>
+            Consumers fail too: the ledger database is mid-failover, or a new order-service release has a bug. One
+            failing event mustn't block every event behind it, so failures move aside instead of being retried in place.
+        </p>
+        <ul>
+            <li><strong>Retry topics.</strong> A failed event goes to <code>payment-events.retry.1m</code>, then
+                <code>.retry.10m</code>, then <code>.retry.1h</code>, carrying its attempt count.</li>
+            <li><strong>Dead-letter queue.</strong> After the last retry, it lands in
+                <code>payment-events.dlq</code> and pages the on-call engineer. An ops console shows the event and
+                its error, and replays it once the cause is fixed.</li>
+            <li><strong>Replays are safe.</strong> Every consumer is idempotent — the ledger by
+                <code>journal_id</code>, the order service by conditional updates — so replaying an event, or
+                processing it out of order, can't double-count anything.</li>
+        </ul>
+
+        <h3>When Things Break</h3>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Failure</th>
+                    <th>What the Buyer Sees</th>
+                    <th>What We Do</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Webhook never arrives</td>
+                    <td>"Processing…" a little longer</td>
+                    <td>Status checks find the result. If even they miss it, the next morning's reconciliation won't.</td>
+                </tr>
+                <tr>
+                    <td>PA times out on create</td>
+                    <td>A short wait</td>
+                    <td>Retry with the same <code>attempt_id</code>; the PA dedupes on our reference.</td>
+                </tr>
+                <tr>
+                    <td>Buyer abandons the UPI app</td>
+                    <td>Nothing</td>
+                    <td>The attempt expires at the PA and becomes <code>FAILED</code>; stock is released after 15
+                        minutes.</td>
+                </tr>
+                <tr>
+                    <td>Two attempts both succeed</td>
+                    <td>One order, one refund SMS</td>
+                    <td>The unique index rejects the second <code>SUCCESS</code>; it goes straight to
+                        <code>REFUNDING</code>.</td>
+                </tr>
+                <tr>
+                    <td>Ledger consumer crashes</td>
+                    <td>Nothing</td>
+                    <td>Kafka redelivers; the duplicate <code>journal_id</code> is ignored.</td>
+                </tr>
+                <tr>
+                    <td>A big bank's UPI is degraded</td>
+                    <td>More declines from that bank</td>
+                    <td>Show a "your bank is facing issues — try another method" banner for that bank's buyers.</td>
+                </tr>
+                <tr>
+                    <td>One PA is degraded</td>
+                    <td>Slightly slower checkout</td>
+                    <td>Route new attempts to the second PA.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="callout">
+            <div class="callout-label">Multi-PA Routing</div>
+            <p>Large Indian merchants rarely depend on a single payment aggregator. The executor tracks the live success
+                rate for each <strong>PA × method × bank</strong> combination over the last few minutes and sends each
+                new attempt to the best one. When one PA's UPI success rate drops on sale night, traffic shifts within
+                a minute. Because our <code>attempt_id</code> is the reference everywhere, recon doesn't care which PA
+                handled an attempt.</p>
+        </div>
+
+        <!-- Section 9: Deep Dive - Recon & payouts -->
+        <h2 id="deep-dive-recon"><span class="section-number">09</span>Deep Dive: Reconciliation &amp; Seller Payouts</h2>
+
+        <h3>Why the Happy Path Isn't Enough</h3>
+        <p>
+            Everything so far depends on messages arriving: webhooks, Kafka events, API replies. Across crores of
+            payments, some won't. <strong>Reconciliation</strong> is the safety net that doesn't trust any single
+            message. Every morning, it compares three independent records of the same money.
+        </p>
+
+        <!-- DIAGRAM 5: Three-way reconciliation (Excalidraw-style) -->
+        <div class="diagram-container reveal-element">
+            <div class="diagram-title">Diagram 5 — Three-Way Reconciliation, Every Morning</div>
+            <svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" style="max-width:760px;">
+                <rect width="760" height="300" fill="#fefefe" rx="12" />
+                <rect width="760" height="300" fill="url(#payDotGrid)" rx="12" />
+
+                <g font-family="'Segoe Print', 'Comic Neue', cursive">
+                    <!-- Sources -->
+                    <rect x="30" y="24" width="190" height="66" rx="10" fill="#e0e7ff" stroke="#4338ca"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="125" y="51" fill="#4338ca" font-size="13" text-anchor="middle" font-weight="700">Our Ledger</text>
+                    <text x="125" y="71" fill="#86868b" font-size="10" text-anchor="middle">attempt_id · UTR · amount</text>
+
+                    <rect x="285" y="24" width="190" height="66" rx="10" fill="#fef3c7" stroke="#d97706"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="380" y="51" fill="#b45309" font-size="13" text-anchor="middle" font-weight="700">PA Settlement File</text>
+                    <text x="380" y="71" fill="#86868b" font-size="10" text-anchor="middle">our reference · UTR · fee</text>
+
+                    <rect x="540" y="24" width="190" height="66" rx="10" fill="#f5f5f7" stroke="#333"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="635" y="51" fill="#333" font-size="13" text-anchor="middle" font-weight="700">Escrow Bank Statement</text>
+                    <text x="635" y="71" fill="#86868b" font-size="10" text-anchor="middle">batch UTR · credited ₹</text>
+
+                    <!-- Recon engine -->
+                    <rect x="230" y="128" width="300" height="62" rx="12" fill="#ecfdf5" stroke="#059669"
+                        stroke-width="2.5" filter="url(#payRough)" />
+                    <text x="380" y="154" fill="#047857" font-size="14" text-anchor="middle" font-weight="700">Recon Engine</text>
+                    <text x="380" y="174" fill="#86868b" font-size="10" text-anchor="middle">match on reference + UTR + amount + date</text>
+
+                    <path d="M 125 90 C 160 105, 230 115, 274 124" fill="none" stroke="#4338ca" stroke-width="1.8"
+                        stroke-linecap="round" marker-end="url(#payArrowIndigo)" filter="url(#payRoughLight)" />
+                    <path d="M 380 90 C 378 104, 382 112, 380 122" fill="none" stroke="#d97706" stroke-width="1.8"
+                        stroke-linecap="round" marker-end="url(#payArrowGold)" filter="url(#payRoughLight)" />
+                    <path d="M 635 90 C 600 105, 530 115, 486 124" fill="none" stroke="#666" stroke-width="1.8"
+                        stroke-linecap="round" marker-end="url(#payArrow)" filter="url(#payRoughLight)" />
+
+                    <!-- Outcomes -->
+                    <rect x="20" y="230" width="210" height="52" rx="10" fill="#ecfdf5" stroke="#059669"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="125" y="252" fill="#047857" font-size="12" text-anchor="middle" font-weight="700">✓ Matched</text>
+                    <text x="125" y="270" fill="#86868b" font-size="10" text-anchor="middle">almost everything · done</text>
+
+                    <rect x="275" y="230" width="210" height="52" rx="10" fill="#fef3c7" stroke="#d97706"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="380" y="252" fill="#b45309" font-size="12" text-anchor="middle" font-weight="700">⟳ Auto-fixed</text>
+                    <text x="380" y="270" fill="#86868b" font-size="10" text-anchor="middle">known pattern → standard fix</text>
+
+                    <rect x="530" y="230" width="210" height="52" rx="10" fill="#fdecea" stroke="#dc382d"
+                        stroke-width="2" filter="url(#payRough)" />
+                    <text x="635" y="252" fill="#dc382d" font-size="12" text-anchor="middle" font-weight="700">⚑ Finance ops queue</text>
+                    <text x="635" y="270" fill="#86868b" font-size="10" text-anchor="middle">a person investigates</text>
+
+                    <path d="M 290 190 C 240 205, 165 213, 130 224" fill="none" stroke="#059669" stroke-width="1.8"
+                        stroke-linecap="round" marker-end="url(#payArrowGreen)" filter="url(#payRoughLight)" />
+                    <path d="M 380 190 C 378 204, 382 214, 380 224" fill="none" stroke="#d97706" stroke-width="1.8"
+                        stroke-linecap="round" marker-end="url(#payArrowGold)" filter="url(#payRoughLight)" />
+                    <path d="M 470 190 C 520 205, 595 213, 630 224" fill="none" stroke="#dc382d" stroke-width="1.8"
+                        stroke-linecap="round" marker-end="url(#payArrowRed)" filter="url(#payRoughLight)" />
+                </g>
+            </svg>
+            <p class="diagram-caption">Three independent records of the same money. Almost everything matches; the rest
+                is sorted by whether a machine or a person should fix it.</p>
+        </div>
+
+        <ul>
+            <li><strong>Our ledger</strong> says what we believe happened.</li>
+            <li><strong>The PA's settlement file</strong>, downloaded each morning, says what the PA processed: every
+                payment with our reference, the bank's UTR, the fee, and which settlement batch it went into.</li>
+            <li><strong>The escrow bank statement</strong> says what money actually arrived. One credit per settlement
+                batch, which should equal the batch total minus fees.</li>
+        </ul>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>What Recon Finds</th>
+                    <th>Likely Cause</th>
+                    <th>Fix</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>PA captured it, our ledger has nothing</td>
+                    <td>Webhook lost and status checks missed</td>
+                    <td><strong>Auto:</strong> post the capture, then confirm the order or refund it</td>
+                </tr>
+                <tr>
+                    <td>We captured it, the PA file doesn't have it</td>
+                    <td>Settled in the next batch (cut-off timing)</td>
+                    <td><strong>Auto:</strong> carry forward a day; alert if still missing on day three</td>
+                </tr>
+                <tr>
+                    <td>PA fee differs from the contract</td>
+                    <td>Wrong pricing applied</td>
+                    <td><strong>Manual:</strong> finance raises a dispute with the PA</td>
+                </tr>
+                <tr>
+                    <td>Bank credit lower than the batch</td>
+                    <td>Unexpected deduction</td>
+                    <td><strong>Manual:</strong> finance investigates with the bank</td>
+                </tr>
+                <tr>
+                    <td>Money in escrow with no reference</td>
+                    <td>Unknown</td>
+                    <td><strong>Manual:</strong> parked in a suspense account until explained</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p>
+            Mismatches fall into three groups: <strong>known and automatable</strong>, <strong>known but needing a
+            person</strong>, and <strong>unknown</strong>. The goal over time is to move cases up that list: every
+            unknown that gets explained becomes a rule, and every manual fix done often enough becomes automatic.
+        </p>
+        <p>
+            Recon also runs <em>inside</em> our own walls. Every <code>SUCCESS</code> attempt must have a capture
+            journal, and every capture journal must have a confirmed or refunded order. This catches bugs in our own
+            consumers long before a seller notices.
+        </p>
+
+        <h3>Paying the Sellers</h3>
+        <p>
+            Pay-out is pay-in in reverse — and in some ways riskier, because money that leaves for the wrong account
+            is very hard to get back.
+        </p>
+        <ul>
+            <li><strong>When.</strong> A seller order's money becomes payable once the return window closes, seven
+                days after delivery. A daily run at 10 AM pays every seller their eligible balance in one transfer.</li>
+            <li><strong>Where.</strong> Every seller's bank account is verified at onboarding with a <strong>penny
+                drop</strong>: we send ₹1 over IMPS and check that the account holder's name the bank returns matches
+                the seller's KYC.</li>
+            <li><strong>Exactly once.</strong> Each payout has a <code>payout_id</code> that we send to the bank as
+                the transfer reference, and the bank rejects duplicates. A payout that times out stays
+                <code>PENDING</code> until its UTR appears on the bank statement — never retried blindly.</li>
+            <li><strong>Ledger first.</strong> Before calling the bank, we move the money from
+                <code>seller_payable</code> to <code>payout_in_transit</code>. When the bank confirms, it moves on to
+                the escrow. If the transfer fails — say, the account was closed — a reversing journal puts it back and
+                the seller is asked to update their bank details.</li>
+        </ul>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Rail</th>
+                    <th>Amount</th>
+                    <th>Speed</th>
+                    <th>Used For</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>IMPS</td>
+                    <td>Up to ₹5 lakh</td>
+                    <td>Instant, 24×7</td>
+                    <td>Most daily payouts, penny drops</td>
+                </tr>
+                <tr>
+                    <td>NEFT</td>
+                    <td>Any amount</td>
+                    <td>Half-hourly batches, 24×7</td>
+                    <td>Larger payouts that aren't urgent</td>
+                </tr>
+                <tr>
+                    <td>RTGS</td>
+                    <td>₹2 lakh and above</td>
+                    <td>Real time</td>
+                    <td>Big sellers after the festive sale</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Four Eyes on Money Out</div>
+            <p>Any payout or ledger adjustment made by hand — outside the daily run — needs a <strong>maker</strong>
+                to create it and a different <strong>checker</strong> to approve it. Changing a seller's bank account
+                triggers a fresh penny drop and a 24-hour hold on payouts. Most payout fraud starts with exactly that
+                change.</p>
+        </div>
+
+        <!-- Section 10: Deep Dive - Security, compliance & resilience -->
+        <h2 id="deep-dive-security"><span class="section-number">10</span>Deep Dive: Security, Compliance &amp; Resilience</h2>
+
+        <h3>Never Touch a Card Number</h3>
+        <p>
+            Since October 2022, RBI's tokenisation rules have stopped merchants in India from storing card numbers at
+            all. Saved cards live as <strong>network tokens</strong> issued for our merchant account, useless anywhere
+            else. On top of that, any system that handles raw card data falls under the full weight of PCI DSS. The
+            simplest way to comply with both is to make sure card numbers <strong>never reach our servers</strong>:
+            the PA's checkout collects them.
+        </p>
+        <ol>
+            <li>Meera chooses <em>Card</em>. The payment service creates an attempt and registers an order at the
+                PA with <code>att_9KX2</code> as the reference. The PA returns an order token.</li>
+            <li>The app opens the PA's checkout (an SDK screen or a hosted page) with that token and a return URL.</li>
+            <li>Meera types her card details into the PA's form — or picks a saved card, which is only a token.</li>
+            <li>Her bank asks for an OTP. India requires this extra factor for online card payments, and it all
+                happens inside the PA's flow.</li>
+            <li>The PA redirects her back to our return URL with a payment ID and a signature.</li>
+            <li>Separately, the PA's <strong>signed webhook</strong> tells our backend the result, and that's what
+                moves the attempt to <code>SUCCESS</code>.</li>
+        </ol>
+
+        <div class="callout callout-warning">
+            <div class="callout-label">⚠️ Never Trust the Redirect</div>
+            <p>The redirect in step 5 passes through the buyer's browser, so it can be lost, replayed or forged. Use it
+                only to show a nicer screen sooner. The order is confirmed by the <strong>server-to-server</strong>
+                webhook (or a status check), after verifying its signature.</p>
+        </div>
+
+        <h3>Threats and Defences</h3>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Threat</th>
+                    <th>Defence</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Eavesdropping</td>
+                    <td>TLS everywhere; mTLS between internal services</td>
+                </tr>
+                <tr>
+                    <td>Forged or tampered webhooks</td>
+                    <td>HMAC signature checked first; timestamps reject old replays</td>
+                </tr>
+                <tr>
+                    <td>Tampered amounts</td>
+                    <td>The server recomputes every total from the cart</td>
+                </tr>
+                <tr>
+                    <td>Card theft</td>
+                    <td>No card numbers stored — tokens only</td>
+                </tr>
+                <tr>
+                    <td>Bots and DDoS on sale night</td>
+                    <td>WAF, per-user and per-device rate limits at the gateway</td>
+                </tr>
+                <tr>
+                    <td>Fraud and stolen accounts</td>
+                    <td>Risk engine: velocity, device fingerprint, new-account and address checks</td>
+                </tr>
+                <tr>
+                    <td>Insider misuse</td>
+                    <td>Least privilege, maker-checker, append-only ledger with full audit trail</td>
+                </tr>
+                <tr>
+                    <td>Data loss</td>
+                    <td>Synchronous standby, point-in-time backups, a second region</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Keep Payment Data in India</h3>
+        <p>
+            RBI's data-localisation rule requires payment system data to be stored only in India. So the primary
+            region is <strong>Mumbai</strong>, disaster recovery is <strong>Hyderabad</strong>, and that includes
+            backups, logs and analytics copies. Any tool hosted abroad — error tracking, log search — only ever sees
+            masked data.
+        </p>
+
+        <h3>Never Lose a Committed Payment</h3>
+        <p>
+            Replication choices matter more here than almost anywhere else. If the database acknowledges Meera's
+            payment and then loses it in a failover, she's been charged for an order that doesn't exist.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Setup</th>
+                    <th>If the Primary Dies</th>
+                    <th>Verdict</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Primary + async replicas</td>
+                    <td>The last few seconds of commits can vanish</td>
+                    <td><span class="cross-icon">○</span> Not for payment state</td>
+                </tr>
+                <tr>
+                    <td>Primary + synchronous standby in another zone</td>
+                    <td>No acknowledged commit is lost</td>
+                    <td><span class="check-icon">●</span> Our choice in Mumbai</td>
+                </tr>
+                <tr>
+                    <td>Distributed SQL (Raft-based)</td>
+                    <td>Every write is on a majority before it's acknowledged</td>
+                    <td><span class="check-icon">●</span> When one primary is outgrown</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p>
+            Payment status is always <strong>read from the primary</strong>. If the app read from a lagging replica,
+            Meera could see <code>PENDING</code> a second after her payment succeeded — and pay again. Replicas serve
+            dashboards and analytics only. Hyderabad gets an async copy, so a full regional failover may lose a few
+            seconds of writes — and the next reconciliation finds exactly those payments in the PA's file.
+        </p>
+
+        <h3>Getting Ready for Sale Night</h3>
+        <ul>
+            <li><strong>Tell the PAs.</strong> Share the expected peak with both PAs weeks ahead; they scale their side
+                too.</li>
+            <li><strong>Pre-scale and pre-warm.</strong> Stateless services are scaled up before midnight, and
+                database connection pools are warmed.</li>
+            <li><strong>Queue at the door.</strong> A virtual waiting room at the gateway admits buyers at a rate
+                checkout can handle. It's better to wait 30 seconds than to see an error.</li>
+            <li><strong>Shard when needed.</strong> 2,000 attempts a second at ~10 writes each is about 20,000 writes
+                a second. If that's too close to one primary's comfort zone, split the payments database by
+                <code>hash(checkout_id)</code> — every query about one checkout stays on one shard.</li>
+            <li><strong>Batch the ledger.</strong> The ledger consumer posts 100 journals per transaction, turning
+                ~12,000 row inserts a second into a little over a hundred commits.</li>
+        </ul>
+
+        <!-- Section 11: Final Design -->
+        <h2 id="final"><span class="section-number">11</span>Final Architecture &amp; Interview Bar</h2>
+
+        <p>
+            Here's everything in one place. Notice that most of the components exist not to move money faster, but to
+            make sure every rupee can be accounted for.
+        </p>
+
+        <table class="comparison-table reveal-element">
+            <thead>
+                <tr>
+                    <th>Component</th>
+                    <th>Technology</th>
+                    <th>Rationale</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>API Gateway</td>
+                    <td>Kong / AWS API Gateway</td>
+                    <td>Auth, rate limits, sale-night waiting room</td>
+                </tr>
+                <tr>
+                    <td>Payment Service</td>
+                    <td>Stateless service</td>
+                    <td>Idempotency keys, server-side totals, risk checks</td>
+                </tr>
+                <tr>
+                    <td>Payment Executor</td>
+                    <td>Stateless service</td>
+                    <td>PA calls with our reference, webhooks, status checks, routing</td>
+                </tr>
+                <tr>
+                    <td>Payment Aggregators</td>
+                    <td>Two RBI-authorised PAs</td>
+                    <td>UPI, cards, netbanking; routed by live success rate</td>
+                </tr>
+                <tr>
+                    <td>Payments DB</td>
+                    <td>PostgreSQL + sync standby (Mumbai)</td>
+                    <td>Checkouts, attempts, outbox; strong consistency</td>
+                </tr>
+                <tr>
+                    <td>Event Log</td>
+                    <td>Debezium + Kafka</td>
+                    <td>Outbox events broadcast to ledger, orders and notifications</td>
+                </tr>
+                <tr>
+                    <td>Ledger Service</td>
+                    <td>PostgreSQL, append-only</td>
+                    <td>Double-entry journals, derived balances, split hot accounts</td>
+                </tr>
+                <tr>
+                    <td>Recon Service</td>
+                    <td>Daily batch jobs</td>
+                    <td>Three-way match: ledger, PA file, bank statement</td>
+                </tr>
+                <tr>
+                    <td>Payout Service</td>
+                    <td>Bank payout API</td>
+                    <td>IMPS / NEFT / RTGS to penny-drop-verified accounts</td>
+                </tr>
+                <tr>
+                    <td>Risk Engine</td>
+                    <td>Rules + scoring</td>
+                    <td>Velocity, device and account checks before charging</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>What's Expected at Each Level?</h3>
+        <p>
+            The same question gets graded very differently depending on the level you're interviewing for.
+        </p>
+
+        <div class="level-grid reveal-element">
+            <div class="level-card mid">
+                <div class="level-label">Mid-Level (E4)</div>
+                <h4>Get the Flow Right</h4>
+                <p>Pay-in through a PA with a hosted checkout, a clean data model with attempts, an idempotency key on
+                    the API, and webhooks for results. Money stored as integers.</p>
+                <span class="level-focus">80% Breadth · 20% Depth</span>
+            </div>
+            <div class="level-card senior">
+                <div class="level-label">Senior (E5)</div>
+                <h4>Make It Correct</h4>
+                <p>Idempotency at every hop, a state machine with conditional updates, the outbox, a double-entry
+                    ledger, and honest handling of pending UPI payments.</p>
+                <span class="level-focus">60% Breadth · 40% Depth</span>
+            </div>
+            <div class="level-card staff">
+                <div class="level-label">Staff+ (E6)</div>
+                <h4>Own the Money</h4>
+                <p>Late-success refunds, hot accounts, reconciliation design, safe payouts, multi-PA routing, and
+                    replication that never loses a committed payment.</p>
+                <span class="level-focus">40% Breadth · 60% Depth</span>
+            </div>
+        </div>
+
+        <div class="callout callout-insight">
+            <div class="callout-label">💡 Final Thought</div>
+            <p>
+                Calling a payment aggregator is the easy 5% of a payment system. The other 95% is answering one
+                question with certainty, at any moment, for every rupee: <strong>where is it, and whose is it?</strong>
+                Idempotency makes sure each rupee moves once, the ledger records every move, and reconciliation proves
+                the books match the bank — even at midnight on the first night of the festive sale.
+            </p>
+        </div>
+
+    </article>
+
+    <!-- Author Footer -->
+    <div class="article-footer">
+        <div class="author-card reveal-element">
+            <img src="../content/ajay-kotnala-photo.jpg" alt="Ajay Kotnala" class="author-avatar">
+            <div class="author-info">
+                <h4>Ajay Kotnala</h4>
+                <div class="author-role">Senior Solution Architect</div>
+                <p>
+                    15+ years designing cloud-native, event-driven architectures at enterprise scale.
+                    Passionate about system design, API-first thinking, and making complex systems feel simple.
+                </p>
+            </div>
+        </div>
+        <div class="back-links-row">
+            <a href="../index.html" class="back-link">← Back to Portfolio</a>
+            <a href="./index.html" class="back-link">Back to System Design Articles →</a>
+        </div>
+    </div>
+
+    <!-- Global Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-bottom">
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/kotnala-ajay/" target="_blank">LinkedIn</a>
+                    <a href="https://github.com/ajaykotnala" target="_blank">GitHub</a>
+                    <a href="https://medium.com/@ajay.kotnalajpr" target="_blank">Medium</a>
+                </div>
+                <p class="fine-print">&copy; 2026 Ajay Kotnala. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll Progress Bar
+        window.addEventListener('scroll', () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = (scrollTop / docHeight) * 100;
+            document.getElementById('progressBar').style.width = progress + '%';
+        });
+
+        // Intersection Observer for scroll-reveal animations
+        document.addEventListener('DOMContentLoaded', () => {
+            const observerOptions = {
+                threshold: 0.12,
+                rootMargin: '0px 0px -40px 0px'
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('active');
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll('.reveal-element').forEach(el => {
+                observer.observe(el);
+            });
+        });
+
+        // Deep Dive Accordion
+        function toggleDeepDive(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle('open');
+        }
+
+        // Smooth scroll for TOC and anchor links
+        document.querySelectorAll('.toc a, a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                const targetId = this.getAttribute('href');
+                if (targetId.startsWith('#')) {
+                    e.preventDefault();
+                    const target = document.querySelector(targetId);
+                    if (target) {
+                        // Nav offset: global nav (44px) + sub nav (52px) + padding
+                        const offset = 110;
+                        const targetPosition = target.getBoundingClientRect().top + window.scrollY - offset;
+                        window.scrollTo({ top: targetPosition, behavior: 'smooth' });
+                    }
+                }
+            });
+        });
+    </script>
+
+    <!-- Cloudflare Web Analytics -->
+    <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "25a535ed0cef446989ce07ab00b1d46d"}'></script>
+    <!-- End Cloudflare Web Analytics -->
+</body>
+
+</html>

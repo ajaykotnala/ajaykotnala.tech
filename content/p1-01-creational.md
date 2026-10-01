@@ -7,7 +7,7 @@ category: ""
 date: ""
 read_time: ""
 description: ""
-source_html: "DesignPatterns/creational-pattern.html"
+source_html: "design-patterns/creational-pattern.html"
 status: "draft"
 ---
 

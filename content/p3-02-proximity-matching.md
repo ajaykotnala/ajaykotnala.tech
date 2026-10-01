@@ -7,7 +7,7 @@ category: "System Design"
 date: "July 2026"
 read_time: "18 min read"
 description: "How do you architect a system where millions of people are furiously swiping, every second hoping the next profile might be \"the one\"? Let's break it down — from feed generation and geo-spatial queries to swipe consistency and push notifications."
-source_html: "SystemDesign/tinder-system-design.html"
+source_html: "system-design/tinder-system-design.html"
 status: "draft"
 ---
 

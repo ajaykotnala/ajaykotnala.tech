@@ -7,7 +7,7 @@ category: "Caching & Systems"
 date: "May 2026"
 read_time: "20 min read"
 description: "Storing something closer to where you need it is ancient common sense. The gap between adding a cache and thinking carefully about a cache is where production incidents live — thundering herds, hot keys, and stale bank balances. Here's the full map: where caches live, how reads and writes flow through them, and exactly how they fail."
-source_html: "DeepDives/caching-system-design.html"
+source_html: "system-design-deep-dives/caching-system-design.html"
 status: "draft"
 ---
 

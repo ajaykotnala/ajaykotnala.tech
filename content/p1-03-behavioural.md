@@ -7,7 +7,7 @@ category: ""
 date: ""
 read_time: ""
 description: ""
-source_html: "DesignPatterns/behavioural-pattern.html"
+source_html: "design-patterns/behavioural-pattern.html"
 status: "draft"
 ---
 

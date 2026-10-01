@@ -7,7 +7,7 @@ category: "Concurrency"
 date: "June 2026"
 read_time: "18 min read"
 description: "Two users click \"Book\" on the same airline seat at the same instant. Both get a confirmation email. Now you have a very unhappy airplane. Almost every concurrency bug you'll ever debug — or get asked about in an interview — collapses into one of exactly three categories. Here's the map, the tools, and the failure modes nobody warns you about."
-source_html: "DeepDives/concurrency-system-design.html"
+source_html: "system-design-deep-dives/concurrency-system-design.html"
 status: "draft"
 ---
 
