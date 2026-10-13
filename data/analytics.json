@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-12T13:48:22.567Z",
+  "updatedAt": "2026-10-13T04:31:38.848Z",
   "source": "cloudflare-web-analytics",
   "siteTag": "account-wide",
   "totals": {
@@ -12,12 +12,12 @@
       "visits": 0
     },
     "last7d": {
-      "pageViews": 27,
-      "visits": 7
+      "pageViews": 25,
+      "visits": 6
     },
     "last30d": {
-      "pageViews": 77,
-      "visits": 24
+      "pageViews": 70,
+      "visits": 22
     }
   },
   "daily": {
